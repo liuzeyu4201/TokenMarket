@@ -53,3 +53,23 @@ impact, and include rollout and rollback notes. Include screenshots for visible 
 Never commit `.env.*`, credentials, provider keys, or production data. Update `.env.example` with
 safe placeholders only. Secrets must be encrypted, redacted from telemetry, and injected through
 environment variables or an approved secret provider.
+
+## Active Feature Context
+
+- `001-repository-workflow-baseline`: planning artifacts live in
+  `specs/001-repository-workflow-baseline/plan.md` with developer contracts under its
+  `contracts/` directory.
+- Planned maintained toolchains are Go 1.25.12, Python 3.11.15 with an independent workflow-tool
+  lock plus per-service `uv.lock`, and Node 24.18.0 LTS with npm lockfiles; dependency or tool
+  upgrades remain reviewed changes.
+- The root Makefile remains the only public workflow. In addition to the seven public actions,
+  stable `bootstrap` and `type-check` support commands are required; bootstrap prepares only
+  committed-lock dependencies and never installs system tools or rewrites locks.
+- GitHub Actions is a read-only thin adapter that invokes `make ci`; component commands and
+  quality gates must not be duplicated in CI YAML. CI migration evidence uses a pinned isolated
+  PostgreSQL 15 container for API-then-Billing forward/backout/retry/head restoration.
+- Until SF02 implements the local dependency lifecycle, `make dev` and `make dev-down` must fail
+  with `SF02_NOT_READY` before reading configuration or accessing Docker. Their public names stay
+  stable when SF02 replaces the internal adapter.
+- SF01 scaffolds operational health, metrics, tests and immutable builds only; it must not add
+  buyer, seller, provider-Key, proxy, metering, billing or administration business behavior.

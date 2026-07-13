@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/repository-workflow/v1/migration-manifest.schema.json",
+  "title": "TokenMarket Migration Owner Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "owners", "non_owners"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "owners": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/api_owner"
+        },
+        {
+          "$ref": "#/$defs/billing_owner"
+        }
+      ],
+      "items": false
+    },
+    "non_owners": {
+      "type": "array",
+      "contains": {
+        "const": "admin-service"
+      },
+      "minContains": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "base_owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component_id",
+        "order",
+        "version_path",
+        "expected_heads",
+        "backout_runbook"
+      ],
+      "properties": {
+        "component_id": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "version_path": {
+          "type": "string",
+          "pattern": "^services/[^/]+/alembic/versions/?$"
+        },
+        "expected_heads": {
+          "const": 1
+        },
+        "backout_runbook": {
+          "type": "string",
+          "pattern": "^ops/runbooks/"
+        }
+      }
+    },
+    "api_owner": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base_owner"
+        },
+        {
+          "properties": {
+            "component_id": {
+              "const": "api-service"
+            },
+            "order": {
+              "const": 1
+            }
+          }
+        }
+      ]
+    },
+    "billing_owner": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base_owner"
+        },
+        {
+          "properties": {
+            "component_id": {
+              "const": "billing-service"
+            },
+            "order": {
+              "const": 2
+            }
+          }
+        }
+      ]
+    }
+  }
+}

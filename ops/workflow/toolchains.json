@@ -1,0 +1,204 @@
+{
+  "schema_version": "1.0.0",
+  "tools": [
+    {
+      "tool": "go",
+      "exact_version": "1.25.12",
+      "version_source": ".tool-versions (golang)",
+      "affected_components": ["proxy-gateway"],
+      "install_policy": "asdf-shim",
+      "integrity_reference": "https://go.dev/dl/go1.25.12.darwin-arm64.tar.gz"
+    },
+    {
+      "tool": "python",
+      "exact_version": "3.11.15",
+      "version_source": ".tool-versions (python)",
+      "affected_components": [
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "tools/workflow"
+      ],
+      "install_policy": "asdf-shim",
+      "integrity_reference": "https://www.python.org/downloads/release/python-31115/"
+    },
+    {
+      "tool": "uv",
+      "exact_version": "0.11.3",
+      "version_source": ".tool-versions (uv)",
+      "affected_components": [
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "tools/workflow"
+      ],
+      "install_policy": "github-release-sha",
+      "integrity_reference": "https://github.com/astral-sh/uv/releases/tag/0.11.3"
+    },
+    {
+      "tool": "node",
+      "exact_version": "24.18.0",
+      "version_source": ".tool-versions (nodejs)",
+      "affected_components": ["frontend"],
+      "install_policy": "asdf-shim",
+      "integrity_reference": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-arm64.tar.gz"
+    },
+    {
+      "tool": "npm",
+      "exact_version": "11.16.0",
+      "version_source": "bundled-with-node-24.18.0",
+      "affected_components": ["frontend"],
+      "install_policy": "npm-managed",
+      "integrity_reference": "frontend/package-lock.json (lockfileVersion 3)"
+    },
+    {
+      "tool": "docker",
+      "exact_version": "29.5.3",
+      "version_source": "system-managed",
+      "affected_components": [
+        "proxy-gateway",
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "frontend",
+        "shared",
+        "infra",
+        "ops"
+      ],
+      "install_policy": "system-managed",
+      "integrity_reference": "Docker Engine 29.5.3"
+    },
+    {
+      "tool": "golangci-lint",
+      "exact_version": "1.64.8",
+      "version_source": "services/proxy-gateway/.golangci.yml",
+      "affected_components": ["proxy-gateway"],
+      "install_policy": "go-install",
+      "integrity_reference": "https://github.com/golangci/golangci-lint/releases/tag/v1.64.8"
+    },
+    {
+      "tool": "black",
+      "exact_version": "25.1.0",
+      "version_source": "services/api-service/pyproject.toml",
+      "affected_components": [
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "tools/workflow"
+      ],
+      "install_policy": "uv-managed",
+      "integrity_reference": "services/api-service/uv.lock"
+    },
+    {
+      "tool": "isort",
+      "exact_version": "6.0.0",
+      "version_source": "services/api-service/pyproject.toml",
+      "affected_components": [
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "tools/workflow"
+      ],
+      "install_policy": "uv-managed",
+      "integrity_reference": "services/api-service/uv.lock"
+    },
+    {
+      "tool": "flake8",
+      "exact_version": "7.1.1",
+      "version_source": "services/api-service/pyproject.toml",
+      "affected_components": [
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "tools/workflow"
+      ],
+      "install_policy": "uv-managed",
+      "integrity_reference": "services/api-service/uv.lock"
+    },
+    {
+      "tool": "mypy",
+      "exact_version": "1.15.0",
+      "version_source": "services/api-service/pyproject.toml",
+      "affected_components": [
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "tools/workflow"
+      ],
+      "install_policy": "uv-managed",
+      "integrity_reference": "services/api-service/uv.lock"
+    },
+    {
+      "tool": "pytest",
+      "exact_version": "8.3.5",
+      "version_source": "services/api-service/pyproject.toml",
+      "affected_components": [
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "tools/workflow"
+      ],
+      "install_policy": "uv-managed",
+      "integrity_reference": "services/api-service/uv.lock"
+    },
+    {
+      "tool": "postgresql",
+      "exact_version": "15.12",
+      "version_source": "ci-gates.md / migration-integration-check contract",
+      "affected_components": ["api-service", "billing-service"],
+      "install_policy": "container-image-digest",
+      "integrity_reference": "docker.io/library/postgres:15.12@sha256:postgresql-15-digest-placeholder"
+    },
+    {
+      "tool": "gitleaks",
+      "exact_version": "8.24.0",
+      "version_source": "security-check contract",
+      "affected_components": ["repository"],
+      "install_policy": "github-release-sha",
+      "integrity_reference": "https://github.com/gitleaks/gitleaks/releases/tag/v8.24.0"
+    },
+    {
+      "tool": "govulncheck",
+      "exact_version": "1.1.4",
+      "version_source": "security-check contract",
+      "affected_components": ["proxy-gateway"],
+      "install_policy": "go-install",
+      "integrity_reference": "https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck@v1.1.4"
+    },
+    {
+      "tool": "pip-audit",
+      "exact_version": "2.8.0",
+      "version_source": "security-check contract",
+      "affected_components": [
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "tools/workflow"
+      ],
+      "install_policy": "uv-managed",
+      "integrity_reference": "tools/workflow/uv.lock"
+    },
+    {
+      "tool": "trivy",
+      "exact_version": "0.61.0",
+      "version_source": "security-check contract",
+      "affected_components": [
+        "proxy-gateway",
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "frontend"
+      ],
+      "install_policy": "github-release-sha",
+      "integrity_reference": "https://github.com/aquasecurity/trivy/releases/tag/v0.61.0"
+    },
+    {
+      "tool": "github-actions-runner",
+      "exact_version": "ubuntu-24.04",
+      "version_source": ".github/workflows/ci.yml",
+      "affected_components": ["repository"],
+      "install_policy": "github-hosted",
+      "integrity_reference": "https://github.com/actions/runner-images/releases/tag/ubuntu24/20250706.2"
+    }
+  ]
+}

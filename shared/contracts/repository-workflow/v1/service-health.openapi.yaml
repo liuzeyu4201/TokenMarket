@@ -1,0 +1,71 @@
+openapi: 3.1.0
+info:
+  title: TokenMarket Service Baseline Health Contract
+  version: 1.0.0
+  description: >-
+    Operational endpoints shared by the Go gateway and Python service scaffolds.
+    They expose no business behavior and do not probe SF02 dependencies.
+paths:
+  /health/live:
+    get:
+      operationId: getLiveness
+      summary: Confirm that the service process can respond
+      responses:
+        "200":
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /health/ready:
+    get:
+      operationId: getReadiness
+      summary: Confirm that the service's own SF01 initialization is complete
+      description: Does not connect to PostgreSQL, Redis, Kafka or an AI provider in SF01.
+      responses:
+        "200":
+          description: Service scaffold is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Return Prometheus-compatible process and build metrics
+      responses:
+        "200":
+          description: Metrics text without secrets or personal data
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - service
+        - status
+        - version
+        - request_id
+      properties:
+        service:
+          type: string
+          enum:
+            - proxy-gateway
+            - api-service
+            - billing-service
+            - admin-service
+        status:
+          type: string
+          enum:
+            - alive
+            - ready
+        version:
+          type: string
+          minLength: 1
+        request_id:
+          type: string
+          minLength: 1

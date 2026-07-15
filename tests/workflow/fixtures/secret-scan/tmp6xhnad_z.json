@@ -1,0 +1,42 @@
+[
+ {
+  "RuleID": "generic-api-key",
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 36,
+  "EndLine": 36,
+  "StartColumn": 10,
+  "EndColumn": 34,
+  "Match": "secret = \"REDACTED\"",
+  "Secret": "REDACTED",
+  "File": "test_secret_scan.py",
+  "SymlinkFile": "",
+  "Commit": "",
+  "Entropy": 3.6644979,
+  "Author": "",
+  "Email": "",
+  "Date": "",
+  "Message": "",
+  "Tags": [],
+  "Fingerprint": "test_secret_scan.py:generic-api-key:36"
+ },
+ {
+  "RuleID": "generic-api-key",
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 1,
+  "EndLine": 1,
+  "StartColumn": 1,
+  "EndColumn": 22,
+  "Match": "api_key=REDACTED",
+  "Secret": "REDACTED",
+  "File": "fixtures/secret-scan/tmp6xhnad_z.txt",
+  "SymlinkFile": "",
+  "Commit": "",
+  "Entropy": 3.6644979,
+  "Author": "",
+  "Email": "",
+  "Date": "",
+  "Message": "",
+  "Tags": [],
+  "Fingerprint": "fixtures/secret-scan/tmp6xhnad_z.txt:generic-api-key:1"
+ }
+]

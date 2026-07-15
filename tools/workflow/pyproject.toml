@@ -1,0 +1,77 @@
+[project]
+name = "workflow"
+version = "0.1.0"
+description = "Maintained repository workflow tooling for the TokenMarket monorepo."
+requires-python = "==3.11.15"
+license = "LicenseRef-Proprietary"
+authors = [
+    { name = "TokenMarket Engineering" },
+]
+keywords = ["workflow", "monorepo", "tokenmarket"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.24.0,<1.0.0",
+    "black>=24.0,<25.0",
+    "isort>=5.13.0,<6.0.0",
+    "flake8>=7.0,<8.0",
+    "mypy>=1.11,<2.0",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[project.scripts]
+workflow = "workflow.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["workflow"]
+
+[tool.setuptools.package-dir]
+workflow = "."
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | __pycache__
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["workflow"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+exclude = [
+    "\\.venv",
+    "__pycache__",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["../../tests/workflow"]
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "pip-audit>=2.10.1",
+]

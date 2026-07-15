@@ -1,0 +1,74 @@
+[project]
+name = "tokenmarket-admin-service"
+version = "0.1.0"
+description = "Admin service scaffold for the TokenMarket monorepo."
+readme = "README.md"
+requires-python = "==3.11.15"
+license = { text = "Proprietary" }
+authors = [
+    { name = "TokenMarket Engineering" },
+]
+keywords = ["admin", "service", "monorepo", "tokenmarket"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "pydantic>=2.9.0,<3.0.0",
+    "uvicorn[standard]>=0.32.0,<1.0.0",
+    "prometheus-client>=0.21.0,<1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.24.0,<1.0.0",
+    "httpx>=0.28.0,<1.0.0",
+    "black>=24.0,<25.0",
+    "isort>=5.13.0,<6.0.0",
+    "flake8>=7.0,<8.0",
+    "mypy>=1.11,<2.0",
+    "pytest-cov>=6.0.0,<7.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | __pycache__
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+exclude = [
+    "\\.venv",
+    "__pycache__",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

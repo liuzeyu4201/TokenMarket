@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "owners": [
+    {
+      "component_id": "api-service",
+      "order": 1,
+      "version_path": "services/api-service/alembic/versions",
+      "expected_heads": 1,
+      "backout_runbook": "ops/runbooks/migrations.md"
+    },
+    {
+      "component_id": "billing-service",
+      "order": 2,
+      "version_path": "services/billing-service/alembic/versions",
+      "expected_heads": 1,
+      "backout_runbook": "ops/runbooks/migrations.md"
+    }
+  ],
+  "non_owners": ["admin-service"]
+}

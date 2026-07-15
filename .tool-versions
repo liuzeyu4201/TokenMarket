@@ -1,0 +1,8 @@
+# TokenMarket maintained toolchain versions.
+# These are the supported versions for local development and CI.
+# Toolchain preflight verifies installed versions against this file.
+
+golang 1.25.12
+python 3.11.15
+nodejs 24.18.0
+uv 0.11.3

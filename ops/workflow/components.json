@@ -1,0 +1,457 @@
+{
+  "schema_version": "1.0.0",
+  "components": [
+    {
+      "id": "proxy-gateway",
+      "path": "services/proxy-gateway",
+      "owner": "TokenMarket Engineering",
+      "responsibility": "Go ingress gateway for proxied AI traffic; exposes health, readiness, metrics, request IDs and structured logs with no business routes in SF01.",
+      "component_type": "go-service",
+      "allowed_dependencies": [],
+      "test_root": "internal",
+      "deliverables": ["binary", "container-image"],
+      "required": true,
+      "actions": [
+        {
+          "action": "bootstrap",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "fmt",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "formatted-files"
+        },
+        {
+          "action": "fmt-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "type-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "lint",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "test",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "test-count"
+        },
+        {
+          "action": "build",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "image"
+        }
+      ]
+    },
+    {
+      "id": "api-service",
+      "path": "services/api-service",
+      "owner": "TokenMarket Engineering",
+      "responsibility": "Core API service scaffold; first Alembic migration owner and owner of the initial database head in SF01.",
+      "component_type": "python-service",
+      "allowed_dependencies": ["shared"],
+      "test_root": "tests",
+      "deliverables": ["container-image"],
+      "required": true,
+      "actions": [
+        {
+          "action": "bootstrap",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "fmt",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "formatted-files"
+        },
+        {
+          "action": "fmt-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "type-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "lint",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "test",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "test-count"
+        },
+        {
+          "action": "build",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "image"
+        },
+        {
+          "action": "migrate",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "migration-result"
+        }
+      ]
+    },
+    {
+      "id": "billing-service",
+      "path": "services/billing-service",
+      "owner": "TokenMarket Engineering",
+      "responsibility": "Billing service scaffold; second Alembic migration owner, applied after api-service in SF01.",
+      "component_type": "python-service",
+      "allowed_dependencies": ["shared"],
+      "test_root": "tests",
+      "deliverables": ["container-image"],
+      "required": true,
+      "actions": [
+        {
+          "action": "bootstrap",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "fmt",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "formatted-files"
+        },
+        {
+          "action": "fmt-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "type-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "lint",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "test",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "test-count"
+        },
+        {
+          "action": "build",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "image"
+        },
+        {
+          "action": "migrate",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "migration-result"
+        }
+      ]
+    },
+    {
+      "id": "admin-service",
+      "path": "services/admin-service",
+      "owner": "TokenMarket Engineering",
+      "responsibility": "Admin service scaffold with no database ownership and no migration responsibilities in SF01.",
+      "component_type": "python-service",
+      "allowed_dependencies": ["shared"],
+      "test_root": "tests",
+      "deliverables": ["container-image"],
+      "required": true,
+      "actions": [
+        {
+          "action": "bootstrap",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "fmt",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "formatted-files"
+        },
+        {
+          "action": "fmt-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "type-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "lint",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "test",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "test-count"
+        },
+        {
+          "action": "build",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "image"
+        }
+      ]
+    },
+    {
+      "id": "frontend",
+      "path": "frontend",
+      "owner": "TokenMarket Engineering",
+      "responsibility": "React 18 web frontend scaffold with strict TypeScript, Vite, Vitest and accessible smoke tests; no business routes in SF01.",
+      "component_type": "web-frontend",
+      "allowed_dependencies": ["shared"],
+      "test_root": "src",
+      "deliverables": ["static-site-image"],
+      "required": true,
+      "actions": [
+        {
+          "action": "bootstrap",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "fmt",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "formatted-files"
+        },
+        {
+          "action": "fmt-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "type-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "lint",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "test",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "test-count"
+        },
+        {
+          "action": "build",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "image"
+        }
+      ]
+    },
+    {
+      "id": "shared",
+      "path": "shared",
+      "owner": "TokenMarket Engineering",
+      "responsibility": "Versioned repository contracts, shared validation tooling and deterministic asset bundles consumed by other components.",
+      "component_type": "contract-assets",
+      "allowed_dependencies": [],
+      "test_root": "tests",
+      "deliverables": ["asset-archive"],
+      "required": true,
+      "actions": [
+        {
+          "action": "bootstrap",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "fmt",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "formatted-files"
+        },
+        {
+          "action": "fmt-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "type-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "lint",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "test",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "test-count"
+        },
+        {
+          "action": "build",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "asset-archive"
+        }
+      ]
+    },
+    {
+      "id": "infra",
+      "path": "infra",
+      "owner": "TokenMarket Engineering",
+      "responsibility": "Infrastructure definitions and assets; lifecycle orchestration remains blocked behind SF02 in SF01.",
+      "component_type": "infrastructure-assets",
+      "allowed_dependencies": [],
+      "test_root": "tests",
+      "deliverables": ["asset-archive"],
+      "required": true,
+      "actions": [
+        {
+          "action": "bootstrap",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "fmt",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "formatted-files"
+        },
+        {
+          "action": "fmt-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "type-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "lint",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "test",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "test-count"
+        },
+        {
+          "action": "build",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "asset-archive"
+        }
+      ]
+    },
+    {
+      "id": "ops",
+      "path": "ops",
+      "owner": "TokenMarket Engineering",
+      "responsibility": "Operational runbooks, migration ownership registry, monitoring and backup assets for the repository workflow baseline.",
+      "component_type": "operations-assets",
+      "allowed_dependencies": ["shared", "infra"],
+      "test_root": "tests",
+      "deliverables": ["asset-archive"],
+      "required": true,
+      "actions": [
+        {
+          "action": "bootstrap",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "fmt",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "formatted-files"
+        },
+        {
+          "action": "fmt-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "type-check",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "lint",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "static-report"
+        },
+        {
+          "action": "test",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "test-count"
+        },
+        {
+          "action": "build",
+          "adapter": "Makefile",
+          "required": true,
+          "evidence_type": "asset-archive"
+        }
+      ]
+    }
+  ]
+}

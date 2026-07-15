@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/repository-workflow/v1/workflow-event.schema.json",
+  "schema_version": "1.0.0",
+  "title": "TokenMarket Workflow Step Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "action",
+    "component",
+    "phase",
+    "status",
+    "code",
+    "duration_ms",
+    "message"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "action": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "component": {
+      "enum": [
+        "repository",
+        "proxy-gateway",
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "frontend",
+        "shared",
+        "infra",
+        "ops"
+      ]
+    },
+    "phase": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "status": {
+      "enum": ["STARTED", "PASSED", "FAILED", "SKIPPED"]
+    },
+    "code": {
+      "enum": [
+        "OK",
+        "INVALID_USAGE",
+        "TOOL_MISSING",
+        "TOOL_VERSION_UNSUPPORTED",
+        "INVALID_CONFIG",
+        "INVALID_MODE",
+        "PROD_APPROVAL_REQUIRED",
+        "SF02_NOT_READY",
+        "COMPONENT_NOT_INITIALIZED",
+        "NO_TESTS_EXECUTED",
+        "STEP_FAILED",
+        "CONTRACT_DRIFT",
+        "MIGRATION_INVALID",
+        "SECRET_DETECTED"
+      ]
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "PASSED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "code": {
+            "const": "OK"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": ["FAILED", "SKIPPED"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "code": {
+            "not": {
+              "const": "OK"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

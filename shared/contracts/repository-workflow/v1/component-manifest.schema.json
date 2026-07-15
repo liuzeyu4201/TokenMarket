@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/repository-workflow/v1/component-manifest.schema.json",
+  "schema_version": "1.0.0",
+  "title": "TokenMarket Repository Component Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "components"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "components": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/component"
+      }
+    }
+  },
+  "$defs": {
+    "component_id": {
+      "enum": [
+        "proxy-gateway",
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "frontend",
+        "shared",
+        "infra",
+        "ops"
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "adapter", "required", "evidence_type"],
+      "properties": {
+        "action": {
+          "enum": [
+            "bootstrap",
+            "fmt",
+            "fmt-check",
+            "type-check",
+            "lint",
+            "test",
+            "build",
+            "migrate"
+          ]
+        },
+        "adapter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "evidence_type": {
+          "enum": [
+            "formatted-files",
+            "static-report",
+            "test-count",
+            "coverage-report",
+            "image",
+            "asset-archive",
+            "migration-result"
+          ]
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "owner",
+        "responsibility",
+        "component_type",
+        "allowed_dependencies",
+        "test_root",
+        "deliverables",
+        "required",
+        "actions"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/component_id"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(services/[^/]+|frontend|shared|infra|ops)/?$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "responsibility": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component_type": {
+          "enum": [
+            "go-service",
+            "python-service",
+            "web-frontend",
+            "contract-assets",
+            "infrastructure-assets",
+            "operations-assets"
+          ]
+        },
+        "allowed_dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/component_id"
+          }
+        },
+        "test_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deliverables": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["binary", "container-image", "static-site-image", "asset-archive"]
+          }
+        },
+        "required": {
+          "const": true
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        }
+      }
+    }
+  }
+}

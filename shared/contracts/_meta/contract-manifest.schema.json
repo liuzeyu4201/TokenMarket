@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/repository-workflow/v1/contract-manifest.schema.json",
+  "title": "TokenMarket Contract Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contracts"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "contracts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/contract"
+      }
+    }
+  },
+  "$defs": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_id", "owner", "version", "format", "compatibility"],
+      "properties": {
+        "contract_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "format": {
+          "enum": ["json-schema", "openapi", "event-schema", "markdown"]
+        },
+        "compatibility": {
+          "enum": ["backward-compatible", "breaking-new-version"]
+        },
+        "deprecated_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "replacement": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

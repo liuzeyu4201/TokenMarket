@@ -1,0 +1,6 @@
+.golangci.yml
+Dockerfile
+.dockerignore
+coverage.out
+*.test
+.git

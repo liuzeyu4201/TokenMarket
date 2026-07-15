@@ -1,0 +1,29 @@
+# Repository-wide owners
+* @tokenmarket/eng
+
+# Root workflow and CI
+/Makefile @tokenmarket/platform
+/.github/workflows/ @tokenmarket/platform
+/.github/CODEOWNERS @tokenmarket/platform
+
+# Service boundaries
+/services/proxy-gateway/ @tokenmarket/gateway
+/services/api-service/ @tokenmarket/backend
+/services/billing-service/ @tokenmarket/backend
+/services/admin-service/ @tokenmarket/backend
+/frontend/ @tokenmarket/frontend
+
+# Shared contracts and validation
+/shared/ @tokenmarket/architecture
+
+# Infrastructure and operations
+/infra/ @tokenmarket/platform
+/ops/ @tokenmarket/platform
+
+# Architecture decisions and API contracts
+/docs/decisions/ @tokenmarket/architecture
+/docs/api/ @tokenmarket/architecture
+
+# Security-sensitive configuration
+.env.example @tokenmarket/security
+/.gitignore @tokenmarket/platform

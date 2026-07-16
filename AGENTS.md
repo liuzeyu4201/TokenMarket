@@ -73,3 +73,20 @@ environment variables or an approved secret provider.
   stable when SF02 replaces the internal adapter.
 - SF01 scaffolds operational health, metrics, tests and immutable builds only; it must not add
   buyer, seller, provider-Key, proxy, metering, billing or administration business behavior.
+- `002-local-dependency-lifecycle`: active design artifacts live in
+  `specs/002-local-dependency-lifecycle/`; ADR 002 records the accepted Docker Compose design,
+  while implementation verification remains pending. Root Make/event v2 explicitly versions the
+  breaking activation; the implementation gate keeps current v1 `SF02_NOT_READY` behavior until
+  every event consumer migrates and Linux x86_64 plus macOS arm64 lifecycle, isolation,
+  persistence, redaction, recovery and performance acceptance passes.
+- SF02 is limited to PostgreSQL 15.18, Redis 7.2 and Grafana OSS 13.0 fixed by reviewed
+  multi-platform OCI index digests. It derives `tokenmarket-<workspace-path-hash>` project
+  ownership, accepts only loopback `DATABASE_URL`/`REDIS_URL`/`GRAFANA_URL` facts from ignored
+  `.env.local`, uses collision-checking full workspace fingerprints and Compose-managed non-root
+  secret files, pipes verified committed Compose bytes through stdin with a safe hashed runtime
+  project directory so Compose labels do not expose the workspace path, serializes lifecycle
+  operations, preserves PostgreSQL/Redis named volumes, and gives Grafana explicit tmpfs storage
+  on ordinary down.
+- Only API Service and Billing Service gain PostgreSQL-aware readiness in SF02. Their liveness
+  remains independent; Gateway and Admin Service must not gain undeclared dependency probes, and
+  no business service becomes part of `make dev`.

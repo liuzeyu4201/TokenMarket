@@ -1,0 +1,397 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/local-environment/v1/local-dependency-manifest.schema.json",
+  "title": "TokenMarket Local Dependency Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "diagnostic_contract_version",
+    "project",
+    "runtime",
+    "timeouts",
+    "dependencies"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "diagnostic_contract_version": {
+      "const": "2.0.0"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prefix",
+        "workspace_hash_algorithm",
+        "workspace_hash_length",
+        "workspace_fingerprint_length",
+        "compose_file",
+        "compose_transport",
+        "compose_project_directory_policy",
+        "lock_mechanism"
+      ],
+      "properties": {
+        "prefix": {
+          "const": "tokenmarket"
+        },
+        "workspace_hash_algorithm": {
+          "const": "sha256-canonical-path-nfc-utf8"
+        },
+        "workspace_hash_length": {
+          "const": 12
+        },
+        "workspace_fingerprint_length": {
+          "const": 64
+        },
+        "compose_file": {
+          "const": "infra/docker/compose.local.yml"
+        },
+        "compose_transport": {
+          "const": "verified-committed-bytes-via-stdin"
+        },
+        "compose_project_directory_policy": {
+          "const": "secure-runtime-project-id-directory"
+        },
+        "lock_mechanism": {
+          "const": "posix-fcntl-nonblocking-exclusive"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "docker_version",
+        "compose_version",
+        "endpoint",
+        "secret_transport",
+        "hosts"
+      ],
+      "properties": {
+        "docker_version": {
+          "const": "29.5.3"
+        },
+        "compose_version": {
+          "const": "5.1.4"
+        },
+        "endpoint": {
+          "const": "local-unix-socket"
+        },
+        "secret_transport": {
+          "const": "compose-environment-source-secret-files"
+        },
+        "hosts": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "darwin/arm64" },
+            { "const": "linux/amd64" }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "timeouts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readiness_budget_seconds",
+        "repeat_confirmation_seconds",
+        "stop_operation_seconds"
+      ],
+      "properties": {
+        "readiness_budget_seconds": {
+          "const": 60
+        },
+        "repeat_confirmation_seconds": {
+          "const": 15
+        },
+        "stop_operation_seconds": {
+          "const": 75
+        }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "prefixItems": [
+        { "$ref": "#/$defs/postgres" },
+        { "$ref": "#/$defs/redis" },
+        { "$ref": "#/$defs/grafana" }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "platforms": {
+      "type": "array",
+      "prefixItems": [
+        { "const": "linux/amd64" },
+        { "const": "linux/arm64" }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "platformDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["linux_amd64", "linux_arm64"],
+      "properties": {
+        "linux_amd64": {
+          "$ref": "#/$defs/digest"
+        },
+        "linux_arm64": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "repository",
+        "version_tag",
+        "index_digest",
+        "platform_digests",
+        "required_platforms",
+        "service_name",
+        "host_url_field",
+        "container_port",
+        "default_host_port",
+        "host_bind_address",
+        "liveness_probe",
+        "readiness_probe",
+        "durability",
+        "secret_transport",
+        "runtime_uid",
+        "runtime_gid",
+        "runtime_uid_policy",
+        "stop_grace_period_seconds"
+      ],
+      "properties": {
+        "id": {
+          "enum": ["postgres", "redis", "grafana"]
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version_tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "index_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "platform_digests": {
+          "$ref": "#/$defs/platformDigests"
+        },
+        "required_platforms": {
+          "$ref": "#/$defs/platforms"
+        },
+        "service_name": {
+          "enum": ["postgres", "redis", "grafana"]
+        },
+        "host_url_field": {
+          "enum": ["DATABASE_URL", "REDIS_URL", "GRAFANA_URL"]
+        },
+        "container_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "default_host_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "host_bind_address": {
+          "const": "127.0.0.1"
+        },
+        "liveness_probe": {
+          "type": "string",
+          "minLength": 1
+        },
+        "readiness_probe": {
+          "type": "string",
+          "minLength": 1
+        },
+        "durability": {
+          "enum": ["durable-fact", "preserved-rebuildable", "ephemeral"]
+        },
+        "secret_transport": {
+          "enum": [
+            "postgres-password-file",
+            "redis-config-file",
+            "grafana-admin-password-file"
+          ]
+        },
+        "volume": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["logical_name", "mount_path", "delete_on_down"],
+          "properties": {
+            "logical_name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$"
+            },
+            "mount_path": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "delete_on_down": {
+              "const": false
+            }
+          }
+        },
+        "ephemeral_storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "mount_path", "owner_policy", "mode"],
+          "properties": {
+            "type": {
+              "const": "tmpfs"
+            },
+            "mount_path": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "owner_policy": {
+              "const": "verified-runtime-uid-gid"
+            },
+            "mode": {
+              "const": "0700"
+            }
+          }
+        },
+        "runtime_uid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runtime_gid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runtime_uid_policy": {
+          "const": "verified-upstream-non-root-secret-owner"
+        },
+        "stop_grace_period_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 120
+        }
+      }
+    },
+    "postgres": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "postgres" },
+            "repository": { "const": "docker.io/library/postgres" },
+            "version_tag": { "const": "15.18-bookworm" },
+            "service_name": { "const": "postgres" },
+            "host_url_field": { "const": "DATABASE_URL" },
+            "container_port": { "const": 5432 },
+            "default_host_port": { "const": 5432 },
+            "liveness_probe": { "const": "pg-isready-tcp" },
+            "readiness_probe": { "const": "authenticated-select-1" },
+            "durability": { "const": "durable-fact" },
+            "secret_transport": { "const": "postgres-password-file" },
+            "volume": {
+              "type": "object",
+              "properties": {
+                "logical_name": { "const": "postgres-data" },
+                "mount_path": { "const": "/var/lib/postgresql/data" }
+              }
+            },
+            "stop_grace_period_seconds": { "const": 60 }
+          },
+          "required": ["volume"],
+          "not": {
+            "required": ["ephemeral_storage"]
+          }
+        }
+      ]
+    },
+    "redis": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "redis" },
+            "repository": { "const": "docker.io/library/redis" },
+            "version_tag": { "const": "7.2.14-bookworm" },
+            "service_name": { "const": "redis" },
+            "host_url_field": { "const": "REDIS_URL" },
+            "container_port": { "const": 6379 },
+            "default_host_port": { "const": 6379 },
+            "liveness_probe": { "const": "redis-process" },
+            "readiness_probe": { "const": "authenticated-ping-pong" },
+            "durability": { "const": "preserved-rebuildable" },
+            "secret_transport": { "const": "redis-config-file" },
+            "volume": {
+              "type": "object",
+              "properties": {
+                "logical_name": { "const": "redis-data" },
+                "mount_path": { "const": "/data" }
+              }
+            },
+            "stop_grace_period_seconds": { "const": 30 }
+          },
+          "required": ["volume"],
+          "not": {
+            "required": ["ephemeral_storage"]
+          }
+        }
+      ]
+    },
+    "grafana": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "grafana" },
+            "repository": { "const": "docker.io/grafana/grafana" },
+            "version_tag": { "const": "13.0.3" },
+            "service_name": { "const": "grafana" },
+            "host_url_field": { "const": "GRAFANA_URL" },
+            "container_port": { "const": 3000 },
+            "default_host_port": { "const": 3000 },
+            "liveness_probe": { "const": "grafana-api-health" },
+            "readiness_probe": { "const": "health-database-ok-and-admin-user" },
+            "durability": { "const": "ephemeral" },
+            "secret_transport": { "const": "grafana-admin-password-file" },
+            "ephemeral_storage": {
+              "type": "object",
+              "properties": {
+                "type": { "const": "tmpfs" },
+                "mount_path": { "const": "/var/lib/grafana" },
+                "owner_policy": { "const": "verified-runtime-uid-gid" },
+                "mode": { "const": "0700" }
+              }
+            },
+            "stop_grace_period_seconds": { "const": 30 }
+          },
+          "required": ["ephemeral_storage"],
+          "not": {
+            "required": ["volume"]
+          }
+        }
+      ]
+    }
+  }
+}

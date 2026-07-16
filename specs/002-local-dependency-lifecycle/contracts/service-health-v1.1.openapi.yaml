@@ -1,0 +1,152 @@
+openapi: 3.1.0
+info:
+  title: TokenMarket Service Operational Health Contract
+  version: 1.1.0
+  description: >-
+    Minor evolution of the SF01 health contract. API Service and Billing
+    Service add PostgreSQL-aware readiness in SF02. Gateway and Admin Service
+    retain their SF01 self-readiness behavior until they declare dependencies.
+paths:
+  /health/live:
+    get:
+      operationId: getLiveness
+      summary: Confirm that the service process can respond
+      description: Never probes PostgreSQL, Redis, Kafka, Grafana, or a provider.
+      responses:
+        "200":
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LivenessResponse"
+  /health/ready:
+    get:
+      operationId: getReadiness
+      summary: Confirm that the service can satisfy its declared dependencies
+      description: >-
+        API Service and Billing Service perform a fresh, bounded PostgreSQL
+        SELECT 1 probe. Gateway and Admin Service have no SF02 dependency probe.
+      responses:
+        "200":
+          description: Service and every currently declared dependency are ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
+          description: At least one declared dependency is not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DependencyReadinessResponse"
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Return Prometheus-compatible process and build metrics
+      description: >-
+        API Service and Billing Service include
+        tokenmarket_postgres_readiness_probes_total,
+        tokenmarket_postgres_readiness_probe_failures_total, and
+        tokenmarket_postgres_readiness_probe_duration_seconds. These metrics
+        use no URL, username, database, exception, SQL, password, workspace,
+        or other unbounded label. Other services retain their SF01 metrics.
+      responses:
+        "200":
+          description: Metrics text without secrets, URLs, or personal data
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  schemas:
+    ServiceName:
+      type: string
+      enum:
+        - proxy-gateway
+        - api-service
+        - billing-service
+        - admin-service
+    LivenessResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - service
+        - status
+        - version
+        - request_id
+      properties:
+        service:
+          $ref: "#/components/schemas/ServiceName"
+        status:
+          const: alive
+        version:
+          type: string
+          minLength: 1
+        request_id:
+          type: string
+          minLength: 1
+    ReadinessResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - service
+        - status
+        - version
+        - request_id
+      properties:
+        service:
+          $ref: "#/components/schemas/ServiceName"
+        status:
+          const: ready
+        version:
+          type: string
+          minLength: 1
+        request_id:
+          type: string
+          minLength: 1
+    DependencyReadinessResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - service
+        - status
+        - version
+        - request_id
+        - dependencies
+      properties:
+        service:
+          type: string
+          enum:
+            - api-service
+            - billing-service
+        status:
+          const: not_ready
+        version:
+          type: string
+          minLength: 1
+        request_id:
+          type: string
+          minLength: 1
+        dependencies:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            $ref: "#/components/schemas/DependencyResult"
+    DependencyResult:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - status
+        - code
+      properties:
+        name:
+          const: postgres
+        status:
+          const: not_ready
+        code:
+          type: string
+          enum:
+            - INVALID_CONFIG
+            - DEPENDENCY_NOT_READY

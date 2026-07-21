@@ -1,0 +1,133 @@
+# SF02 local dependency lifecycle Compose model: PostgreSQL 15, Redis 7, Grafana OSS.
+#
+# This file is consumed only by the repository workflow adapter behind
+# `make dev` / `make dev-down`. The adapter verifies these committed bytes,
+# pipes them to the Compose CLI over stdin, and always supplies an explicit
+# project name plus a secure runtime project directory. Do not invoke this
+# file directly, and do not add services: Kafka, Prometheus, Loki, MinIO,
+# the frontend, and every business service stay out of scope by contract.
+#
+# Every TOKENMARKET_* interpolation value is injected by the adapter through a
+# dedicated child-process environment mapping, never from a dotenv file or the caller's
+# shell. The three host-port values derive from the validated loopback URLs;
+# TOKENMARKET_WORKSPACE_ID and TOKENMARKET_WORKSPACE_FINGERPRINT carry the
+# workspace ownership identity onto project-scoped resources; the three
+# secret sources below exist only inside that child mapping and materialize
+# as 0400 container files owned by the verified non-root runtime identities.
+
+services:
+  postgres:
+    image: docker.io/library/postgres:15.18-bookworm@sha256:b0c5bab0fbba8e0c221f73b1dc6359ec35f8650074377e727299df248fc8ad51
+    user: "999:999"
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_USER: ${TOKENMARKET_POSTGRES_USER}
+      POSTGRES_DB: ${TOKENMARKET_POSTGRES_DB}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    ports:
+      - target: 5432
+        published: "${TOKENMARKET_POSTGRES_HOST_PORT}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    secrets:
+      - source: postgres_password
+        target: /run/secrets/postgres_password
+        uid: "999"
+        gid: "999"
+        mode: 0400
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - PGPASSWORD=$$(cat /run/secrets/postgres_password) psql -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB -tAc 'SELECT 1' | grep -qx 1
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    labels: &tokenmarket-labels
+      com.tokenmarket.repository: tokenmarket
+      com.tokenmarket.workspace-id: ${TOKENMARKET_WORKSPACE_ID}
+      com.tokenmarket.workspace-fingerprint: ${TOKENMARKET_WORKSPACE_FINGERPRINT}
+
+  redis:
+    image: docker.io/library/redis:7.2.14-bookworm@sha256:f0707c78ea880b293ccdeb410c9c0a8ccae93fe7128799b751333a698b0a39a7
+    user: "999:999"
+    stop_grace_period: 30s
+    command: ["redis-server", "/run/secrets/redis.conf"]
+    ports:
+      - target: 6379
+        published: "${TOKENMARKET_REDIS_HOST_PORT}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - redis-data:/data
+    secrets:
+      - source: redis_config
+        target: /run/secrets/redis.conf
+        uid: "999"
+        gid: "999"
+        mode: 0400
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - REDISCLI_AUTH=$$(sed -n 's/^requirepass //p' /run/secrets/redis.conf) redis-cli PING | grep -qx PONG
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    labels: *tokenmarket-labels
+
+  grafana:
+    image: docker.io/grafana/grafana:13.0.3@sha256:1a345428a36270f5fb9add69fea71450a5843c15266c99359d6d380470ab19c9
+    user: "472:472"
+    stop_grace_period: 30s
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+    ports:
+      - target: 3000
+        published: "${TOKENMARKET_GRAFANA_HOST_PORT}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: ingress
+    tmpfs:
+      - /var/lib/grafana:rw,mode=0700,uid=472,gid=472
+    secrets:
+      - source: grafana_admin_password
+        target: /run/secrets/grafana_admin_password
+        uid: "472"
+        gid: "472"
+        mode: 0400
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -q -O - http://127.0.0.1:3000/api/health | tr -d "[:space:]" | grep -q '"database":"ok"'
+          && wget -q -O - --header "Authorization: Basic $$(printf 'admin:%s' "$$(cat /run/secrets/grafana_admin_password)" | base64)"
+          http://127.0.0.1:3000/api/user | tr -d "[:space:]" | grep -q '"isGrafanaAdmin":true'
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    labels: *tokenmarket-labels
+
+networks:
+  default:
+    labels: *tokenmarket-labels
+
+volumes:
+  postgres-data:
+    labels: *tokenmarket-labels
+  redis-data:
+    labels: *tokenmarket-labels
+
+secrets:
+  postgres_password:
+    environment: TOKENMARKET_POSTGRES_PASSWORD
+  redis_config:
+    environment: TOKENMARKET_REDIS_CONFIG
+  grafana_admin_password:
+    environment: TOKENMARKET_GRAFANA_ADMIN_PASSWORD

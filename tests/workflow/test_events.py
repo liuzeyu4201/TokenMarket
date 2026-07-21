@@ -1,8 +1,11 @@
-"""Workflow event emission, schema and aggregation tests (T017).
+"""Workflow event emission, schema and aggregation tests (T017, SF02 T016).
 
-These tests fail until `tools/workflow/events.py` implements schema 1.0.0
-JSONL events, step ordering, fail-fast skipping, final aggregation and
-stable diagnostic codes.
+The v1 tests below are explicit SF01 Make/event regression coverage: they pin
+the immutable v1 emission API, v1 schema 1.0.0 shape, and v1 diagnostic set.
+The SF02 T016 additions migrate the repository-owned JSONL reader/fixture
+assertions to the v2 standard envelope defined in
+``shared/contracts/repository-workflow/v2/workflow-event.schema.json`` via the
+shared v2 reader in ``tests/workflow/helpers.py``.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from .helpers import load_json, repo_path
+from .helpers import load_json, read_events_v2_jsonl, repo_path, validate_event_v2
 
 
 def _events_module() -> Any:
@@ -288,3 +291,102 @@ def test_messages_do_not_contain_secret_values() -> None:
     line = _to_jsonl(event)
     assert sensitive_value not in line
     assert "DATABASE_URL" in line or "variable" in line
+
+
+def _emit_event_v2(**kwargs: Any) -> dict[str, Any]:
+    return getattr(_events_module(), "emit_event_v2")(**kwargs)
+
+
+def _diagnostic_code_v2(value: str) -> Any:
+    return getattr(_events_module(), "DiagnosticCodeV2")(value)
+
+
+V2_SCHEMA_PATH = (
+    Path("shared") / "contracts" / "repository-workflow" / "v2" / "workflow-event.schema.json"
+)
+
+
+class TestV2ConsumerMigration:
+    """Repository-owned JSONL readers migrated to the v2 standard envelope.
+
+    The shared v2 reader in ``tests/workflow/helpers.py`` accepts emitted v2
+    envelopes and rejects v1-shaped dicts, so v1 remains explicit regression
+    history rather than a silently misparsed stream.
+    """
+
+    def test_v2_schema_runtime_copy_published(self) -> None:
+        schema = load_json(str(V2_SCHEMA_PATH))
+        assert schema["properties"]["schema_version"]["const"] == "2.0.0"
+        assert schema["properties"]["event_type"]["const"] == "workflow.step"
+        assert schema["properties"]["producer"]["const"] == "repository-workflow"
+
+    def test_v2_reader_accepts_emitted_envelope(self) -> None:
+        event = _emit_event_v2(
+            action="dev",
+            component="repository",
+            phase="preflight",
+            status="PASSED",
+            code=_diagnostic_code_v2("OK"),
+            duration_ms=3,
+            message="preflight completed",
+            correlation_id="corr-migration-1",
+        )
+        events = read_events_v2_jsonl(_to_jsonl(event))
+        assert events == [event]
+        validate_event_v2(events[0])
+
+    def test_v2_reader_accepts_event_log_v2_stream(self) -> None:
+        log = getattr(_events_module(), "EventLogV2")(correlation_id="corr-migration-2")
+        log.start("dev", "repository", "preflight")
+        log.wait(
+            "dev",
+            "infra",
+            "readiness",
+            dependency="postgres",
+            message="postgres starting",
+        )
+        log.finish(
+            "dev",
+            "infra",
+            "readiness",
+            dependency="postgres",
+            status="PASSED",
+            message="postgres ready",
+        )
+        stream = "\n".join(_to_jsonl(event) for event in log.events)
+        events = read_events_v2_jsonl(stream)
+        assert [event["payload"]["status"] for event in events] == [
+            "STARTED",
+            "WAITING",
+            "PASSED",
+        ]
+        assert {event["correlation_id"] for event in events} == {"corr-migration-2"}
+        assert len({event["event_id"] for event in events}) == 3
+
+    def test_v2_reader_rejects_v1_event_dicts(self) -> None:
+        v1_event = _emit_event(
+            action="lint",
+            component="api-service",
+            phase="execution",
+            status="FAILED",
+            code=_diagnostic_code("STEP_FAILED"),
+            duration_ms=5,
+            message="v1 history event",
+            run_id="run-v1-reader",
+        )
+        with pytest.raises(AssertionError):
+            validate_event_v2(v1_event)
+
+    def test_v2_reader_rejects_v1_jsonl_stream(self) -> None:
+        v1_event = _emit_event(
+            action="test",
+            component="repository",
+            phase="execution",
+            status="PASSED",
+            code=_diagnostic_code("OK"),
+            duration_ms=1,
+            message="v1 regression event",
+            run_id="run-v1-stream",
+        )
+        with pytest.raises(AssertionError):
+            read_events_v2_jsonl(_to_jsonl(v1_event))

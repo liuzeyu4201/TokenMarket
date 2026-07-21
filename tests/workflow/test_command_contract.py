@@ -9,11 +9,13 @@ orchestration are implemented.
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 
 import pytest
 
-from .helpers import find_repo_root, load_json, repo_path, run
+from .helpers import find_repo_root, load_json, load_text, repo_path, run, validate_event_v2
 
 ROOT_MAKEFILE = repo_path("Makefile")
 
@@ -206,3 +208,97 @@ class TestComponentCoverage:
         assert (
             bound == expected
         ), f"aggregate `{action}` must cover all service-like components; missing {missing}"
+
+
+V1_MAKE_WORKFLOW = (
+    "shared",
+    "contracts",
+    "repository-workflow",
+    "v1",
+    "make-workflow.md",
+)
+V1_EVENT_SCHEMA = (
+    "shared",
+    "contracts",
+    "repository-workflow",
+    "v1",
+    "workflow-event.schema.json",
+)
+V2_MAKE_WORKFLOW = (
+    "shared",
+    "contracts",
+    "repository-workflow",
+    "v2",
+    "make-workflow.md",
+)
+V2_EVENT_SCHEMA = (
+    "shared",
+    "contracts",
+    "repository-workflow",
+    "v2",
+    "workflow-event.schema.json",
+)
+
+
+class TestMakeWorkflowEventMigration:
+    """Root Make/event v2 migration gate (SF02 T016).
+
+    The v2 contract is published with its consumer-migration/deprecation gate
+    while the v1 Make/event artifacts and the current v1 JSONL stream remain
+    intact as explicit regression coverage until the activation gate passes.
+    """
+
+    def test_v2_make_workflow_contract_published(self) -> None:
+        for parts in (V2_MAKE_WORKFLOW, V2_EVENT_SCHEMA):
+            path = repo_path(*parts)
+            assert path.is_file(), f"missing v2 contract artifact: {path}"
+            assert path.read_text(encoding="utf-8").strip(), f"empty v2 artifact: {path}"
+
+    def test_v1_make_workflow_artifacts_retained(self) -> None:
+        """Immutable v1 Make/event artifacts stay through the deprecation window."""
+        for parts in (V1_MAKE_WORKFLOW, V1_EVENT_SCHEMA):
+            path = repo_path(*parts)
+            assert path.is_file(), f"v1 history must be retained: {path}"
+            assert path.read_text(encoding="utf-8").strip(), f"empty v1 artifact: {path}"
+
+    def test_v2_contract_declares_consumer_migration_gate(self) -> None:
+        text = load_text(*V2_MAKE_WORKFLOW)
+        for phrase in (
+            "Consumer migration gate",
+            "Announcement period",
+            "Activation",
+            "Deprecation window",
+        ):
+            assert phrase in text, f"v2 contract must declare `{phrase}`"
+        assert "No dual JSONL stream" in text, "v2 contract forbids a dual JSONL stream"
+
+    def test_v2_contract_keeps_stable_public_target_names(self) -> None:
+        text = load_text(*V2_MAKE_WORKFLOW)
+        assert "`dev`" in text and "`dev-down`" in text
+        for target in ("dev", "dev-down"):
+            result = _make("-n", target)
+            assert result.returncode == 0, f"target `{target}` must stay defined through v2"
+
+    def test_current_dev_jsonl_stream_is_strict_v1_until_activation(self) -> None:
+        """Until the activation gate, `make dev` still emits only v1 JSONL events."""
+        env = os.environ.copy()
+        env.pop("NO_COLOR", None)  # force the JSONL branch regardless of terminal env
+        result = subprocess.run(
+            ["make", "dev"],
+            cwd=find_repo_root(),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0, "dev remains fail-closed before the v2 activation gate"
+        jsonl_lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
+        assert jsonl_lines, "dev must emit JSONL step events on the v1 stream"
+        for line in jsonl_lines:
+            event = json.loads(line)
+            assert event["schema_version"] == "1.0.0"
+            assert isinstance(event["run_id"], str) and event["run_id"]
+            # The migrated strict v2 reader must reject the current v1 stream;
+            # the streams never mix and consumers migrate before activation.
+            with pytest.raises(AssertionError):
+                validate_event_v2(event)

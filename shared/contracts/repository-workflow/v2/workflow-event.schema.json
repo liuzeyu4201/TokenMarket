@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/repository-workflow/v2/workflow-event.schema.json",
+  "title": "TokenMarket Workflow Step Event Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "timestamp",
+    "producer",
+    "correlation_id",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "const": "workflow.step"
+    },
+    "schema_version": {
+      "const": "2.0.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "producer": {
+      "const": "repository-workflow"
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "component",
+        "phase",
+        "status",
+        "code",
+        "duration_ms",
+        "message"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "component": {
+          "enum": [
+            "repository",
+            "proxy-gateway",
+            "api-service",
+            "billing-service",
+            "admin-service",
+            "frontend",
+            "shared",
+            "infra",
+            "ops"
+          ]
+        },
+        "dependency": {
+          "enum": ["postgres", "redis", "grafana"]
+        },
+        "phase": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "status": {
+          "enum": ["STARTED", "WAITING", "PASSED", "FAILED", "SKIPPED"]
+        },
+        "code": {
+          "enum": [
+            "OK",
+            "INVALID_USAGE",
+            "TOOL_MISSING",
+            "TOOL_VERSION_UNSUPPORTED",
+            "INVALID_CONFIG",
+            "INVALID_MODE",
+            "PROD_APPROVAL_REQUIRED",
+            "SF02_NOT_READY",
+            "COMPONENT_NOT_INITIALIZED",
+            "NO_TESTS_EXECUTED",
+            "STEP_FAILED",
+            "CONTRACT_DRIFT",
+            "MIGRATION_INVALID",
+            "SECRET_DETECTED",
+            "IMAGE_UNAVAILABLE",
+            "PORT_CONFLICT",
+            "DEPENDENCY_NOT_READY",
+            "OPERATION_IN_PROGRESS",
+            "RESOURCE_OWNERSHIP_CONFLICT"
+          ]
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["dependency"]
+          },
+          "then": {
+            "properties": {
+              "component": {
+                "enum": ["repository", "infra"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": ["dev", "dev-down"]
+              },
+              "phase": {
+                "enum": [
+                  "image-pull",
+                  "image-verify",
+                  "reconcile",
+                  "liveness",
+                  "readiness",
+                  "stopping"
+                ]
+              }
+            },
+            "required": ["action", "phase"]
+          },
+          "then": {
+            "required": ["dependency"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "enum": ["IMAGE_UNAVAILABLE", "PORT_CONFLICT", "DEPENDENCY_NOT_READY"]
+              }
+            },
+            "required": ["code"]
+          },
+          "then": {
+            "required": ["dependency"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": ["WAITING", "PASSED"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "code": {
+                "const": "OK"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": ["FAILED", "SKIPPED"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "code": {
+                "not": {
+                  "const": "OK"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

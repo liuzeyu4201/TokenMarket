@@ -1,13 +1,25 @@
-"""Billing service SF01 scaffold."""
+"""Billing service SF01 scaffold with SF02 PostgreSQL-aware readiness."""
 
 from __future__ import annotations
 
+import os
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import Info, generate_latest
+from sqlalchemy.ext.asyncio import AsyncEngine
 
+from .database import (
+    InvalidDatabaseConfigError,
+    ProbeErrorCategory,
+    ProbeOutcome,
+    ReadinessProbe,
+    create_postgres_engine,
+    probe_postgres_readiness,
+)
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
 
@@ -17,7 +29,55 @@ logger = configure_logging()
 service_info = Info("app", "Billing service build information")
 service_info.info({"service": "billing-service", "version": VERSION})
 
-app = FastAPI(title="TokenMarket Billing Service", version=VERSION)
+
+async def _invalid_config_probe() -> ProbeOutcome:
+    return ProbeOutcome(ok=False, category=ProbeErrorCategory.INVALID_CONFIG)
+
+
+def _build_probe_from_env() -> tuple[ReadinessProbe, AsyncEngine | None]:
+    """Build the lifespan-owned probe from DATABASE_URL, failing closed.
+
+    Invalid configuration never raises and never echoes the URL; readiness
+    reports INVALID_CONFIG while liveness stays independent.
+    """
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url is None:
+        return _invalid_config_probe, None
+    try:
+        engine = create_postgres_engine(database_url)
+    except InvalidDatabaseConfigError:
+        logger.warning("postgres readiness probe disabled: invalid configuration")
+        return _invalid_config_probe, None
+
+    async def _probe() -> ProbeOutcome:
+        return await probe_postgres_readiness(engine)
+
+    return _probe, engine
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Own the probe engine: create on startup, dispose on shutdown.
+
+    Tests may inject ``app.state.postgres_probe``/``postgres_engine`` before
+    startup; injected probes are preserved while any present engine is still
+    disposed at shutdown.
+    """
+    created = getattr(app.state, "postgres_probe", None) is None
+    if created:
+        probe, engine = _build_probe_from_env()
+        app.state.postgres_probe = probe
+        app.state.postgres_engine = engine
+    yield
+    engine = getattr(app.state, "postgres_engine", None)
+    if engine is not None:
+        await engine.dispose()
+    app.state.postgres_engine = None
+    if created:
+        app.state.postgres_probe = None
+
+
+app = FastAPI(title="TokenMarket Billing Service", version=VERSION, lifespan=lifespan)
 app.state.version = VERSION
 app.include_router(health_router)
 

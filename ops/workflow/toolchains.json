@@ -143,11 +143,11 @@
     },
     {
       "tool": "postgresql",
-      "exact_version": "15.12",
-      "version_source": "ci-gates.md / migration-integration-check contract",
+      "exact_version": "15.18",
+      "version_source": "ci-gates.md / migration-integration-check contract / SF02 local dependency manifest",
       "affected_components": ["api-service", "billing-service"],
       "install_policy": "container-image-digest",
-      "integrity_reference": "docker.io/library/postgres:15.12@sha256:postgresql-15-digest-placeholder"
+      "integrity_reference": "docker.io/library/postgres:15.18-bookworm@sha256:b0c5bab0fbba8e0c221f73b1dc6359ec35f8650074377e727299df248fc8ad51"
     },
     {
       "tool": "gitleaks",

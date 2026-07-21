@@ -8,6 +8,7 @@ and emits JSONL/plain-text step events.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import shutil
@@ -16,13 +17,18 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 from .events import DiagnosticCode, EventLog, aggregate_status, emit_event, to_jsonl
 from .images import image_scan, runtime_smoke
 from .manifest import ManifestError, action_binding, load_manifest, validate_all
 from .mode import ModeError as ModeSelectionError
 from .mode import require_production_approval, validate_mode
+
+if TYPE_CHECKING:
+    from .local_env.identity import WorkspaceIdentity
+    from .local_env.lifecycle import AdapterFactory, ClockFn, ProbeFn, SleepFn
+    from .local_env.models import LocalDependencyManifest
 
 
 class WorkflowError(Exception):
@@ -341,6 +347,61 @@ def execute_action(
             )
         )
         return 1
+
+
+def execute_dev_guarded(
+    *,
+    repo_root: Path,
+    mode: str | None = None,
+    mode_origin: str = "omitted",
+    plain: bool = False,
+    workspace_root: Path | None = None,
+    identity: WorkspaceIdentity | None = None,
+    config_reader: Callable[[], str] | None = None,
+    manifest_loader: Callable[[], LocalDependencyManifest] | None = None,
+    runtime_base: Path | None = None,
+    adapter_factory: AdapterFactory | None = None,
+    probe_fn: ProbeFn | None = None,
+    clock: ClockFn | None = None,
+    sleep: SleepFn | None = None,
+) -> int:
+    """Internal guarded SF02 dev dispatch (T032); NOT a public target.
+
+    Tests import and call this path directly to exercise the real T031 start
+    lifecycle with injectable seams. It is deliberately not wired to any
+    public entry point: ``execute_action("dev")`` and ``execute_action(
+    "dev-down")`` keep the v1 ``SF02_NOT_READY`` fail-closed behavior until
+    the make-workflow v2 activation gate passes (T074), so a closed gate means
+    the public targets still fail before reading configuration, checking
+    Docker, or mutating the workspace. Effective-mode validation inside the
+    lifecycle also fails closed (``INVALID_MODE``) for any non-local or
+    non-command-line mode origin.
+    """
+    from .local_env import lifecycle as _lifecycle
+
+    outcome = asyncio.run(
+        _lifecycle.start_local_environment(
+            repo_root=repo_root,
+            mode=mode,
+            mode_origin=mode_origin,
+            workspace_root=workspace_root,
+            identity=identity,
+            config_reader=config_reader,
+            manifest_loader=manifest_loader,
+            runtime_base=runtime_base,
+            adapter_factory=adapter_factory,
+            probe_fn=probe_fn,
+            clock=clock,
+            sleep=sleep,
+        )
+    )
+    use_plain = plain or bool(os.environ.get("NO_COLOR"))
+    for envelope, line in zip(outcome.events, outcome.plain_lines):
+        if use_plain:
+            print(line)
+        else:
+            print(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")))
+    return 0 if outcome.status == "PASSED" else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:

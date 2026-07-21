@@ -1,0 +1,128 @@
+{
+  "schema_version": "1.0.0",
+  "diagnostic_contract_version": "2.0.0",
+  "project": {
+    "prefix": "tokenmarket",
+    "workspace_hash_algorithm": "sha256-canonical-path-nfc-utf8",
+    "workspace_hash_length": 12,
+    "workspace_fingerprint_length": 64,
+    "compose_file": "infra/docker/compose.local.yml",
+    "compose_transport": "verified-committed-bytes-via-stdin",
+    "compose_project_directory_policy": "secure-runtime-project-id-directory",
+    "lock_mechanism": "posix-fcntl-nonblocking-exclusive"
+  },
+  "runtime": {
+    "docker_version": "29.5.3",
+    "compose_version": "5.1.4",
+    "endpoint": "local-unix-socket",
+    "secret_transport": "compose-environment-source-secret-files",
+    "hosts": [
+      "darwin/arm64",
+      "linux/amd64"
+    ]
+  },
+  "timeouts": {
+    "readiness_budget_seconds": 60,
+    "repeat_confirmation_seconds": 15,
+    "stop_operation_seconds": 75
+  },
+  "dependencies": [
+    {
+      "id": "postgres",
+      "repository": "docker.io/library/postgres",
+      "version_tag": "15.18-bookworm",
+      "index_digest": "sha256:b0c5bab0fbba8e0c221f73b1dc6359ec35f8650074377e727299df248fc8ad51",
+      "platform_digests": {
+        "linux_amd64": "sha256:fafb7480959eeeb7f1e43b479e642ffef2aa0f067242a1954ab41f2d764e2786",
+        "linux_arm64": "sha256:92c67be3a884bc55d99e73dab0baca3f7a2c1591dc1828abadfdd640b10866c8"
+      },
+      "required_platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "service_name": "postgres",
+      "host_url_field": "DATABASE_URL",
+      "container_port": 5432,
+      "default_host_port": 5432,
+      "host_bind_address": "127.0.0.1",
+      "liveness_probe": "pg-isready-tcp",
+      "readiness_probe": "authenticated-select-1",
+      "durability": "durable-fact",
+      "secret_transport": "postgres-password-file",
+      "volume": {
+        "logical_name": "postgres-data",
+        "mount_path": "/var/lib/postgresql/data",
+        "delete_on_down": false
+      },
+      "runtime_uid": 999,
+      "runtime_gid": 999,
+      "runtime_uid_policy": "verified-upstream-non-root-secret-owner",
+      "stop_grace_period_seconds": 60
+    },
+    {
+      "id": "redis",
+      "repository": "docker.io/library/redis",
+      "version_tag": "7.2.14-bookworm",
+      "index_digest": "sha256:f0707c78ea880b293ccdeb410c9c0a8ccae93fe7128799b751333a698b0a39a7",
+      "platform_digests": {
+        "linux_amd64": "sha256:86778a4a011a500d9a502858e27647380b62e5e8fbadef3f59e506f0899792fd",
+        "linux_arm64": "sha256:7ee8f94475527b5d6a1077c2be9d7fab2b1417fe0d9985ffd28f29764c79c291"
+      },
+      "required_platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "service_name": "redis",
+      "host_url_field": "REDIS_URL",
+      "container_port": 6379,
+      "default_host_port": 6379,
+      "host_bind_address": "127.0.0.1",
+      "liveness_probe": "redis-process",
+      "readiness_probe": "authenticated-ping-pong",
+      "durability": "preserved-rebuildable",
+      "secret_transport": "redis-config-file",
+      "volume": {
+        "logical_name": "redis-data",
+        "mount_path": "/data",
+        "delete_on_down": false
+      },
+      "runtime_uid": 999,
+      "runtime_gid": 999,
+      "runtime_uid_policy": "verified-upstream-non-root-secret-owner",
+      "stop_grace_period_seconds": 30
+    },
+    {
+      "id": "grafana",
+      "repository": "docker.io/grafana/grafana",
+      "version_tag": "13.0.3",
+      "index_digest": "sha256:1a345428a36270f5fb9add69fea71450a5843c15266c99359d6d380470ab19c9",
+      "platform_digests": {
+        "linux_amd64": "sha256:65f8af7bd56f4010036ca45ef301deae30bd102880926bfd48f8c19be85b6fd8",
+        "linux_arm64": "sha256:d2ee7728138ac45709a1dde82eebadd85f9768eb46b528665f78426c606a35b5"
+      },
+      "required_platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "service_name": "grafana",
+      "host_url_field": "GRAFANA_URL",
+      "container_port": 3000,
+      "default_host_port": 3000,
+      "host_bind_address": "127.0.0.1",
+      "liveness_probe": "grafana-api-health",
+      "readiness_probe": "health-database-ok-and-admin-user",
+      "durability": "ephemeral",
+      "secret_transport": "grafana-admin-password-file",
+      "ephemeral_storage": {
+        "type": "tmpfs",
+        "mount_path": "/var/lib/grafana",
+        "owner_policy": "verified-runtime-uid-gid",
+        "mode": "0700"
+      },
+      "runtime_uid": 472,
+      "runtime_gid": 472,
+      "runtime_uid_policy": "verified-upstream-non-root-secret-owner",
+      "stop_grace_period_seconds": 30
+    }
+  ]
+}

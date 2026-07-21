@@ -31,6 +31,22 @@ The adapter will:
 
 Selected dependency releases are PostgreSQL `15.18-bookworm`, Redis `7.2.14-bookworm`, and Grafana OSS `13.0.3`; the implementation change must resolve, verify, scan, and commit real multi-platform index and both target child digests before the Compose asset is accepted.
 
+### Resolved dependency evidence (verified 2026-07-16)
+
+Method: each OCI index digest was computed as the SHA-256 of the raw index document fetched through two independent registry mirrors and cross-checked equal; child digests were read from the index manifest lists; linux/arm64 images were pulled and executed natively on darwin/arm64 with Docker 29.5.3 and Compose v5.1.4. Canonical machine-readable values are committed in `ops/workflow/local-dependencies.json`.
+
+- **PostgreSQL `15.18-bookworm`** (`docker.io/library/postgres`): index `sha256:b0c5bab0fbba8e0c221f73b1dc6359ec35f8650074377e727299df248fc8ad51`; linux/amd64 `sha256:fafb7480959eeeb7f1e43b479e642ffef2aa0f067242a1954ab41f2d764e2786`; linux/arm64 `sha256:92c67be3a884bc55d99e73dab0baca3f7a2c1591dc1828abadfdd640b10866c8`; runtime `uid=999 gid=999` (`postgres`); PostgreSQL License.
+- **Redis `7.2.14-bookworm`** (`docker.io/library/redis`): index `sha256:f0707c78ea880b293ccdeb410c9c0a8ccae93fe7128799b751333a698b0a39a7`; linux/amd64 `sha256:86778a4a011a500d9a502858e27647380b62e5e8fbadef3f59e506f0899792fd`; linux/arm64 `sha256:7ee8f94475527b5d6a1077c2be9d7fab2b1417fe0d9985ffd28f29764c79c291`; runtime `uid=999 gid=999` (`redis`); BSD 3-Clause (final BSD-licensed Redis release line).
+- **Grafana OSS `13.0.3`** (`docker.io/grafana/grafana`): index `sha256:1a345428a36270f5fb9add69fea71450a5843c15266c99359d6d380470ab19c9`; linux/amd64 `sha256:65f8af7bd56f4010036ca45ef301deae30bd102880926bfd48f8c19be85b6fd8`; linux/arm64 `sha256:d2ee7728138ac45709a1dde82eebadd85f9768eb46b528665f78426c606a35b5`; AGPL-3.0, used unmodified as a local container with no distribution or hosted-service offering. Upstream runs as `uid=472` with primary group `0` (root); the frozen manifest schema requires `runtime_gid >= 1` and the data model requires a verified non-root runtime identity, so the Compose asset pins `user: "472:472"` and a `/var/lib/grafana` tmpfs with `uid=472,gid=472,mode=0700`. Verified on Docker 29.5.3 that Grafana 13.0.3 starts as `472:472` on that tmpfs and `GET /api/health` returns 200 with `database="ok"`; the manifest records `runtime_uid=472, runtime_gid=472`.
+
+Vulnerability scans (Trivy, severities HIGH/CRITICAL, against the pinned digests, 2026-07-16; scans are reproducible from the committed digests and are re-run on any dependency change):
+
+- PostgreSQL: 16 CRITICAL / 45 HIGH findings — 7 unique CVEs, all in Debian bookworm userland (`perl` 5.36 CVE-2026-13221/42496/8376, `zlib1g` CVE-2023-45853, `libsqlite3-0` CVE-2025-7458, `libxml2` CVE-2026-6653) plus one Go `stdlib` CVE-2025-68121 in a bundled Go tool; none in the PostgreSQL server build itself.
+- Redis: 4 CRITICAL / 17 HIGH — `perl-base` CVE-2026-13221/42496/8376 and `zlib1g` CVE-2023-45853 from the bookworm base.
+- Grafana: 0 CRITICAL / 32 HIGH.
+
+Risk acceptance: containers bind loopback only, run non-root with 0400 synthetic local credentials, and hold no production data, so bookworm userland exposure is accepted for local development. Resolution and scan evidence are re-produced whenever a tag or digest changes, per the rollback and dependency-change rules below.
+
 ## Ownership
 
 - **Public command and event owner**: Repository workflow maintainers.

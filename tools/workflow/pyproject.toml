@@ -22,6 +22,7 @@ dependencies = [
     "isort>=5.13.0,<6.0.0",
     "flake8>=7.0,<8.0",
     "mypy>=1.11,<2.0",
+    "asyncpg>=0.30.0,<0.31.0",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +36,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["workflow"]
+packages = ["workflow", "workflow.local_env"]
 
 [tool.setuptools.package-dir]
 workflow = "."

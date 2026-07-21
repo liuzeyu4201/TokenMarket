@@ -71,6 +71,9 @@ playwright-report/
 blob-report/
 junit.xml
 
+# Ephemeral secret-scan fixture outputs (gitleaks reports and synthetic temp files)
+tests/workflow/fixtures/secret-scan/tmp*
+
 # Local databases and container overrides
 *.db
 *.sqlite

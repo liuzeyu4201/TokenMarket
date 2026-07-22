@@ -1,7 +1,7 @@
 # ADR 002: Local Dependency Lifecycle via Docker Compose
 
 **Status**: Accepted
-**Implementation Verification**: Pending — requires both-platform lifecycle, security, persistence, recovery, accessibility, and performance evidence before public v2 activation
+**Implementation Verification**: Pending — requires both-platform lifecycle, security, persistence, recovery, accessibility, and performance evidence before public v2 activation (see `specs/002-local-dependency-lifecycle/evidence/README.md`; T068 partial unit evidence recorded, T069–T071 and full Make matrix open). Activation remains atomic at T074 only after those rows pass.
 **Date**: 2026-07-15
 **Owner**: TokenMarket Engineering
 **Deciders**: Repository maintainers / Platform team
@@ -129,10 +129,51 @@ Rejected. Multi-platform index images, named volumes, and published ports alread
 - Grafana local state is intentionally reset across ordinary down/up; durable monitoring configuration waits for SF19.
 - A moved workspace does not automatically adopt old volumes, by design.
 
+## Requirement-to-evidence traceability (T073)
+
+| Area | Primary evidence / tasks |
+|------|--------------------------|
+| Public entry + activation gate (FR-001) | `tools/workflow/cli.py` `SF02_NOT_READY`; activation T074 after T068–T073 |
+| Immutable digests / three deps (FR-002–003) | `ops/workflow/local-dependencies.json`; compose/manifest tests |
+| Config / loopback / secrets (FR-004–009) | `local_env/config.py`; config/security tests |
+| Start readiness 60s / repeat 15s (FR-013–014, SC-001–002) | lifecycle + performance harness; platform evidence T069–T070 |
+| Ownership / isolation / lock (FR-016, FR-023) | `local_env/identity.py`; identity/concurrency tests |
+| Non-destructive down + volumes (FR-017–021) | `lifecycle.stop_*` / compose down; persistence tests T076 |
+| Event v2 + consumer migration (FR-026) | `events.py`; contracts/events/sf02_transition tests |
+| API/Billing readiness only (FR-025) | service `database.py`/`health.py`; service tests |
+| Security redaction (Constitution II) | security/secret_scan tests; runbook |
+| Dual-platform + usability (SC-001, SC-008) | T069–T071 evidence files under `specs/002-local-dependency-lifecycle/evidence/` |
+
+## Dependency / security / schema impact
+
+- **New/changed artifacts**: Compose `infra/docker/compose.local.yml`; lifecycle package `tools/workflow/local_env/`; workflow event v2 schema; health OpenAPI **1.1.0** (backward-compatible 503 shape for API/Billing only); workflow `asyncpg` 0.30.x in the independent workflow lock only.
+- **No** business schema/Alembic/seed; **no** Gateway/Admin dependency probes; **no** Kafka in the SF02 dependency set.
+- Digests and scans are re-reviewed whenever tags change (see Resolved dependency evidence above).
+
+## Activation / deprecation notice
+
+- **Current runtime**: public `make dev` / `make dev-down` remain SF01 `SF02_NOT_READY` fail-closed (pre-config/pre-Docker).
+- **Guarded candidate**: `execute_dev_guarded` / `execute_dev_down_guarded` exercise real lifecycle for tests only.
+- **Activation (T074, single reviewed change)**: after Linux amd64 + macOS arm64 evidence, full quality gates, usability protocol, and this ADR verification flip: remove runtime `SF02_NOT_READY`, default event v2 envelopes on public targets, publish matching help/recovery text, mark **Implementation Verification: Verified**.
+- **Deprecation**: v1 Make/event artifacts remain immutable through the next tagged release; consumers already migrated to v2 readers.
+
+## Volume-preserving rollback decision point
+
+Rollback reverts adapter/Compose/manifest/v2 activation/service readiness together and restores `SF02_NOT_READY` if needed. **Project PostgreSQL/Redis named volumes are never deleted by rollback or ordinary down.** Image rollback changes tag + index + both child digests + scan evidence as one unit.
+
+## Evidence index
+
+- `specs/002-local-dependency-lifecycle/evidence/README.md`
+
 ## References
 
 - `specs/002-local-dependency-lifecycle/spec.md`
 - `specs/002-local-dependency-lifecycle/research.md`
+- `specs/002-local-dependency-lifecycle/quickstart.md`
+- `specs/002-local-dependency-lifecycle/tasks.md`
+- `ops/runbooks/local-environment.md`
+- `shared/contracts/repository-workflow/v2/`
+- `shared/contracts/local-environment/v1/`
 - `specs/001-repository-workflow-baseline/contracts/make-workflow.md`
 - `specs/001-repository-workflow-baseline/contracts/workflow-event.schema.json`
 - `specs/001-repository-workflow-baseline/contracts/environment-mode.md`

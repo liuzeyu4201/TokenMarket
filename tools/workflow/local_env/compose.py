@@ -56,10 +56,16 @@ import stat
 import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
 
-from .identity import COMPOSE_PROJECT_DIR_NAME, WorkspaceIdentity
+from .identity import (
+    COMPOSE_PROJECT_DIR_NAME,
+    REPOSITORY_LABEL_VALUE,
+    WorkspaceIdentity,
+    authorize_label_mutation,
+)
 from .models import (
     ComposeSecretMaterial,
     DependencyId,
@@ -337,6 +343,7 @@ def _require_str(record: Mapping[str, Any], key: str) -> str:
 
 
 def _parse_labels(raw: Any) -> dict[str, str]:
+    """Parse Compose ``ps --format json`` comma-separated label strings."""
     if raw is None or raw == "":
         return {}
     if not isinstance(raw, str):
@@ -350,6 +357,22 @@ def _parse_labels(raw: Any) -> dict[str, str]:
             raise ComposeStateParseError("compose state labels are malformed")
         labels[key] = value
     return labels
+
+
+def _parse_inspect_labels(raw: Any) -> dict[str, str]:
+    """Parse Docker inspect label maps (dict) or Compose label strings."""
+    if raw is None or raw == "":
+        return {}
+    if isinstance(raw, Mapping):
+        labels: dict[str, str] = {}
+        for key, value in raw.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise ComposeStateParseError("docker inspect labels are malformed")
+            labels[key] = value
+        return labels
+    if isinstance(raw, str):
+        return _parse_labels(raw)
+    raise ComposeStateParseError("docker inspect labels are malformed")
 
 
 def _parse_publishers(raw: Any) -> tuple[PublisherInfo, ...]:
@@ -563,7 +586,6 @@ def build_teardown_placeholders(
 
     Values satisfy the synthetic-secret grammar so Compose can parse the
     verified model, but they are fixed non-credentials with no real meaning.
-    The down command itself is a later task (T043); this is the parse surface.
     """
     postgres = manifest.dependency(DependencyId.POSTGRES)
     redis_dep = manifest.dependency(DependencyId.REDIS)
@@ -600,6 +622,56 @@ def build_teardown_placeholders(
 def _indicates_port_race(stderr: str) -> bool:
     lowered = stderr.lower()
     return any(marker in lowered for marker in _PORT_RACE_MARKERS)
+
+
+_PARSE_FAILURE_MARKERS = (
+    "interpolating",
+    "required variable",
+    "missing a value",
+    "variable is not set",
+    "invalid interpolation",
+)
+
+
+def _indicates_compose_parse_failure(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return any(marker in lowered for marker in _PARSE_FAILURE_MARKERS)
+
+
+class ResourceKind(str, Enum):
+    """Exact-label Docker resource kinds the down path may discover."""
+
+    CONTAINER = "container"
+    NETWORK = "network"
+    VOLUME = "volume"
+
+
+@dataclass(frozen=True)
+class ProjectResource:
+    """One exact-label Docker resource owned (or claimed) by a project."""
+
+    kind: ResourceKind
+    resource_id: str
+    name: str
+    labels: dict[str, str]
+
+
+# Non-secret parse-only values so Compose can interpolate the model on down
+# without reading .env.local. Ports are fixed defaults; they are never used
+# to publish because down does not create resources.
+_TEARDOWN_DERIVED_ENV: dict[str, str] = {
+    POSTGRES_USER_ENV: "teardown",
+    POSTGRES_DB_ENV: "teardown",
+    POSTGRES_HOST_PORT_ENV: "5432",
+    REDIS_HOST_PORT_ENV: "6379",
+    GRAFANA_HOST_PORT_ENV: "3000",
+}
+
+_SERVICE_STOP_GRACE: dict[str, int] = {
+    DependencyId.POSTGRES.value: 60,
+    DependencyId.REDIS.value: 30,
+    DependencyId.GRAFANA.value: 30,
+}
 
 
 class ComposeAdapter:
@@ -1139,3 +1211,365 @@ class ComposeAdapter:
         env[WORKSPACE_ID_ENV] = self._identity.project_id
         env[WORKSPACE_FINGERPRINT_ENV] = self._identity.workspace_fingerprint
         return env
+
+    # -- down: discovery, authorization, reconcile, fallback (T043) -----------
+
+    def project_resources(self) -> tuple[ProjectResource, ...]:
+        """List exact-project containers, networks, and volumes (read-only).
+
+        Uses only the Compose project label filter. Stopped containers are
+        included so down can still remove them. Never reads the Compose asset.
+        """
+        filter_value = f"label=com.docker.compose.project={self._identity.project_id}"
+        return self._list_filtered_resources(filter_value)
+
+    def repository_resources(self) -> tuple[ProjectResource, ...]:
+        """List repository-labeled resources across workspaces (read-only).
+
+        Used only for report-only moved-workspace findings; never mutates.
+        """
+        filter_value = f"label={LABEL_REPOSITORY}={REPOSITORY_LABEL_VALUE}"
+        return self._list_filtered_resources(filter_value)
+
+    def assert_exact_resource_ownership(
+        self, resources: Sequence[ProjectResource]
+    ) -> None:
+        """Authorize every resource by exact project id + full fingerprint."""
+        for resource in resources:
+            authorize_label_mutation(self._identity, resource.labels)
+
+    def remove_exact_resources(
+        self,
+        resources: Sequence[ProjectResource],
+        *,
+        timeout_seconds: float,
+    ) -> None:
+        """Gracefully stop/remove exact-label containers and networks only.
+
+        Volumes, foreign ownership, and forced removal are refused. A stop
+        failure or timeout is failure evidence — never silent success.
+        """
+        if timeout_seconds <= 0:
+            raise ComposeCommandError(
+                "exact-label removal budget exhausted; project state is retained "
+                "for inspection"
+            )
+        # Refuse volumes and authorize every resource before any spawn.
+        for resource in resources:
+            if resource.kind is ResourceKind.VOLUME:
+                raise OwnershipConflictError(
+                    "named volumes must never be removed by the ordinary stop "
+                    "path; refusing volume mutation"
+                )
+            authorize_label_mutation(self._identity, resource.labels)
+
+        deadline = timeout_seconds
+        # Containers first (postgres → redis → grafana grace), then networks.
+        containers = [
+            resource
+            for resource in resources
+            if resource.kind is ResourceKind.CONTAINER
+        ]
+        networks = [
+            resource for resource in resources if resource.kind is ResourceKind.NETWORK
+        ]
+        for resource in containers:
+            grace = self._stop_grace_for(resource)
+            stop_budget = min(float(grace) + 5.0, deadline)
+            if stop_budget <= 0:
+                raise ComposeCommandError(
+                    "exact-label removal budget exhausted; project state is "
+                    "retained for inspection"
+                )
+            result = self._spawn(
+                ["docker", "stop", "--time", str(grace), resource.resource_id],
+                timeout_seconds=stop_budget,
+                timeout_error=ComposeCommandError(
+                    "docker stop exceeded its bounded execution time and was terminated"
+                ),
+            )
+            if result.returncode != 0:
+                raise ComposeCommandError(
+                    "compose down failed; project state is retained for inspection"
+                )
+            rm_budget = min(15.0, deadline)
+            result = self._spawn(
+                ["docker", "rm", resource.resource_id],
+                timeout_seconds=rm_budget,
+                timeout_error=ComposeCommandError(
+                    "docker rm exceeded its bounded execution time and was terminated"
+                ),
+            )
+            if result.returncode != 0:
+                raise ComposeCommandError(
+                    "compose down failed; project state is retained for inspection"
+                )
+        for resource in networks:
+            net_budget = min(15.0, deadline)
+            if net_budget <= 0:
+                raise ComposeCommandError(
+                    "exact-label removal budget exhausted; project state is "
+                    "retained for inspection"
+                )
+            result = self._spawn(
+                ["docker", "network", "rm", resource.resource_id],
+                timeout_seconds=net_budget,
+                timeout_error=ComposeCommandError(
+                    "docker network rm exceeded its bounded execution time and "
+                    "was terminated"
+                ),
+            )
+            if result.returncode != 0:
+                raise ComposeCommandError(
+                    "compose down failed; project state is retained for inspection"
+                )
+
+    def reconcile_down(
+        self,
+        secrets: ComposeSecretSet,
+        *,
+        timeout_seconds: float,
+    ) -> None:
+        """Config-free exact-project down: verified stdin, no volumes/images.
+
+        Uses only parse-only placeholders plus workspace labels. On Compose
+        model parse failure, falls back to exact-label container/network
+        removal. Named volumes, images, and prune are never touched.
+        """
+        if timeout_seconds <= 0:
+            raise ComposeCommandError(
+                "compose down budget exhausted; project state is retained for "
+                "inspection"
+            )
+        compose_bytes = self.verified_compose_bytes()
+        child_env = self._child_environment(secrets, _TEARDOWN_DERIVED_ENV)
+        result = self._spawn(
+            self._compose_argv("down", "--remove-orphans", with_stdin_file=True),
+            timeout_seconds=timeout_seconds,
+            input_text=compose_bytes.decode("utf-8"),
+            env=child_env,
+            timeout_error=ComposeCommandError(
+                "compose down exceeded its bounded execution time and was terminated"
+            ),
+        )
+        if result.returncode == 0:
+            return
+        if _indicates_compose_parse_failure(result.stderr):
+            # Fallback only needs exact-label containers and networks; volumes
+            # are never listed or touched on this path.
+            filter_value = (
+                f"label=com.docker.compose.project={self._identity.project_id}"
+            )
+            mutable = [
+                *self._list_containers(filter_value),
+                *self._list_networks(filter_value),
+            ]
+            self.assert_exact_resource_ownership(mutable)
+            self.remove_exact_resources(mutable, timeout_seconds=timeout_seconds)
+            return
+        raise ComposeCommandError(
+            "compose down failed; project state is retained for inspection"
+        )
+
+    def _stop_grace_for(self, resource: ProjectResource) -> int:
+        service = resource.labels.get("com.docker.compose.service", "")
+        if service in _SERVICE_STOP_GRACE:
+            return _SERVICE_STOP_GRACE[service]
+        try:
+            definition = self._manifest.dependency(DependencyId(service))
+        except (ValueError, KeyError, LocalEnvironmentError):
+            return 30
+        return int(definition.stop_grace_period_seconds)
+
+    def _list_filtered_resources(self, filter_value: str) -> tuple[ProjectResource, ...]:
+        resources: list[ProjectResource] = []
+        resources.extend(self._list_containers(filter_value))
+        resources.extend(self._list_networks(filter_value))
+        resources.extend(self._list_volumes(filter_value))
+        return tuple(resources)
+
+    def _list_containers(self, filter_value: str) -> list[ProjectResource]:
+        result = self._spawn(
+            [
+                "docker",
+                "ps",
+                "-aq",
+                "--no-trunc",
+                "--filter",
+                filter_value,
+            ],
+            timeout_seconds=STATE_COMMAND_TIMEOUT_SECONDS,
+            timeout_error=ComposeCommandError(
+                "docker ps exceeded its bounded execution time and was terminated"
+            ),
+        )
+        if result.returncode != 0:
+            raise ComposeCommandError(
+                "docker resource listing failed; project state is retained for inspection"
+            )
+        ids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if not ids:
+            return []
+        inspect = self._spawn(
+            ["docker", "inspect", *ids],
+            timeout_seconds=STATE_COMMAND_TIMEOUT_SECONDS,
+            timeout_error=ComposeCommandError(
+                "docker inspect exceeded its bounded execution time and was terminated"
+            ),
+        )
+        if inspect.returncode != 0:
+            raise ComposeCommandError(
+                "docker resource listing failed; project state is retained for inspection"
+            )
+        try:
+            documents = json.loads(inspect.stdout)
+        except json.JSONDecodeError as exc:
+            raise ComposeStateParseError(
+                "docker inspect output is malformed; project state is retained"
+            ) from exc
+        if not isinstance(documents, list):
+            raise ComposeStateParseError(
+                "docker inspect output is malformed; project state is retained"
+            )
+        resources: list[ProjectResource] = []
+        for document in documents:
+            if not isinstance(document, dict):
+                raise ComposeStateParseError(
+                    "docker inspect output is malformed; project state is retained"
+                )
+            resource_id = str(document.get("Id") or "")
+            raw_name = str(document.get("Name") or resource_id)
+            name = raw_name.lstrip("/")
+            if isinstance(document.get("Config"), dict):
+                raw_labels = document["Config"].get("Labels")
+            else:
+                raw_labels = document.get("Labels")
+            labels = _parse_inspect_labels(raw_labels)
+            resources.append(
+                ProjectResource(
+                    kind=ResourceKind.CONTAINER,
+                    resource_id=resource_id,
+                    name=name,
+                    labels=labels,
+                )
+            )
+        return resources
+
+    def _list_networks(self, filter_value: str) -> list[ProjectResource]:
+        result = self._spawn(
+            [
+                "docker",
+                "network",
+                "ls",
+                "--no-trunc",
+                "-q",
+                "--filter",
+                filter_value,
+            ],
+            timeout_seconds=STATE_COMMAND_TIMEOUT_SECONDS,
+            timeout_error=ComposeCommandError(
+                "docker network ls exceeded its bounded execution time and was terminated"
+            ),
+        )
+        if result.returncode != 0:
+            raise ComposeCommandError(
+                "docker resource listing failed; project state is retained for inspection"
+            )
+        ids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if not ids:
+            return []
+        inspect = self._spawn(
+            ["docker", "network", "inspect", *ids],
+            timeout_seconds=STATE_COMMAND_TIMEOUT_SECONDS,
+            timeout_error=ComposeCommandError(
+                "docker network inspect exceeded its bounded execution time and "
+                "was terminated"
+            ),
+        )
+        if inspect.returncode != 0:
+            raise ComposeCommandError(
+                "docker resource listing failed; project state is retained for inspection"
+            )
+        try:
+            documents = json.loads(inspect.stdout)
+        except json.JSONDecodeError as exc:
+            raise ComposeStateParseError(
+                "docker network inspect output is malformed; project state is retained"
+            ) from exc
+        if not isinstance(documents, list):
+            raise ComposeStateParseError(
+                "docker network inspect output is malformed; project state is retained"
+            )
+        resources: list[ProjectResource] = []
+        for document in documents:
+            if not isinstance(document, dict):
+                raise ComposeStateParseError(
+                    "docker network inspect output is malformed; project state is retained"
+                )
+            resource_id = str(document.get("Id") or "")
+            name = str(document.get("Name") or resource_id)
+            labels = _parse_inspect_labels(document.get("Labels"))
+            resources.append(
+                ProjectResource(
+                    kind=ResourceKind.NETWORK,
+                    resource_id=resource_id,
+                    name=name,
+                    labels=labels,
+                )
+            )
+        return resources
+
+    def _list_volumes(self, filter_value: str) -> list[ProjectResource]:
+        result = self._spawn(
+            ["docker", "volume", "ls", "-q", "--filter", filter_value],
+            timeout_seconds=STATE_COMMAND_TIMEOUT_SECONDS,
+            timeout_error=ComposeCommandError(
+                "docker volume ls exceeded its bounded execution time and was terminated"
+            ),
+        )
+        if result.returncode != 0:
+            raise ComposeCommandError(
+                "docker resource listing failed; project state is retained for inspection"
+            )
+        names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if not names:
+            return []
+        inspect = self._spawn(
+            ["docker", "volume", "inspect", *names],
+            timeout_seconds=STATE_COMMAND_TIMEOUT_SECONDS,
+            timeout_error=ComposeCommandError(
+                "docker volume inspect exceeded its bounded execution time and "
+                "was terminated"
+            ),
+        )
+        if inspect.returncode != 0:
+            raise ComposeCommandError(
+                "docker resource listing failed; project state is retained for inspection"
+            )
+        try:
+            documents = json.loads(inspect.stdout)
+        except json.JSONDecodeError as exc:
+            raise ComposeStateParseError(
+                "docker volume inspect output is malformed; project state is retained"
+            ) from exc
+        if not isinstance(documents, list):
+            raise ComposeStateParseError(
+                "docker volume inspect output is malformed; project state is retained"
+            )
+        resources: list[ProjectResource] = []
+        for document in documents:
+            if not isinstance(document, dict):
+                raise ComposeStateParseError(
+                    "docker volume inspect output is malformed; project state is retained"
+                )
+            name = str(document.get("Name") or "")
+            labels = _parse_inspect_labels(document.get("Labels"))
+            resources.append(
+                ProjectResource(
+                    kind=ResourceKind.VOLUME,
+                    resource_id=name,
+                    name=name,
+                    labels=labels,
+                )
+            )
+        return resources

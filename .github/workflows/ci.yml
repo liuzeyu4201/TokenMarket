@@ -2,11 +2,11 @@ name: quality-gate
 
 on:
   push:
-    branches: ["main"]
+    branches: ["master", "master-dev"]
   pull_request:
-    branches: ["main"]
+    branches: ["master", "master-dev"]
   merge_group:
-    branches: ["main"]
+    branches: ["master", "master-dev"]
   workflow_dispatch:
 
 permissions:

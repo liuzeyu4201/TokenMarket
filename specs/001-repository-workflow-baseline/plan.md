@@ -250,9 +250,9 @@ ops/
 ### Phase E — CI activation and documentation
 
 1. Add `.github/workflows/ci.yml` with read-only permissions, full-history checkout, pinned toolchain/scanner setup and the single project command `make ci`; Docker provides the isolated PostgreSQL and image-smoke environments.
-2. Add CODEOWNERS and repository setup instructions for required `quality-gate`, protected main and merge queue compatibility.
+2. Add CODEOWNERS and repository setup instructions for required `quality-gate`, protected `master` / `master-dev` and merge queue compatibility.
 3. Complete root/component READMEs and ops runbooks; validate all links.
-4. When a GitHub remote exists, configure the ruleset and prove PR plus final-main triggers. Until then the workflow file is testable locally, but hosted acceptance is not complete.
+4. When a GitHub remote exists, configure the rulesets and prove PR plus final `master` / `master-dev` triggers. Until then the workflow file is testable locally, but hosted acceptance is not complete.
 
 **Exit evidence**: Full [quickstart.md](./quickstart.md) passes and PR review evidence links every requirement to tests/gates.
 
@@ -263,7 +263,7 @@ ops/
 | US1 / FR-003–014 | Command contract, frozen bootstrap, explicit type-check, component-action, fail-fast, preflight, fmt idempotency, SF02 and migration tests | Help text and recovery review |
 | US2 / FR-015–018 | `.env` ignore test, safe placeholder rules, Gitleaks fixture, log/event redaction, lockfile checks | Confirm no real value in Git/history/build args |
 | US3 / FR-001–002, FR-019, FR-024 | Manifest schema, structure/boundary negative fixtures, contract drift and link checks | ADR/owner/compatibility review |
-| US4 / FR-020–026 | Path fixture, dirty-worktree snapshot, mode-origin matrix, CI config contract and required gate test | Hosted PR/main gate evidence and ruleset review |
+| US4 / FR-020–026 | Path fixture, dirty-worktree snapshot, mode-origin matrix, CI config contract and required gate test | Hosted PR/`master`/`master-dev` gate evidence and ruleset review |
 | ER-001–003 | Contract version/compatibility tests, approval-before-access, pinned PostgreSQL 15 migration forward/backout/retry/head-restore | Security and migration owner review |
 | ER-004–007 | Help/preflight timing, retry/repeat runs, JSONL schema, `NO_COLOR`, screen-reader-safe text | Recorded target environment and recovery evidence |
 | SC-001–012 | Quickstart scenarios plus automated counts/timing/side-effect snapshots | New-developer 15-minute exercise and hosted CI proof |
@@ -291,11 +291,11 @@ Changed Go/Python domain coverage threshold remains 80%; SF01 creates no domain 
 2. Require local `make ci` on a clean checkout.
 3. Create the hosted CI workflow and verify read-only permissions before enabling the required check.
 4. Enable `quality-gate` ruleset only after one successful PR run exists, preventing a missing-check deadlock.
-5. Verify final `main` SHA, immutable image references and scan evidence; no images are pushed or deployed.
+5. Verify final `master` SHA, immutable image references and scan evidence; no images are pushed or deployed.
 
 ### Rollback
 
-- Revert through a reviewed PR validated by the same `quality-gate`; never reset or force-push `main`.
+- Revert through a reviewed PR validated by the same `quality-gate`; never reset or force-push `master` or `master-dev`.
 - Keep the required job name stable; revert Action SHAs, toolchain files and Make adapters together.
 - Disable a contaminated cache by schema bump; correctness must remain with caches off.
 - No database schema or production resource exists to roll back. If a migration test fixture fails, discard the isolated instance and fix the migration graph.

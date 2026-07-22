@@ -1,5 +1,24 @@
 # Workflow Runbook
 
+## Long-lived branches
+
+| Branch | Role | Typical merge path |
+|--------|------|--------------------|
+| `master` | **Production branch** — always releasable; source for production deploys | Reviewed PR from `master-dev` or hotfix into `master` |
+| `master-dev` | **Test-environment deployment branch** — integration and pre-prod validation | Feature / fix PR into `master-dev` |
+
+Development flow:
+
+1. Branch from `master-dev` (or the latest green tip of the line you are extending).
+2. Open a PR into `master-dev`; `quality-gate` must pass.
+3. After test-environment validation, open a promotion PR from `master-dev` into `master`.
+4. Hotfixes may target `master` when urgent, then MUST be back-merged into `master-dev`.
+
+Environment selection for `make migrate` and future deploy scripts is **not** inferred from
+the branch. Use explicit `mode=local|test|prod` (and production approval for `prod`) per
+`shared/contracts/repository-workflow/v1/environment-mode.md`. Future CD jobs may be
+*scheduled* from `master-dev` / `master` while still passing explicit `mode=` on the command line.
+
 ## Local configuration
 
 1. Copy `.env.example` to `.env.local`.
@@ -34,7 +53,7 @@ be reviewed before renewal.
 
 - Keep the required job name `quality-gate` stable through rollbacks.
 - Suspected cache contamination: bump cache key or disable cache.
-- Failed main merge: open a review-revert PR; never force-push.
+- Failed `master` or `master-dev` merge: open a review-revert PR; never force-push.
 
 ### Runner or scanner failure
 
@@ -49,24 +68,36 @@ If `quality-gate` fails because a hosted tool or scanner is unavailable:
 ### Required check rollout order
 
 1. Merge the CI workflow and verify at least one successful PR `quality-gate` run.
-2. Enable the `quality-gate` required status check in branch protection/ruleset.
-3. Enable "Do not allow bypassing the above settings" for the ruleset.
+2. Enable the `quality-gate` required status check in branch protection/rulesets for
+   both `master` and `master-dev`.
+3. Enable "Do not allow bypassing the above settings" for each ruleset.
 4. Enable "Restrict pushes that create files" and "Require a pull request before merging".
 
 ### GitHub ruleset configuration
 
-Configure the repository ruleset for `main` with:
+Configure repository rulesets for the long-lived branches:
 
-- **Target branches**: `main`
+#### `master` (production)
+
+- **Target branches**: `master`
 - **Bypass list**: empty (no role, team, or app may bypass)
 - **Restrictions**: disable direct push and force push
 - **Pull request**: required, at least 1 reviewer, dismiss stale approvals on new commits
 - **Required status checks**: `quality-gate`
-- **Commit message**: do not require signed commits unless ADR-002 is adopted
+- **Commit message**: do not require signed commits unless a later ADR adopts them
+- **Promotion**: prefer PRs that merge `master-dev` → `master` after test validation
 
-### Linking PR and final-main runs
+#### `master-dev` (test deployment)
+
+- **Target branches**: `master-dev`
+- **Bypass list**: empty
+- **Restrictions**: disable direct push and force push
+- **Pull request**: required, at least 1 reviewer, dismiss stale approvals on new commits
+- **Required status checks**: `quality-gate`
+
+### Linking PR and final long-lived-branch runs
 
 Each PR must show a green `quality-gate` run before merge. After merge, the
-`push` trigger on `main` produces the final-main run. Incident response and
-release evidence must reference both the PR run ID and the final-main run ID.
-
+`push` trigger on `master` or `master-dev` produces the final run for that tip.
+Incident response and release evidence must reference both the PR run ID and the
+final long-lived-branch run ID (and for production, the promotion PR into `master`).

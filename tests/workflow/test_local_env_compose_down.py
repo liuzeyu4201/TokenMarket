@@ -755,7 +755,11 @@ class TestProjectResourceDiscovery:
 
         resources = adapter.repository_resources()
 
-        assert _argvs(fake_subprocess) == _listing_argvs(identity, repository_scan=True)
+        assert _argvs(fake_subprocess) == _listing_argvs(
+            identity,
+            containers=[("foreign-container-id", "postgres")],
+            repository_scan=True,
+        )
         assert len(resources) == 1
         assert resources[0].labels[compose.LABEL_WORKSPACE_ID] == foreign_id
         assert git.calls == [], "repository scan is read-only discovery"
@@ -954,8 +958,12 @@ class TestExactLabelFallbackRemoval:
         compose = _compose()
 
         def interruptible(args: Sequence[str], **kwargs: Any) -> Any:
-            if list(args[:2]) == ["docker", "stop"]:
-                raise subprocess.TimeoutExpired(cmd=[str(arg) for arg in args], timeout=60.0)
+            argv = [str(arg) for arg in args]
+            # Record the attempted stop before raising so the test can assert
+            # the exact graceful-stop surface (no forced escalation).
+            if argv[:2] == ["docker", "stop"]:
+                fake_subprocess.calls.append((argv, dict(kwargs)))
+                raise subprocess.TimeoutExpired(cmd=argv, timeout=60.0)
             return fake_subprocess.run(args, **kwargs)
 
         adapter, _ = _adapter(

@@ -8,7 +8,7 @@
 
 ## 1. CI 平台与唯一质量门禁
 
-**Decision**: 使用 GitHub Actions 作为当前 CI 薄适配层，固定 `ubuntu-24.04` runner。工作流监听面向 `main` 的 `pull_request`、`push`、手动复验 `workflow_dispatch`，启用 merge queue 后增加 `merge_group`。唯一 required job 名称保持为 `quality-gate`，工作流中的项目命令只有根级 `make ci`。
+**Decision**: 使用 GitHub Actions 作为当前 CI 薄适配层，固定 `ubuntu-24.04` runner。工作流监听面向长生命周期分支 `master`（生产）与 `master-dev`（测试环境部署线）的 `pull_request`、`push`、手动复验 `workflow_dispatch`，启用 merge queue 后增加 `merge_group`。唯一 required job 名称保持为 `quality-gate`，工作流中的项目命令只有根级 `make ci`。
 
 **Rationale**: 规格要求实际合并阻断，而仓库目前没有 remote 可用于推导托管平台。GitHub Actions 是本功能的显式默认；把全部门禁放在根 Make 工作流中，可保证本地复现，并让未来更换托管平台时只替换 CI 适配文件。核心门禁不使用路径过滤，避免 required check 因未触发而长期等待或错误放行。
 

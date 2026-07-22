@@ -49,7 +49,7 @@ No cloud, production, or repository secrets are consumed by SF01. Tests use synt
 | Scanner download failure | Fails closed; may be manually re-run once. | Disable cache or bump cache schema if contamination is suspected. |
 | Cache contamination | Disable cache or bump cache schema; correctness must hold with caches off. | Re-run with cache disabled, then investigate. |
 | Required check missing | Branch protection/ruleset prevents merge until `quality-gate` reports success. | Do not bypass; fix the workflow or the change. |
-| Main merge failure | Revert through a reviewed PR validated by the same `quality-gate`. | No force-push, reset, or check bypass. |
+| `master` / `master-dev` merge failure | Revert through a reviewed PR validated by the same `quality-gate`. | No force-push, reset, or check bypass. |
 
 The adapter does not transform failures into warnings, retry flaky tests until green, or skip required steps.
 

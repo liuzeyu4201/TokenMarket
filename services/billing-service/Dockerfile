@@ -15,6 +15,14 @@ COPY alembic.ini ./
 FROM python:3.11.15-slim
 
 WORKDIR /app
+# Harden the base image Python tooling that Trivy flags (not application deps).
+RUN pip install --no-cache-dir --upgrade \
+      "pip>=25.0" \
+      "setuptools>=78" \
+      "wheel>=0.46.2" \
+      "jaraco.context>=6.1.0" \
+    && rm -rf /root/.cache/pip
+
 COPY --from=builder /build/.venv /app/.venv
 COPY --from=builder /build/app /app/app
 COPY --from=builder /build/alembic /app/alembic

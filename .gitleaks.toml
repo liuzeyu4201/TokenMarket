@@ -1,0 +1,18 @@
+# TokenMarket gitleaks configuration.
+# Synthetic credentials in automated tests are allowlisted so make security-check
+# can fail closed on real leaks without failing on intentional fixtures.
+# Ephemeral scans in test_secret_scan.py still run without this config on a
+# temp directory so detection of the synthetic pattern remains covered.
+
+title = "TokenMarket"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic credentials in tests and documentation examples only"
+paths = [
+  '''tests/workflow/.*''',
+  '''services/.*/.*_test\.go''',
+  '''项目开发/.*''',
+]

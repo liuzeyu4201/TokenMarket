@@ -236,17 +236,23 @@ For SC-008, the repository workflow owner recruits 10 representative developers 
 
 ## 12. Review evidence
 
+Central index (redacted): `specs/002-local-dependency-lifecycle/evidence/README.md`.
+
 Attach only redacted artifacts:
 
-- `make help` and toolchain capability result.
-- Per-platform 20-trial cold-start summaries showing at least 19/20 within 60 seconds, with image timing excluded, plus ten healthy repeat timings.
+- `make help` and toolchain capability result (`evidence/quality-gates.md`).
+- Per-platform 20-trial cold-start summaries showing at least 19/20 within 60 seconds, with image timing excluded, plus ten healthy repeat timings (`evidence/linux-amd64.md`, `evidence/macos-arm64.md`).
 - Per-dependency final records validated against the workflow event v2 standard envelope, plus v1 Make/event immutability and consumer-migration evidence.
 - Ten start/down/restart cycles with PostgreSQL marker retention and stable resource counts.
 - API/Billing 200/503/recovery contract results.
 - Port conflict, invalid config, auth failure, timeout, lock conflict, moved-workspace, and remote-context results.
 - Linux x86_64 and macOS arm64 performance summaries.
-- Ten-person new-developer acceptance aggregate showing at least 9/10 within 10 minutes.
-- Image tag/index/child digests, license review, and scans for both architectures.
+- Ten-person new-developer acceptance aggregate showing at least 9/10 within 10 minutes (`evidence/developer-usability.md`).
+- Image tag/index/child digests, license review, and scans for both architectures (ADR 002 + `ops/workflow/local-dependencies.json`).
 - `git status --short` proving no runtime config, secret, generated override, or unrelated workspace change was tracked.
 
 Do not attach `.env.local`, raw Compose config/inspect output, child environment/secret content, URLs with user-info, or dependency exception bodies.
+
+### Pre-activation gate (current branch)
+
+Until T074, `make dev` / `make dev-down` return `SF02_NOT_READY` by design. Sections 3–8 of this quickstart are executed through guarded adapters and automated tests; public-target transcripts for those sections are recorded only after activation evidence (T068–T073) passes.

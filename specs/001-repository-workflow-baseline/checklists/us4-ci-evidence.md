@@ -57,7 +57,7 @@ and exposed through `workflow.cli`.
 
 - Job name: `quality-gate`
 - Runner: `ubuntu-24.04`
-- Triggers: `push` to `main`, `pull_request`, `merge_group`, `workflow_dispatch`
+- Triggers: `push` to `master` / `master-dev`, `pull_request`, `merge_group`, `workflow_dispatch`
 - Permissions: `contents: read`
 - Checkout: pinned `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683` with
   `fetch-depth: 0` and `persist-credentials: false`
@@ -150,8 +150,8 @@ Recorded in `ops/runbooks/workflow.md`:
 
 - CI cache contamination recovery.
 - Runner/scanner failure handling.
-- Failed `main` review-revert process.
+- Failed `master` / `master-dev` review-revert process.
 - Required check rollout order.
-- GitHub ruleset configuration for `quality-gate`, main protection, and bypass
+- GitHub ruleset configuration for `quality-gate`, `master` / `master-dev` protection, and bypass
   prevention.
-- Linking PR and final-main `quality-gate` runs.
+- Linking PR and final `master` / `master-dev` `quality-gate` runs.

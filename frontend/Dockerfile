@@ -8,13 +8,14 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Runtime stage
-FROM nginx:1.27.4-alpine@sha256:4ff102c5d78d254a6f0da062b3cf39eaf07f01eec0927fd21e219d0af8bc0591
+# Runtime stage — keep nginx alpine current for OS security patches
+FROM nginx:1.29-alpine
 
 COPY --from=builder /build/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+RUN apk upgrade --no-cache && \
+    addgroup -S appgroup && adduser -S appuser -G appgroup && \
     mkdir -p /var/cache/nginx /var/run /var/log/nginx /tmp && \
     sed -i '/pid.*nginx.pid;/d' /etc/nginx/nginx.conf && \
     chown -R appuser:appgroup /var/cache/nginx /var/run /var/log/nginx /tmp /usr/share/nginx/html /etc/nginx /etc/nginx/conf.d

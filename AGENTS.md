@@ -16,7 +16,9 @@ monitoring, migrations, and runbooks. Keep tests within each component's establi
 
 The root Makefile is the required workflow entry point as implementation is scaffolded:
 
-- `make dev`: start PostgreSQL, Redis, Kafka, and Grafana for local development.
+- `make dev` / `make dev-down`: local PostgreSQL 15, Redis 7, and Grafana OSS
+  lifecycle (SF02). Public targets remain `SF02_NOT_READY` until dual-platform
+  activation; Kafka is out of the SF02 dependency set.
 - `make test`: run all Go, Python, and frontend test suites.
 - `make lint`: run static analysis and type checks across components.
 - `make fmt`: apply repository formatters.
@@ -43,10 +45,24 @@ coverage, plus direct negative tests for authorization, idempotency, concurrency
 
 ## Commit & Pull Request Guidelines
 
-The repository has no commit history yet. Follow the mandated Conventional Commits style, such
-as `feat: add gateway health check` or `docs: clarify migration policy`. PRs must describe scope,
-link the relevant spec or issue, list verification evidence, call out contract/schema/security
-impact, and include rollout and rollback notes. Include screenshots for visible frontend changes.
+Follow Conventional Commits (for example `feat: add gateway health check` or
+`docs: clarify migration policy`). PRs must describe scope, link the relevant
+spec or issue, list verification evidence, call out contract/schema/security
+impact, and include rollout and rollback notes. Include screenshots for visible
+frontend changes.
+
+### Long-lived branches
+
+| Branch | Role |
+|--------|------|
+| `master` | Production branch — always releasable; source line for production deploys |
+| `master-dev` | Test-environment deployment branch — integration and pre-prod validation |
+
+Open feature/fix PRs against `master-dev`. Promote to production with a reviewed
+PR into `master` after test validation. Hotfixes that land on `master` must be
+back-merged to `master-dev`. Make environment selection remains explicit
+`mode=local|test|prod` and is never inferred from the Git branch name; see
+`ops/runbooks/workflow.md` and `shared/contracts/repository-workflow/v1/`.
 
 ## Security & Configuration
 

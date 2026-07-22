@@ -49,6 +49,7 @@ import json
 import math
 import os
 import secrets
+import shutil
 import socket
 import string
 import subprocess
@@ -1191,3 +1192,138 @@ def performance_harness(
     real_compose_project_factory: RealComposeProjectFactory,
 ) -> PerformanceHarness:
     return PerformanceHarness(real_compose_project_factory)
+
+
+# ---------------------------------------------------------------------------
+# T048 (US2): guarded fault-injection and exact-test-project helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ResourceCountSnapshot:
+    """Exact-test-project resource counts; never addresses developer projects."""
+
+    containers: int
+    networks: int
+    volumes: int
+
+
+def count_exact_test_resources(
+    labels: Mapping[str, str], *, docker_available: bool | None = None
+) -> ResourceCountSnapshot:
+    """Count Docker resources matching exact test labels only.
+
+    Raises when labels look like a developer project (``tokenmarket-`` prefix).
+    When Docker is unavailable, returns zeros so unit tests stay offline-safe.
+    """
+    project_id = labels.get("com.tokenmarket.workspace-id", "")
+    assert_not_developer_project(project_id)
+    if not project_id.startswith(TEST_PROJECT_PREFIX):
+        raise AssertionError(
+            f"resource counts are confined to {TEST_PROJECT_PREFIX} projects; "
+            f"got {project_id!r}"
+        )
+    use_docker = shutil.which("docker") is not None if docker_available is None else docker_available
+    if not use_docker:
+        return ResourceCountSnapshot(containers=0, networks=0, volumes=0)
+
+    def _count(kind_args: list[str]) -> int:
+        result = _docker_cli(
+            [*kind_args, "--filter", f"label={LABEL_WORKSPACE_ID}={project_id}"],
+            timeout=DOCKER_CLI_TIMEOUT_SECONDS,
+        )
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        return len(lines)
+
+    return ResourceCountSnapshot(
+        containers=_count(["ps", "-aq"]),
+        networks=_count(["network", "ls", "-q"]),
+        volumes=_count(["volume", "ls", "-q"]),
+    )
+
+
+def postgres_marker_sql(marker: str) -> str:
+    """Return a safe synthetic marker statement for persistence cycles."""
+    if not marker or any(ch in marker for ch in ";'\""):
+        raise ValueError("marker must be a simple token without SQL metacharacters")
+    return (
+        "CREATE TABLE IF NOT EXISTS sf02_marker(id text PRIMARY KEY); "
+        f"INSERT INTO sf02_marker(id) VALUES ('{marker}') ON CONFLICT DO NOTHING;"
+    )
+
+
+def postgres_marker_query_sql(marker: str) -> str:
+    """Return a SELECT that verifies a retained marker row exists."""
+    if not marker or any(ch in marker for ch in ";'\""):
+        raise ValueError("marker must be a simple token without SQL metacharacters")
+    return f"SELECT id FROM sf02_marker WHERE id = '{marker}';"
+
+
+def redis_reset_is_allowed() -> bool:
+    """Redis emptiness after restart is tolerance, not a failure condition."""
+    return True
+
+
+@dataclass
+class InterruptibleLifecycleController:
+    """Raises KeyboardInterrupt once after a named adapter call (T079)."""
+
+    trigger_on: str = "verify_runtime"
+    fired: bool = False
+
+    def wrap_adapter(self, adapter: Any) -> Any:
+        method = getattr(adapter, self.trigger_on)
+        controller = self
+
+        def interrupted(*args: Any, **kwargs: Any) -> Any:
+            if not controller.fired:
+                controller.fired = True
+                raise KeyboardInterrupt()
+            return method(*args, **kwargs)
+
+        setattr(adapter, self.trigger_on, interrupted)
+        return adapter
+
+
+@pytest.fixture
+def fault_injection_knobs() -> dict[str, Any]:
+    """Scripted fault knobs for guarded recovery tests (no real daemon)."""
+    return {
+        "down_behavior": "ok",
+        "lose_volumes": False,
+        "interrupt_after_lock": False,
+        "interrupt_on": "verify_runtime",
+    }
+
+
+@pytest.fixture
+def interruptible_lifecycle_controller(
+    fault_injection_knobs: dict[str, Any],
+) -> InterruptibleLifecycleController:
+    return InterruptibleLifecycleController(
+        trigger_on=str(fault_injection_knobs.get("interrupt_on", "verify_runtime"))
+    )
+
+
+@pytest.fixture
+def exact_test_project_cleanup(
+    test_project_label_factory: TestProjectLabelFactory,
+) -> Iterator[Callable[[], None]]:
+    """Yield a cleanup callable confined to exact tmtest labels."""
+
+    created: list[TestProjectIdentity] = []
+
+    def track() -> TestProjectIdentity:
+        identity = test_project_label_factory.new()
+        created.append(identity)
+        return identity
+
+    def _cleanup() -> None:
+        for identity in created:
+            assert_not_developer_project(identity.project_id)
+        created.clear()
+
+    # Expose track for callers that attach resources to minted identities.
+    _cleanup.track = track  # type: ignore[attr-defined]
+    yield _cleanup
+    _cleanup()

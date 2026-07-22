@@ -58,7 +58,7 @@ introduced.
 - Workflow: `.github/workflows/ci.yml`
 - Job name: `quality-gate`
 - Only project command: `make ci`
-- Hosted run URLs for PR and final-main commit to be attached after the first
+- Hosted run URLs for PR and final `master` / `master-dev` commit to be attached after the first
   merged PR.
 
 ## Rollout / rollback notes

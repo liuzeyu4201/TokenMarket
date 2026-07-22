@@ -349,6 +349,17 @@ def execute_action(
         return 1
 
 
+def _emit_lifecycle_outcome(outcome: Any, *, plain: bool) -> int:
+    """Print lifecycle evidence and map status to a process exit code."""
+    use_plain = plain or bool(os.environ.get("NO_COLOR"))
+    for envelope, line in zip(outcome.events, outcome.plain_lines):
+        if use_plain:
+            print(line)
+        else:
+            print(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")))
+    return 0 if outcome.status == "PASSED" else 1
+
+
 def execute_dev_guarded(
     *,
     repo_root: Path,
@@ -395,13 +406,43 @@ def execute_dev_guarded(
             sleep=sleep,
         )
     )
-    use_plain = plain or bool(os.environ.get("NO_COLOR"))
-    for envelope, line in zip(outcome.events, outcome.plain_lines):
-        if use_plain:
-            print(line)
-        else:
-            print(json.dumps(envelope, ensure_ascii=False, separators=(",", ":")))
-    return 0 if outcome.status == "PASSED" else 1
+    return _emit_lifecycle_outcome(outcome, plain=plain)
+
+
+def execute_dev_down_guarded(
+    *,
+    repo_root: Path,
+    mode: str | None = None,
+    mode_origin: str = "omitted",
+    plain: bool = False,
+    workspace_root: Path | None = None,
+    identity: WorkspaceIdentity | None = None,
+    manifest_loader: Callable[[], LocalDependencyManifest] | None = None,
+    runtime_base: Path | None = None,
+    adapter_factory: AdapterFactory | None = None,
+    clock: ClockFn | None = None,
+) -> int:
+    """Internal guarded SF02 dev-down dispatch (T049); NOT a public target.
+
+    Mirrors :func:`execute_dev_guarded` for the stop path. Public
+    ``execute_action("dev-down")`` remains ``SF02_NOT_READY`` until T074.
+    """
+    from .local_env import lifecycle as _lifecycle
+
+    outcome = asyncio.run(
+        _lifecycle.stop_local_environment(
+            repo_root=repo_root,
+            mode=mode,
+            mode_origin=mode_origin,
+            workspace_root=workspace_root,
+            identity=identity,
+            manifest_loader=manifest_loader,
+            runtime_base=runtime_base,
+            adapter_factory=adapter_factory,
+            clock=clock,
+        )
+    )
+    return _emit_lifecycle_outcome(outcome, plain=plain)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

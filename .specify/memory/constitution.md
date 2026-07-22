@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-- Version change: template (unratified) -> 1.0.0
+- Version change: template (unratified) -> 1.0.0; 1.0.0 -> 1.1.0 (long-lived branches master/master-dev)
 - Modified principles:
   - Placeholder Principle 1 -> I. Architecture Boundaries and Contract-First Design
   - Placeholder Principle 2 -> II. Secure by Default (NON-NEGOTIABLE)
@@ -201,10 +201,14 @@ redacted telemetry and pre-defined operating behavior.
   build, migrate, and local integration. CI MUST run the same commands and MUST block merge on
   formatting, static analysis, tests, contract drift, migration validation, secret scanning,
   or build failure.
-- Main MUST remain releasable. Changes MUST be delivered through a focused branch and review,
-  use Conventional Commits, and link specification requirements to implementation and test
-  evidence. Generated artifacts, unrelated refactors, and dependency upgrades MUST NOT be
-  mixed into a feature change without explicit justification.
+- Long-lived branches are `master` (production, always releasable) and `master-dev`
+  (test-environment deployment line). Feature work merges into `master-dev` first; production
+  promotion is a reviewed merge into `master`. Changes MUST be delivered through a focused
+  branch and review, use Conventional Commits, and link specification requirements to
+  implementation and test evidence. Generated artifacts, unrelated refactors, and dependency
+  upgrades MUST NOT be mixed into a feature change without explicit justification. Make
+  environment selection remains explicit `mode=local|test|prod` and MUST NOT be inferred from
+  the Git branch name.
 - Releases MUST have an immutable artifact, migration order, configuration diff, rollout and
   rollback plan, observability checks, and accountable approval. Breaking API/event changes
   MUST use a new version and a documented deprecation window; destructive data changes MUST
@@ -289,4 +293,4 @@ across independently deployable components.
   `项目开发/4-前端与DevOps监控规范.md`. These documents may add detail but MUST NOT weaken
   this constitution.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-13 | **Last Amended**: 2026-07-13
+**Version**: 1.1.0 | **Ratified**: 2026-07-13 | **Last Amended**: 2026-07-22

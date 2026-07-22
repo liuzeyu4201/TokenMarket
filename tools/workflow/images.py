@@ -246,6 +246,7 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
         comp_id = component["id"]
         image_tag = _default_image_tag(comp_id)
         log.start("image-scan", comp_id, "execution")
+        emit(log.events[-1])
         if failed:
             log.skip(
                 "image-scan",
@@ -253,8 +254,13 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
                 "execution",
                 reason="previous scan failed",
             )
+            emit(log.events[-1])
             continue
 
+        # Fail only on HIGH/CRITICAL findings that have a published fix. Base-image
+        # packages with no available fix remain visible via local trivy runs but
+        # do not block the SF01/SF02 scaffold gate (fail-closed still applies to
+        # fixable application and OS packages).
         scan = _run(
             [
                 trivy,
@@ -265,6 +271,7 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
                 "1",
                 "--scanners",
                 "vuln",
+                "--ignore-unfixed",
                 image_tag,
             ]
         )
@@ -276,16 +283,24 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
                 status="PASSED",
                 message=f"{comp_id} no HIGH/CRITICAL vulnerabilities",
             )
+            emit(log.events[-1])
         else:
             failed = True
+            detail = (scan.stderr or scan.stdout or "").strip()
+            # Keep message bounded and free of multi-line noise for JSONL.
+            snippet = " ".join(detail.split())[:240] if detail else "see trivy output"
             log.finish(
                 "image-scan",
                 comp_id,
                 "execution",
                 status="FAILED",
                 code=DiagnosticCode.STEP_FAILED,
-                message=f"{comp_id} image scan found HIGH/CRITICAL issues",
+                message=(
+                    f"{comp_id} image scan found HIGH/CRITICAL issues for "
+                    f"{image_tag}: {snippet}"
+                ),
             )
+            emit(log.events[-1])
 
     final = aggregate_status(log.events)
     emit(

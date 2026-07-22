@@ -282,23 +282,28 @@ def _required_fields(block: str) -> set[str]:
 
 
 def test_health_v1_1_keeps_200_response_shapes() -> None:
-    """The 1.1 minor update keeps the exact 1.0 200 shape and bumps only the version."""
+    """The 1.1 minor update keeps the exact SF01 200 field set and version 1.1.0.
+
+    After the SF02 health 1.1 asset is committed, HEAD matches the working tree
+    (both 1.1.0). The SF01 200 required-field set remains the compatibility
+    baseline and is checked against the frozen EXPECTED_200_REQUIRED constant
+    rather than re-reading a historical 1.0.0 blob from HEAD.
+    """
     text = _health_contract_text()
     head_text = _health_contract_head_text()
     assert re.search(
         r"(?m)^ {2}version: 1\.1\.0$", text
     ), "health contract must be 1.1.0"
     assert re.search(
-        r"(?m)^ {2}version: 1\.0\.0$", head_text
-    ), "HEAD health contract must be the 1.0.0 baseline"
-    head_required = _required_fields(_yaml_block(head_text, "    HealthResponse:"))
-    assert head_required == EXPECTED_200_REQUIRED
+        r"(?m)^ {2}version: 1\.1\.0$", head_text
+    ), "committed HEAD health contract must already be the 1.1.0 minor update"
+    assert text == head_text, "working-tree health contract must match committed HEAD"
     liveness = _yaml_block(text, "    LivenessResponse:")
     readiness = _yaml_block(text, "    ReadinessResponse:")
     assert liveness, "LivenessResponse schema missing from health v1.1"
     assert readiness, "ReadinessResponse schema missing from health v1.1"
-    assert _required_fields(liveness) == head_required
-    assert _required_fields(readiness) == head_required
+    assert _required_fields(liveness) == EXPECTED_200_REQUIRED
+    assert _required_fields(readiness) == EXPECTED_200_REQUIRED
     assert "additionalProperties: false" in liveness
     assert "additionalProperties: false" in readiness
     assert "const: alive" in liveness
@@ -306,24 +311,20 @@ def test_health_v1_1_keeps_200_response_shapes() -> None:
 
 
 def test_health_v1_1_liveness_has_no_dependency_probe() -> None:
-    """Liveness keeps its 200-only, never-probing behavior from 1.0."""
-    head_live = _yaml_block(_health_contract_head_text(), "  /health/live:")
+    """Liveness keeps its 200-only, never-probing behavior from SF01."""
     live = _yaml_block(_health_contract_text(), "  /health/live:")
-    for label, block in (("HEAD", head_live), ("v1.1", live)):
-        assert block, f"{label} /health/live definition is missing"
-        assert '"200":' in block, f"{label} /health/live must keep its 200 response"
-        assert (
-            '"503":' not in block
-        ), f"{label} /health/live must not fail on dependencies"
+    assert live, "/health/live definition is missing"
+    assert '"200":' in live, "/health/live must keep its 200 response"
+    assert '"503":' not in live, "/health/live must not fail on dependencies"
     assert "Never probes PostgreSQL" in live
 
 
 def test_health_v1_1_adds_only_api_billing_postgres_503_readiness() -> None:
     """The only addition is the API/Billing PostgreSQL-aware 503 readiness shape."""
     text = _health_contract_text()
-    head_text = _health_contract_head_text()
-    assert '"503":' not in head_text, "HEAD 1.0 contract must not define a 503 response"
+    live = _yaml_block(text, "  /health/live:")
     ready = _yaml_block(text, "  /health/ready:")
+    assert '"503":' not in live, "liveness must not gain a dependency 503"
     assert '"200":' in ready and '"503":' in ready
     assert "DependencyReadinessResponse" in ready
     dependency = _yaml_block(text, "    DependencyReadinessResponse:")

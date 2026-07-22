@@ -204,14 +204,14 @@ Expected:
 
 ## 11. Verify hosted CI
 
-Open or update a pull request against `main` after implementation.
+Open or update a pull request against `master-dev` after implementation (promote to `master` only after test validation).
 
 Expected:
 
 - Exactly one stable required check, `quality-gate`, runs without path filtering.
 - The workflow invokes `make ci` as its only project command.
 - A deliberately failing fixture in a disposable test branch blocks the merge.
-- A successful merge triggers the same gate for the final `main` commit.
+- A successful merge triggers the same gate for the final `master-dev` or `master` commit.
 - Workflow token permissions are read-only and no repository/production secret is available.
 
 ## 12. Evidence to attach to review
@@ -221,5 +221,5 @@ Expected:
 - Contract, boundary and migration-check results.
 - Five immutable image references plus runtime health smoke results.
 - Secret/dependency/image scan summaries with sensitive values redacted.
-- `quality-gate` URL/result for PR and final main commit.
+- `quality-gate` URL/result for PR and final `master-dev` / `master` commit.
 - Confirmation that no business schema, provider credential, production resource or deployment was introduced.

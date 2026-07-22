@@ -60,7 +60,7 @@ make ci                # 本地复现完整 CI 门禁
 
 | 命令 | 用途 |
 |------|------|
-| `make dev` / `make dev-down` | 本地依赖生命周期（SF02 前返回 `SF02_NOT_READY`） |
+| `make dev` / `make dev-down` | 本地 PostgreSQL/Redis/Grafana 生命周期（公共入口在双平台证据前仍返回 `SF02_NOT_READY`；见 `ops/runbooks/local-environment.md`） |
 | `make fmt` | 应用仓库格式化工具 |
 | `make lint` | 汇总静态分析、类型检查与边界检查 |
 | `make test` | 汇总所有组件自动化测试 |
@@ -75,9 +75,18 @@ make ci                # 本地复现完整 CI 门禁
 - 生产动作必须通过 `mode=prod` 显式选择并经过独立审批。
 - 详见 [`ops/runbooks/workflow.md`](ops/runbooks/workflow.md)。
 
+## 分支与环境
+
+| 分支 | 角色 |
+|------|------|
+| `master` | 生产分支（始终可发布；生产部署代码源） |
+| `master-dev` | 测试环境部署分支（功能先合入并验证） |
+
+功能 PR 默认合入 `master-dev`，测试验证后再晋升到 `master`。迁移/部署仍须显式 `mode=local|test|prod`，**不**根据分支名推断环境。详见 [`ops/runbooks/workflow.md`](ops/runbooks/workflow.md)。
+
 ## 持续集成
 
-`.github/workflows/ci.yml` 是一个只读薄适配层，仅执行：
+`.github/workflows/ci.yml` 是一个只读薄适配层，在 `master` / `master-dev` 的 PR 与 push 上触发，仅执行：
 
 ```bash
 make ci

@@ -33,3 +33,12 @@ def test_ci_workflow_uses_pinned_actions() -> None:
 def test_ci_workflow_has_read_only_permissions() -> None:
     text = repo_path(".github", "workflows", "ci.yml").read_text(encoding="utf-8")
     assert "contents: read" in text
+
+
+def test_ci_workflow_targets_master_and_master_dev() -> None:
+    """Long-lived branches: master (prod), master-dev (test deploy line)."""
+    text = repo_path(".github", "workflows", "ci.yml").read_text(encoding="utf-8")
+    assert '"master"' in text
+    assert '"master-dev"' in text
+    # Legacy default branch must not remain the only protected line.
+    assert 'branches: ["main"]' not in text

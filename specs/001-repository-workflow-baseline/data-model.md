@@ -254,7 +254,7 @@ No business tables are created by SF01. CI migration evidence uses an isolated P
 | Field | Type | Rules |
 |-------|------|-------|
 | `id` | string | Unique; required job is `quality-gate` |
-| `triggers` | set | PR to main, main push, manual; merge group when enabled |
+| `triggers` | set | PR/push to `master` and `master-dev`, manual; merge group when enabled |
 | `root_target` | string | `ci` |
 | `blocking` | boolean | Always true for required gate |
 | `permissions` | map | `contents: read`; all unspecified permissions none |

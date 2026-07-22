@@ -216,6 +216,23 @@ class LocalEnvironmentConfiguration:
             for connection in self.connections
         }
 
+    def displayed_container_endpoints(self) -> dict[str, str]:
+        """Safe canonical container endpoints keyed by dependency.
+
+        Replaces only the host/port with the project-network service name and
+        fixed container port; never serializes user-info or secrets (T057).
+        """
+        endpoints: dict[str, str] = {}
+        for connection in self.connections:
+            endpoint = (
+                f"{connection.host_scheme}://{connection.container_host}:"
+                f"{connection.container_port}"
+            )
+            if connection.database is not None:
+                endpoint = f"{endpoint}/{connection.database}"
+            endpoints[connection.dependency_id.value] = endpoint
+        return endpoints
+
 
 def parse_local_environment(text: str) -> LocalEnvironmentConfiguration:
     """Parse and validate ``.env.local`` content (mode-first, pure).

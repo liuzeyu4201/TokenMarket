@@ -34,7 +34,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Sequence
 
 from .models import LockSafetyError, OperationInProgressError, OwnershipConflictError
 
@@ -43,6 +43,13 @@ WORKSPACE_HASH_LENGTH = 12
 WORKSPACE_FINGERPRINT_LENGTH = 64
 LOCK_FILE_NAME = "lifecycle.lock"
 COMPOSE_PROJECT_DIR_NAME = "compose-project"
+
+# Path-free ownership labels carried on Compose resources (T042). The raw and
+# canonical workspace paths are deliberately absent from both keys and values.
+LABEL_REPOSITORY = "com.tokenmarket.repository"
+LABEL_WORKSPACE_ID = "com.tokenmarket.workspace-id"
+LABEL_WORKSPACE_FINGERPRINT = "com.tokenmarket.workspace-fingerprint"
+REPOSITORY_LABEL_VALUE = "tokenmarket"
 
 _PROJECT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 
@@ -113,6 +120,122 @@ def verify_fingerprint_ownership(
             f"workspace hash collision detected for {identity.project_id}: the full "
             "fingerprint does not match this workspace; failing closed before mutation"
         )
+
+
+def ownership_labels(identity: WorkspaceIdentity) -> dict[str, str]:
+    """Return the path-free ownership label set for exact-project resources.
+
+    Labels carry only the repository constant, the short project id, and the
+    full 64-hex fingerprint. Raw and canonical workspace paths never appear
+    in keys or values (T042).
+    """
+    return {
+        LABEL_REPOSITORY: REPOSITORY_LABEL_VALUE,
+        LABEL_WORKSPACE_ID: identity.project_id,
+        LABEL_WORKSPACE_FINGERPRINT: identity.workspace_fingerprint,
+    }
+
+
+def authorize_label_mutation(
+    identity: WorkspaceIdentity, labels: Mapping[str, str]
+) -> None:
+    """Authorize mutation from a resource's ownership labels.
+
+    Requires exact ``workspace-id`` plus full ``workspace-fingerprint`` match.
+    Missing labels, foreign workspaces, and short-hash collisions fail closed
+    with :class:`OwnershipConflictError` before any mutation (T042).
+    """
+    observed_project_id = labels.get(LABEL_WORKSPACE_ID, "")
+    observed_fingerprint = labels.get(LABEL_WORKSPACE_FINGERPRINT, "")
+    if not observed_project_id or not observed_fingerprint:
+        raise OwnershipConflictError(
+            "resource is missing required ownership labels; refusing to adopt, "
+            "stop, or mutate it"
+        )
+    verify_fingerprint_ownership(
+        identity,
+        observed_project_id=observed_project_id,
+        observed_fingerprint=observed_fingerprint,
+    )
+
+
+@dataclass(frozen=True)
+class ResourceObservation:
+    """Read-only view of one Docker resource discovered by label filter."""
+
+    kind: str
+    name: str
+    labels: Mapping[str, str] = field(repr=False)
+
+
+@dataclass(frozen=True)
+class MovedWorkspaceFinding:
+    """Report-only finding for a resource owned by a different workspace.
+
+    Findings must never be adopted, stopped, removed, renamed, or attached.
+    ``guidance`` is safe to emit: it may name the old project id but never the
+    workspace path.
+    """
+
+    workspace_id: str
+    observation: ResourceObservation
+    guidance: str
+
+
+@dataclass(frozen=True)
+class RepositoryResourceClassification:
+    """Split of repository-labeled resources into owned vs moved findings."""
+
+    owned: tuple[ResourceObservation, ...]
+    moved: tuple[MovedWorkspaceFinding, ...]
+
+
+def _moved_workspace_guidance(workspace_id: str) -> str:
+    return (
+        f"resources for moved or prior workspace {workspace_id} were found; "
+        "they are report-only and were not stopped or removed. Recover from "
+        "the original workspace path or stop them with that workspace's "
+        "project identity, then retry."
+    )
+
+
+def classify_repository_resources(
+    identity: WorkspaceIdentity,
+    observations: Sequence[ResourceObservation],
+) -> RepositoryResourceClassification:
+    """Classify repository-labeled resources as owned or report-only moved.
+
+    Exact project+fingerprint ownership is required for the owned set. A
+    matching short project id with a different fingerprint is a collision and
+    fails closed. Other workspace ids become mandatory report-only findings
+    with safe recovery guidance (T042).
+    """
+    owned: list[ResourceObservation] = []
+    moved: list[MovedWorkspaceFinding] = []
+    for observation in observations:
+        labels = dict(observation.labels)
+        observed_project_id = labels.get(LABEL_WORKSPACE_ID, "")
+        observed_fingerprint = labels.get(LABEL_WORKSPACE_FINGERPRINT, "")
+        if not observed_project_id or not observed_fingerprint:
+            raise OwnershipConflictError(
+                "resource is missing required ownership labels; refusing to "
+                "classify or mutate it"
+            )
+        if observed_project_id == identity.project_id:
+            # Exact match authorizes; fingerprint mismatch is a collision.
+            authorize_label_mutation(identity, labels)
+            owned.append(observation)
+            continue
+        moved.append(
+            MovedWorkspaceFinding(
+                workspace_id=observed_project_id,
+                observation=observation,
+                guidance=_moved_workspace_guidance(observed_project_id),
+            )
+        )
+    return RepositoryResourceClassification(
+        owned=tuple(owned), moved=tuple(moved)
+    )
 
 
 def _require_secure_directory(

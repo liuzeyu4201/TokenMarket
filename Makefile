@@ -13,13 +13,16 @@ MODE ?= $(mode)
 MODE_ORIGIN := $(origin mode)
 
 # Default target shows help without side effects.
+# Activation-ready copy for SF02 lifecycle targets is prepared here (T047) but
+# remains descriptive until the final atomic public switch (T074). Until then
+# both targets still fail closed with SF02_NOT_READY at runtime.
 .PHONY: help
 help:
 	@echo "TokenMarket repository workflow"
 	@echo ""
 	@echo "Public targets:"
-	@echo "  make dev            Start local dependencies after SF02"
-	@echo "  make dev-down       Stop local dependencies after SF02"
+	@echo "  make dev            Start local PostgreSQL/Redis/Grafana (SF02; gated until activation)"
+	@echo "  make dev-down       Stop local runtime instances; retain named volumes (SF02; gated)"
 	@echo "  make fmt            Apply repository formatters (modifies source)"
 	@echo "  make lint           Run static analysis, type checks and boundary checks"
 	@echo "  make test           Run all component tests"
@@ -33,8 +36,11 @@ help:
 	@echo "  make security-check Run secret and dependency scans (fail-closed)"
 	@echo ""
 	@echo "Prerequisites: Go, Python/uv, Node/npm, Docker (see .tool-versions)"
-	@echo "Side effects: fmt modifies declared source files; build creates local images"
-	@echo "Recovery: fix the reported component error and rerun the same command"
+	@echo "Side effects: fmt modifies declared source; build creates local images;"
+	@echo "  dev creates project containers/networks/volumes; dev-down stops runtime"
+	@echo "  instances and keeps PostgreSQL/Redis named volumes (no prune/volume delete)"
+	@echo "Recovery: fix the reported diagnostic (mode/config/port/auth/runtime) and"
+	@echo "  rerun the same command; for moved workspaces use the original path identity"
 
 # Public targets delegate to the maintained workflow tool.
 .PHONY: dev dev-down fmt lint test build migrate

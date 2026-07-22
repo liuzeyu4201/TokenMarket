@@ -124,8 +124,13 @@ def run_security_checks(repo_root: Any, *, max_retries: int = 1) -> None:
 
     repo_root = Path(repo_root)
 
+    gitleaks_config = repo_root / ".gitleaks.toml"
+    gitleaks_cmd = ["gitleaks", "detect", "-v", "-s", str(repo_root)]
+    if gitleaks_config.is_file():
+        gitleaks_cmd.extend(["--config", str(gitleaks_config)])
+
     scanners: list[tuple[str, list[str], str | None]] = [
-        ("gitleaks", ["gitleaks", "detect", "-v", "-s", str(repo_root)], None),
+        ("gitleaks", gitleaks_cmd, None),
         (
             "govulncheck",
             [

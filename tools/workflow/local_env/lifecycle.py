@@ -1,8 +1,8 @@
-"""Start orchestration for the SF02 local dependency lifecycle (T031).
+"""Start and stop orchestration for the SF02 local dependency lifecycle.
 
-Implements the ``make dev`` ordered contract of
+Implements the ``make dev`` / ``make dev-down`` ordered contracts of
 ``specs/002-local-dependency-lifecycle/contracts/local-environment-lifecycle.md``
-and research Decisions 4, 8, 9 and 10 by composing the reviewed building
+and research Decisions 4, 7, 8, 9, 10 and 11 by composing the reviewed building
 blocks (config, identity/lock, Compose adapter, probes, event v2):
 
 1. Effective-mode validation first: only an omitted mode or command-line
@@ -60,9 +60,11 @@ from .compose import (
     ComposeSecretSet,
     ImagePullRecord,
     PortConflictError,
+    ResourceKind,
     RuntimeFacts,
     ServiceState,
     build_secret_material,
+    build_teardown_placeholders,
 )
 from .config import (
     InvalidConfigError,
@@ -73,13 +75,16 @@ from .config import (
 from .identity import (
     WorkspaceIdentity,
     acquire_project_lock,
+    classify_repository_resources,
     ensure_project_runtime_dir,
     secure_runtime_base,
     workspace_identity,
+    ResourceObservation,
 )
 from .models import (
     DependencyHealthResult,
     DependencyId,
+    InvalidStateTransitionError,
     LifecycleAction,
     LifecycleOperation,
     LifecyclePhase,
@@ -101,6 +106,7 @@ __all__ = [
     "ProbeFn",
     "SleepFn",
     "start_local_environment",
+    "stop_local_environment",
 ]
 
 ClockFn = Callable[[], float]
@@ -202,6 +208,9 @@ class LifecycleRunOutcome:
     events: tuple[dict[str, Any], ...]
     plain_lines: tuple[str, ...]
     dependency_results: tuple[DependencyHealthResult, ...]
+    # Operation state-machine terminal status when relevant (e.g. INTERRUPTED).
+    # Event payload status remains FAILED for interrupts (v2 envelope limit).
+    operation_status: str = ""
 
 
 def _render_plain_line(envelope: Mapping[str, Any]) -> str:
@@ -256,7 +265,87 @@ def _elapsed_ms(now: ClockFn, started: float) -> int:
     return max(0, int(round((now() - started) * 1000)))
 
 
-def _validate_effective_mode(mode: str | None, mode_origin: str) -> None:
+_INTERRUPT_MESSAGE = (
+    "lifecycle operation was interrupted; project state and named volumes are "
+    "retained for inspection; fix the cause if needed and retry the same command"
+)
+
+
+def _interrupted_outcome(
+    *,
+    emitter: _RunEmitter,
+    action: str,
+    project_id: str,
+    now: ClockFn,
+    started: float,
+    phase: LifecyclePhase,
+    operation: LifecycleOperation | None,
+    keep: bool,
+) -> LifecycleRunOutcome:
+    """Map KeyboardInterrupt/SIGINT to a safe INTERRUPTED terminal outcome (T077).
+
+    Event payload status remains FAILED (v2 envelope allows only
+    STARTED/WAITING/PASSED/FAILED/SKIPPED); the operation state machine uses
+    :attr:`OperationStatus.INTERRUPTED`. Resources are retained when any
+    mutable work may already have occurred.
+    """
+    message = _INTERRUPT_MESSAGE
+    if not keep:
+        message = (
+            "lifecycle operation was interrupted before project resources were "
+            "mutated; retry the same command"
+        )
+    interrupted_status = OperationStatus.INTERRUPTED.value
+    if operation is not None and not operation.is_terminal:
+        try:
+            # Immutable transition: retain the returned state for accounting.
+            operation = operation.transition(
+                OperationStatus.INTERRUPTED,
+                phase=phase,
+                diagnostic_code=DiagnosticCodeV2.STEP_FAILED.value,
+            )
+            interrupted_status = operation.status.value
+        except InvalidStateTransitionError:
+            interrupted_status = (
+                operation.status.value if operation is not None else interrupted_status
+            )
+    event_phase = phase if phase is not LifecyclePhase.STOPPING else LifecyclePhase.FINAL
+    if event_phase in _DEPENDENCY_SCOPED_PHASES:
+        event_phase = LifecyclePhase.FINAL
+    emitter.emit(
+        phase=event_phase,
+        status="FAILED",
+        code=DiagnosticCodeV2.STEP_FAILED.value,
+        message=message,
+        duration_ms=_elapsed_ms(now, started),
+    )
+    # Final aggregate for consumers that expect a terminal final event.
+    if event_phase is not LifecyclePhase.FINAL:
+        emitter.emit(
+            phase=LifecyclePhase.FINAL,
+            status="FAILED",
+            code=DiagnosticCodeV2.STEP_FAILED.value,
+            message=message,
+            duration_ms=_elapsed_ms(now, started),
+        )
+    return LifecycleRunOutcome(
+        action=action,
+        status="FAILED",
+        diagnostic_code=DiagnosticCodeV2.STEP_FAILED.value,
+        correlation_id=emitter.correlation_id,
+        project_id=project_id,
+        message=message,
+        duration_ms=_elapsed_ms(now, started),
+        events=tuple(emitter.events),
+        plain_lines=tuple(emitter.plain_lines),
+        dependency_results=(),
+        operation_status=interrupted_status,
+    )
+
+
+def _validate_effective_mode(
+    mode: str | None, mode_origin: str, *, action: str = "dev"
+) -> None:
     """Accept only an omitted mode or command-line ``mode=local`` (contract).
 
     Any other value or origin fails closed before ``.env.local``, coordination
@@ -268,7 +357,7 @@ def _validate_effective_mode(mode: str | None, mode_origin: str) -> None:
     if mode == "local" and mode_origin in _COMMAND_LINE_MODE_ORIGINS:
         return
     raise InvalidModeError(
-        "make dev accepts only an omitted mode or an explicit command-line "
+        f"make {action} accepts only an omitted mode or an explicit command-line "
         "mode=local; shell, environment, and file origins cannot select or "
         "elevate the lifecycle mode"
     )
@@ -839,12 +928,17 @@ async def start_local_environment(
                     OperationStatus.SUCCEEDED, phase=LifecyclePhase.FINAL
                 )
                 endpoints = config.displayed_endpoints()
+                containers = config.displayed_container_endpoints()
                 message = (
                     "all three dependencies produced fresh authenticated "
                     "readiness evidence; host endpoints: "
                     f"postgres {endpoints['postgres']}; "
                     f"redis {endpoints['redis']}; "
-                    f"grafana {endpoints['grafana']}"
+                    f"grafana {endpoints['grafana']}; "
+                    "container endpoints: "
+                    f"postgres {containers['postgres']}; "
+                    f"redis {containers['redis']}; "
+                    f"grafana {containers['grafana']}"
                 )
                 emitter.emit(
                     phase=LifecyclePhase.FINAL,
@@ -917,3 +1011,397 @@ async def start_local_environment(
                 diagnostic_code=code,
             )
         return _fail(primary_code=code, message=exc.message, keep=retained)
+    except KeyboardInterrupt:
+        return _interrupted_outcome(
+            emitter=emitter,
+            action=action,
+            project_id=project_id,
+            now=now,
+            started=started,
+            phase=phase,
+            operation=operation,
+            keep=retained or operation is not None,
+        )
+
+
+def _resource_service(resource: Any) -> str | None:
+    """Return the Compose service name for a container resource, if labeled."""
+    labels = getattr(resource, "labels", None) or {}
+    service = labels.get("com.docker.compose.service")
+    return service if isinstance(service, str) and service else None
+
+
+def _as_resource_observations(resources: Sequence[Any]) -> tuple[ResourceObservation, ...]:
+    observations: list[ResourceObservation] = []
+    for resource in resources:
+        kind = resource.kind
+        kind_value = kind.value if isinstance(kind, ResourceKind) else str(kind)
+        observations.append(
+            ResourceObservation(
+                kind=kind_value,
+                name=str(resource.name),
+                labels=dict(resource.labels),
+            )
+        )
+    return tuple(observations)
+
+
+def _kind_is(resource: Any, expected: ResourceKind) -> bool:
+    kind = resource.kind
+    if kind is expected:
+        return True
+    return str(kind) == expected.value
+
+
+async def stop_local_environment(
+    *,
+    repo_root: Path,
+    mode: str | None = None,
+    mode_origin: str = "omitted",
+    workspace_root: Path | None = None,
+    identity: WorkspaceIdentity | None = None,
+    manifest_loader: Callable[[], LocalDependencyManifest] | None = None,
+    runtime_base: Path | None = None,
+    adapter_factory: AdapterFactory | None = None,
+    clock: ClockFn | None = None,
+) -> LifecycleRunOutcome:
+    """Run the guarded ``make dev-down`` stop lifecycle and return its evidence.
+
+    Config-free: never requires, parses, or validates ``.env.local``. The
+    per-project lock serializes every mutable phase and final event emission
+    (T044–T046). Named volumes are retained; moved-workspace resources are
+    report-only.
+    """
+    now = time.monotonic if clock is None else clock
+    action = LifecycleAction.DEV_DOWN.value
+    emitter = _RunEmitter(action)
+    started = now()
+    project_id = ""
+    phase = LifecyclePhase.IDENTITY
+    operation: LifecycleOperation | None = None
+    retained = False
+
+    factory = adapter_factory or _default_adapter_factory
+    load = manifest_loader or _default_manifest_loader(repo_root)
+
+    def _fail(
+        *,
+        primary_code: str,
+        message: str,
+        keep: bool,
+    ) -> LifecycleRunOutcome:
+        final_message = message
+        if keep:
+            final_message += (
+                " Project state and named volumes are retained for inspection; "
+                "fix the reported cause and retry."
+            )
+        emitter.emit(
+            phase=LifecyclePhase.FINAL,
+            status="FAILED",
+            code=(
+                DiagnosticCodeV2.STEP_FAILED.value
+                if primary_code in _DEPENDENCY_SCOPED_CODES
+                else primary_code
+            ),
+            message=final_message,
+            duration_ms=_elapsed_ms(now, started),
+        )
+        return LifecycleRunOutcome(
+            action=action,
+            status="FAILED",
+            diagnostic_code=primary_code,
+            correlation_id=emitter.correlation_id,
+            project_id=project_id,
+            message=final_message,
+            duration_ms=_elapsed_ms(now, started),
+            events=tuple(emitter.events),
+            plain_lines=tuple(emitter.plain_lines),
+            dependency_results=(),
+        )
+
+    try:
+        # 1. Effective mode only — no configuration, coordination, or Docker.
+        _validate_effective_mode(mode, mode_origin, action="dev-down")
+
+        # 2. Canonical workspace identity (pure; path never emitted).
+        resolved_identity = identity or workspace_identity(workspace_root or repo_root)
+        project_id = resolved_identity.project_id
+        operation = LifecycleOperation(
+            correlation_id=emitter.correlation_id,
+            action=LifecycleAction.DEV_DOWN,
+            project_id=project_id,
+            started_at=started,
+        )
+        emitter.emit(
+            phase=LifecyclePhase.IDENTITY,
+            status="PASSED",
+            code="OK",
+            message=(
+                "workspace identity resolved; exact project ownership boundary "
+                f"is {project_id}"
+            ),
+        )
+
+        # 3. Manifest + side-effect-free adapter construction may precede lock.
+        manifest = load()
+        base = runtime_base if runtime_base is not None else secure_runtime_base()
+        project_dir = base / project_id
+        adapter = factory(manifest, resolved_identity, project_dir, repo_root)
+
+        # 4. Immediate lock before runtime validation or any Docker access.
+        phase = LifecyclePhase.LOCK
+        project_runtime_dir = ensure_project_runtime_dir(base, project_id)
+        lock = acquire_project_lock(project_runtime_dir, project_id=project_id)
+        try:
+            emitter.emit(
+                phase=LifecyclePhase.LOCK,
+                status="PASSED",
+                code="OK",
+                message="project lock acquired; stop path may proceed",
+            )
+            operation = operation.transition(
+                OperationStatus.RUNNING, phase=LifecyclePhase.STOPPING
+            )
+
+            # 5. Read-only runtime check, then exact-project discovery.
+            phase = LifecyclePhase.PREFLIGHT
+            adapter.verify_runtime()
+            resources = adapter.project_resources()
+            adapter.assert_exact_resource_ownership(resources)
+
+            containers = [r for r in resources if _kind_is(r, ResourceKind.CONTAINER)]
+            networks = [r for r in resources if _kind_is(r, ResourceKind.NETWORK)]
+            volumes_before = {
+                r.name for r in resources if _kind_is(r, ResourceKind.VOLUME)
+            }
+
+            already_stopped = not containers and not networks
+            retained = True
+            phase = LifecyclePhase.STOPPING
+
+            if not already_stopped:
+                stop_budget = float(manifest.timeouts.stop_operation_seconds)
+                remaining = stop_budget - (now() - started)
+                if remaining <= 0:
+                    return _fail(
+                        primary_code=DiagnosticCodeV2.STEP_FAILED.value,
+                        message=(
+                            "stop operation budget exhausted before reconcile; "
+                            "project state is retained for inspection"
+                        ),
+                        keep=True,
+                    )
+                placeholders = build_teardown_placeholders(manifest, resolved_identity)
+                try:
+                    adapter.reconcile_down(placeholders, timeout_seconds=remaining)
+                except LocalEnvironmentError as exc:
+                    # Per-dependency evidence for remaining containers.
+                    remaining_resources = adapter.project_resources()
+                    remaining_services = {
+                        _resource_service(r)
+                        for r in remaining_resources
+                        if _kind_is(r, ResourceKind.CONTAINER)
+                    }
+                    remaining_services.discard(None)
+                    if not remaining_services:
+                        remaining_services = {dep.value for dep in DependencyId}
+                    for dep_name in sorted(s for s in remaining_services if s):
+                        try:
+                            dependency = DependencyId(dep_name)
+                        except ValueError:
+                            continue
+                        emitter.emit(
+                            phase=LifecyclePhase.STOPPING,
+                            status="FAILED",
+                            code=exc.code,
+                            message=exc.message,
+                            duration_ms=_elapsed_ms(now, started),
+                            dependency=dependency,
+                        )
+                    if not operation.is_terminal:
+                        operation = operation.transition(
+                            OperationStatus.FAILED,
+                            phase=LifecyclePhase.STOPPING,
+                            diagnostic_code=exc.code,
+                        )
+                    return _fail(
+                        primary_code=exc.code, message=exc.message, keep=True
+                    )
+                finally:
+                    placeholders = placeholders.release()
+
+            # 6. Post-stop verification: containers/networks gone, volumes kept.
+            after = adapter.project_resources()
+            adapter.assert_exact_resource_ownership(after)
+            remaining_containers = [
+                r for r in after if _kind_is(r, ResourceKind.CONTAINER)
+            ]
+            remaining_networks = [
+                r for r in after if _kind_is(r, ResourceKind.NETWORK)
+            ]
+            volumes_after = {
+                r.name for r in after if _kind_is(r, ResourceKind.VOLUME)
+            }
+
+            if remaining_containers or remaining_networks:
+                for resource in remaining_containers:
+                    service = _resource_service(resource)
+                    if service is None:
+                        continue
+                    try:
+                        dependency = DependencyId(service)
+                    except ValueError:
+                        continue
+                    emitter.emit(
+                        phase=LifecyclePhase.STOPPING,
+                        status="FAILED",
+                        code=DiagnosticCodeV2.STEP_FAILED.value,
+                        message=(
+                            f"{service} is still present after stop; project "
+                            "state is retained for inspection"
+                        ),
+                        duration_ms=_elapsed_ms(now, started),
+                        dependency=dependency,
+                    )
+                return _fail(
+                    primary_code=DiagnosticCodeV2.STEP_FAILED.value,
+                    message=(
+                        "stop did not clear exact-project containers or networks; "
+                        "project state is retained for inspection"
+                    ),
+                    keep=True,
+                )
+
+            # Required named volumes must survive ordinary down.
+            expected_volume_suffixes = ("postgres-data", "redis-data")
+            for suffix in expected_volume_suffixes:
+                expected_name = f"{project_id}_{suffix}"
+                # Only require volumes that were present before the stop, or
+                # that the project ever owned; a first-time already-stopped
+                # environment with no volumes is success, but losing a volume
+                # that existed before down is failure.
+                if expected_name in volumes_before and expected_name not in volumes_after:
+                    return _fail(
+                        primary_code=DiagnosticCodeV2.STEP_FAILED.value,
+                        message=(
+                            f"named volume {suffix} is missing after stop; "
+                            "ordinary down must retain every named volume"
+                        ),
+                        keep=True,
+                    )
+
+            # 7. Per-dependency stopping evidence (success path).
+            for dependency in (
+                DependencyId.POSTGRES,
+                DependencyId.REDIS,
+                DependencyId.GRAFANA,
+            ):
+                emitter.emit(
+                    phase=LifecyclePhase.STOPPING,
+                    status="PASSED",
+                    code="OK",
+                    message=(
+                        f"{dependency.value} runtime instance is stopped; named "
+                        "volumes are retained"
+                        if not already_stopped
+                        else (
+                            f"{dependency.value} is already stopped; named "
+                            "volumes are retained"
+                        )
+                    ),
+                    duration_ms=_elapsed_ms(now, started),
+                    dependency=dependency,
+                )
+
+            # 8. Report-only moved-workspace scan (never mutates).
+            repository = adapter.repository_resources()
+            classification = classify_repository_resources(
+                resolved_identity, _as_resource_observations(repository)
+            )
+            for finding in classification.moved:
+                emitter.emit(
+                    phase=LifecyclePhase.PREFLIGHT,
+                    status="PASSED",
+                    code="OK",
+                    message=finding.guidance,
+                    duration_ms=0,
+                )
+
+            if already_stopped:
+                message = (
+                    "local dependency environment is already stopped; named "
+                    "volumes are retained and nothing was mutated"
+                )
+            else:
+                message = (
+                    "local dependency runtime instances are stopped; named "
+                    "volumes are retained for the next start"
+                )
+            operation = operation.transition(
+                OperationStatus.SUCCEEDED, phase=LifecyclePhase.FINAL
+            )
+            emitter.emit(
+                phase=LifecyclePhase.FINAL,
+                status="PASSED",
+                code="OK",
+                message=message,
+                duration_ms=_elapsed_ms(now, started),
+            )
+            return LifecycleRunOutcome(
+                action=action,
+                status="PASSED",
+                diagnostic_code="OK",
+                correlation_id=emitter.correlation_id,
+                project_id=project_id,
+                message=message,
+                duration_ms=_elapsed_ms(now, started),
+                events=tuple(emitter.events),
+                plain_lines=tuple(emitter.plain_lines),
+                dependency_results=(),
+            )
+        finally:
+            lock.release()
+    except LocalEnvironmentError as exc:
+        code = exc.code
+        event_phase = phase
+        if code == DiagnosticCodeV2.OPERATION_IN_PROGRESS.value:
+            event_phase = LifecyclePhase.LOCK
+        elif code == DiagnosticCodeV2.INVALID_MODE.value:
+            event_phase = LifecyclePhase.PREFLIGHT
+        elif event_phase in _DEPENDENCY_SCOPED_PHASES:
+            event_phase = LifecyclePhase.FINAL
+        event_code = (
+            DiagnosticCodeV2.STEP_FAILED.value
+            if code in _DEPENDENCY_SCOPED_CODES
+            else code
+        )
+        emitter.emit(
+            phase=event_phase,
+            status="FAILED",
+            code=event_code,
+            message=exc.message,
+            duration_ms=_elapsed_ms(now, started),
+        )
+        rejected = code in (
+            DiagnosticCodeV2.OPERATION_IN_PROGRESS.value,
+            DiagnosticCodeV2.INVALID_MODE.value,
+        )
+        if operation is not None and not operation.is_terminal:
+            operation = operation.transition(
+                OperationStatus.REJECTED if rejected else OperationStatus.FAILED,
+                phase=phase,
+                diagnostic_code=code,
+            )
+        return _fail(primary_code=code, message=exc.message, keep=retained)
+    except KeyboardInterrupt:
+        return _interrupted_outcome(
+            emitter=emitter,
+            action=action,
+            project_id=project_id,
+            now=now,
+            started=started,
+            phase=phase,
+            operation=operation,
+            keep=retained or operation is not None,
+        )

@@ -47,6 +47,15 @@ Missing, expired, mismatched or unbound proof produces `PROD_APPROVAL_REQUIRED`.
 
 SF01 defines and tests this selector for future deployment scripts but does not implement cloud or production deployment. Future scripts must reuse this contract; they may not add an alternate `env`, `stage` or branch-inference selector.
 
+Long-lived Git branches map to **deploy lines of code**, not to this selector:
+
+| Branch | Deploy line |
+|--------|-------------|
+| `master` | Production release line |
+| `master-dev` | Test-environment deployment line |
+
+Future continuous delivery may *schedule* jobs from those branches (for example, push to `master-dev` runs deploy with command-line `mode=test`; push to `master` runs deploy with command-line `mode=prod` plus approval). The Make CLI itself still requires explicit `mode=` and MUST NOT read the current Git branch, default branch, or remote tracking name to choose `local`, `test`, or `prod`.
+
 ## Recovery
 
 An invalid selection has no side effects and may be retried with an explicit valid value. A failed production approval is not cached. A migration that starts after valid selection follows the reviewed owner backout runbook; changing mode during a run is forbidden.

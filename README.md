@@ -89,12 +89,13 @@ make ci                # 本地复现完整 CI 门禁
 
 | 类型 | 形式 | 示例 |
 |------|------|------|
-| 功能（有 `specs/`） | `NNN-short-kebab`，与 `specs/` 目录名一致 | `003-layered-compose-deploy` |
+| Spec Kit 功能（有 `specs/`） | `NNN-short-kebab`，与 `specs/` 目录名一致 | `002-local-dependency-lifecycle` |
+| 产品改动（无 Spec Kit 功能） | `feat/<slug>` | `feat/layered-compose-deploy` |
 | 缺陷修复 | `fix/<slug>` | `fix/api-readiness-timeout` |
 | 生产热修 | `hotfix/<slug>`（从 `master` 拉出） | `hotfix/migrate-approval` |
 | 文档 / 杂务 / 重构 | `docs|chore|refactor/<slug>` | `docs/local-env-runbook` |
 
-要求：小写 ASCII、kebab-case、推荐 ≤ 50 字符；禁止用环境名当分支名；禁止在已有编号规格时使用 `feature/002-...` 这类别名。功能 PR 默认合入 `master-dev`，测试验证后再晋升到 `master`。迁移/部署仍须显式 `mode=local|test|prod`，**不**根据分支名推断环境。完整规则见 [`ops/runbooks/workflow.md`](ops/runbooks/workflow.md)。
+要求：小写 ASCII、kebab-case、推荐 ≤ 50 字符；禁止用环境名当分支名；**没有** `specs/NNN-...` 时不要造 `NNN-...` 分支；已有编号规格时禁止 `feat/002-...` / `feature/002-...`。PR 默认合入 `master-dev`，测试验证后再晋升到 `master`。迁移/部署仍须显式 `mode=local|test|prod`，**不**根据分支名推断环境。完整规则见 [`ops/runbooks/workflow.md`](ops/runbooks/workflow.md)。
 
 ## 持续集成
 

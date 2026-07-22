@@ -63,19 +63,21 @@ Canonical rules live in `ops/runbooks/workflow.md`. Summary:
 |------|---------|---------|
 | Production line | `master` (fixed) | — |
 | Test line | `master-dev` (fixed) | — |
-| Spec feature | `NNN-short-kebab` **=** `specs/NNN-short-kebab/` | `master-dev` |
+| Spec Kit feature | `NNN-short-kebab` **=** `specs/NNN-short-kebab/` only | `master-dev` |
+| Product change (no Spec Kit feature) | `feat/<slug>` | `master-dev` |
 | Bug fix | `fix/<slug>` | `master-dev` |
 | Prod hotfix | `hotfix/<slug>` (from `master`) | `master`, then back-merge |
 | Docs / chore / refactor | `docs|chore|refactor/<slug>` | `master-dev` |
 
 Rules: lowercase ASCII kebab-case; no spaces/underscores; recommended ≤ 50 chars;
-never use environment names (`local`/`test`/`prod`) as branches; never invent
-`feature/NNN-...` when a numbered spec exists. Open feature/fix PRs against
-`master-dev`. Promote to production with a reviewed PR into `master` after test
-validation. Hotfixes that land on `master` must be back-merged to `master-dev`.
-Make environment selection remains explicit `mode=local|test|prod` and is never
-inferred from the Git branch name; see `ops/runbooks/workflow.md` and
-`shared/contracts/repository-workflow/v1/`.
+never use environment names (`local`/`test`/`prod`) as branches; never invent a
+numbered `NNN-...` branch without a matching `specs/NNN-.../` directory; never
+use `feat/002-...` / `feature/002-...` when a numbered Spec Kit feature exists.
+Open PRs against `master-dev`. Promote to production with a reviewed PR into
+`master` after test validation. Hotfixes that land on `master` must be
+back-merged to `master-dev`. Make environment selection remains explicit
+`mode=local|test|prod` and is never inferred from the Git branch name; see
+`ops/runbooks/workflow.md` and `shared/contracts/repository-workflow/v1/`.
 
 ## Security & Configuration
 
@@ -119,8 +121,9 @@ environment variables or an approved secret provider.
 - Only API Service and Billing Service gain PostgreSQL-aware readiness in SF02. Their liveness
   remains independent; Gateway and Admin Service must not gain undeclared dependency probes, and
   no business service becomes part of `make dev`.
-- `003-layered-compose-deploy`: design and assets live under
-  `specs/003-layered-compose-deploy/` and ADR 003 (`docs/decisions/003-layered-compose-deploy.md`).
-  Layered Compose — Layer L local deps, Layer I images, Layer A apps, Layer D deploy merge.
-  Public entries: `make deploy` / `make deploy-down` with `mode=test|prod`. Do not expand
-  `compose.local.yml` with business services or revive root-level full-stack compose sketches.
+- Layered Compose deploy (branch `feat/layered-compose-deploy`, **not** a Spec Kit
+  `specs/NNN-...` feature): ADR 003 (`docs/decisions/003-layered-compose-deploy.md`),
+  contracts under `shared/contracts/deploy-environment/v1/`, compose assets under
+  `infra/docker/compose.{middleware,app,deploy}.yml`. Public entries: `make deploy` /
+  `make deploy-down` with `mode=test|prod`. Do not expand `compose.local.yml` with
+  business services or revive root-level full-stack compose sketches.

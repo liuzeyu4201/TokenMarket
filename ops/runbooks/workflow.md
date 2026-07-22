@@ -20,11 +20,11 @@ selected with explicit `mode=` (see below).
 
 ```text
 long-lived   := master | master-dev
-feature      := <NNN>-<slug>                 # preferred; matches specs/
+spec-feature := <NNN>-<slug>                 # only when specs/NNN-slug/ exists
 other        := <kind>/<slug>
-kind         := fix | hotfix | docs | chore | refactor
+kind         := feat | fix | hotfix | docs | chore | refactor
 slug         := [a-z0-9]+(-[a-z0-9]+)*     # English words, hyphens only
-NNN          := [0-9]{3}                     # zero-padded feature id
+NNN          := [0-9]{3}                     # zero-padded Spec Kit feature id
 ```
 
 Recommended total length: **≤ 50 characters**. Avoid underscores, dots (except none),
@@ -41,27 +41,30 @@ When work has (or will have) a Spec Kit feature under `specs/`:
 | Identity | Branch basename **MUST equal** the feature directory under `specs/` |
 | Base branch | Create from current green `master-dev` |
 | PR target | `master-dev` |
-| Examples | `001-repository-workflow-baseline`, `002-local-dependency-lifecycle`, `003-layered-compose-deploy` |
+| Examples | `001-repository-workflow-baseline`, `002-local-dependency-lifecycle` |
 
 Allocate `NNN` in ascending order (next free three-digit id). Do not reuse an id for a
 different feature. Do not invent a parallel name that differs only by prefix
-(`feature/002-...` is forbidden when a numbered feature exists).
+(`feature/002-...` or `feat/002-...` is forbidden when a numbered Spec Kit feature exists).
+Do **not** invent `NNN-...` branch names when there is no matching `specs/NNN-.../` directory.
 
 ### Other short-lived branches
 
-Use only when the change is too small for a new `specs/NNN-...` feature, or is an urgent
+Use when the change is **not** tracked as a Spec Kit feature under `specs/`, or is an urgent
 production fix:
 
 | Prefix | Use when | Base from | PR into |
 |--------|----------|-----------|---------|
+| `feat/<slug>` | Product/behavior change **without** a Spec Kit `specs/NNN-...` feature | `master-dev` | `master-dev` |
 | `fix/<slug>` | Bug fix for test line | `master-dev` | `master-dev` |
 | `hotfix/<slug>` | Urgent production fix | `master` | `master`, then **back-merge** to `master-dev` |
 | `docs/<slug>` | Documentation-only | `master-dev` | `master-dev` |
 | `chore/<slug>` | Tooling, deps, CI plumbing with no product behavior | `master-dev` | `master-dev` |
 | `refactor/<slug>` | Internal restructure with no intended behavior change | `master-dev` | `master-dev` |
 
-Examples: `fix/api-readiness-timeout`, `hotfix/migrate-approval-bypass`,
-`docs/local-environment-runbook`, `chore/uv-lock-refresh`.
+Examples: `feat/layered-compose-deploy`, `fix/api-readiness-timeout`,
+`hotfix/migrate-approval-bypass`, `docs/local-environment-runbook`,
+`chore/uv-lock-refresh`.
 
 ### Forbidden
 
@@ -70,7 +73,8 @@ Examples: `fix/api-readiness-timeout`, `hotfix/migrate-approval-bypass`,
 - Alternate long-lived lines: `main`, `develop`, `release/*` (unless a future contract
   replaces this standard).
 - Spec feature with a non-matching branch: work tracked as `specs/004-foo/` **must** use
-  branch `004-foo`, not `feature/foo` or `004_foo`.
+  branch `004-foo`, not `feat/foo`, `feature/foo`, or `004_foo`.
+- Numbered `NNN-...` branches that do not match an existing `specs/NNN-.../` directory.
 - Encoding secrets, hostnames, or customer data in the branch name.
 
 ### Development flow

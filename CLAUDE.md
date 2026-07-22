@@ -55,18 +55,27 @@ spec or issue, list verification evidence, call out contract/schema/security
 impact, and include rollout and rollback notes. Include screenshots for visible
 frontend changes.
 
-### Long-lived branches
+### Branch naming
 
-| Branch | Role |
-|--------|------|
-| `master` | Production branch — always releasable; source line for production deploys |
-| `master-dev` | Test-environment deployment branch — integration and pre-prod validation |
+Canonical rules live in `ops/runbooks/workflow.md`. Summary:
 
-Open feature/fix PRs against `master-dev`. Promote to production with a reviewed
-PR into `master` after test validation. Hotfixes that land on `master` must be
-back-merged to `master-dev`. Make environment selection remains explicit
-`mode=local|test|prod` and is never inferred from the Git branch name; see
-`ops/runbooks/workflow.md` and `shared/contracts/repository-workflow/v1/`.
+| Kind | Pattern | PR into |
+|------|---------|---------|
+| Production line | `master` (fixed) | — |
+| Test line | `master-dev` (fixed) | — |
+| Spec feature | `NNN-short-kebab` **=** `specs/NNN-short-kebab/` | `master-dev` |
+| Bug fix | `fix/<slug>` | `master-dev` |
+| Prod hotfix | `hotfix/<slug>` (from `master`) | `master`, then back-merge |
+| Docs / chore / refactor | `docs|chore|refactor/<slug>` | `master-dev` |
+
+Rules: lowercase ASCII kebab-case; no spaces/underscores; recommended ≤ 50 chars;
+never use environment names (`local`/`test`/`prod`) as branches; never invent
+`feature/NNN-...` when a numbered spec exists. Open feature/fix PRs against
+`master-dev`. Promote to production with a reviewed PR into `master` after test
+validation. Hotfixes that land on `master` must be back-merged to `master-dev`.
+Make environment selection remains explicit `mode=local|test|prod` and is never
+inferred from the Git branch name; see `ops/runbooks/workflow.md` and
+`shared/contracts/repository-workflow/v1/`.
 
 ## Security & Configuration
 
@@ -110,6 +119,8 @@ environment variables or an approved secret provider.
 - Only API Service and Billing Service gain PostgreSQL-aware readiness in SF02. Their liveness
   remains independent; Gateway and Admin Service must not gain undeclared dependency probes, and
   no business service becomes part of `make dev`.
-- `003-deploy-compose-layers` / ADR 003: layered Compose — Layer L local deps, Layer I images,
-  Layer A apps, Layer D deploy merge. Public deploy targets are gated until `tools/workflow/deploy_env`
-  is implemented; do not revive root-level full-stack `docker-compose.yml` sketches from older docs.
+- `003-layered-compose-deploy`: design and assets live under
+  `specs/003-layered-compose-deploy/` and ADR 003 (`docs/decisions/003-layered-compose-deploy.md`).
+  Layered Compose — Layer L local deps, Layer I images, Layer A apps, Layer D deploy merge.
+  Public entries: `make deploy` / `make deploy-down` with `mode=test|prod`. Do not expand
+  `compose.local.yml` with business services or revive root-level full-stack compose sketches.

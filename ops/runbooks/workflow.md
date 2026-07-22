@@ -7,12 +7,78 @@
 | `master` | **Production branch** — always releasable; source for production deploys | Reviewed PR from `master-dev` or hotfix into `master` |
 | `master-dev` | **Test-environment deployment branch** — integration and pre-prod validation | Feature / fix PR into `master-dev` |
 
-Development flow:
+These two names are fixed. Do not rename them, and do not invent additional long-lived
+deploy lines without a reviewed contract change.
 
-1. Branch from `master-dev` (or the latest green tip of the line you are extending).
-2. Open a PR into `master-dev`; `quality-gate` must pass.
+## Branch naming standard
+
+All short-lived branches use **lowercase ASCII**, **kebab-case**, and **no spaces**.
+Branch names never encode environment (`local` / `test` / `prod`); environment is always
+selected with explicit `mode=` (see below).
+
+### Grammar
+
+```text
+long-lived   := master | master-dev
+feature      := <NNN>-<slug>                 # preferred; matches specs/
+other        := <kind>/<slug>
+kind         := fix | hotfix | docs | chore | refactor
+slug         := [a-z0-9]+(-[a-z0-9]+)*     # English words, hyphens only
+NNN          := [0-9]{3}                     # zero-padded feature id
+```
+
+Recommended total length: **≤ 50 characters**. Avoid underscores, dots (except none),
+uppercase, Chinese or other non-ASCII, personal names, and raw ticket IDs without a slug
+(for example prefer `fix/gateway-request-id` over `fix/1234` alone).
+
+### Feature branches (primary path)
+
+When work has (or will have) a Spec Kit feature under `specs/`:
+
+| Rule | Requirement |
+|------|-------------|
+| Name form | `NNN-short-kebab-description` |
+| Identity | Branch basename **MUST equal** the feature directory under `specs/` |
+| Base branch | Create from current green `master-dev` |
+| PR target | `master-dev` |
+| Examples | `001-repository-workflow-baseline`, `002-local-dependency-lifecycle`, `003-layered-compose-deploy` |
+
+Allocate `NNN` in ascending order (next free three-digit id). Do not reuse an id for a
+different feature. Do not invent a parallel name that differs only by prefix
+(`feature/002-...` is forbidden when a numbered feature exists).
+
+### Other short-lived branches
+
+Use only when the change is too small for a new `specs/NNN-...` feature, or is an urgent
+production fix:
+
+| Prefix | Use when | Base from | PR into |
+|--------|----------|-----------|---------|
+| `fix/<slug>` | Bug fix for test line | `master-dev` | `master-dev` |
+| `hotfix/<slug>` | Urgent production fix | `master` | `master`, then **back-merge** to `master-dev` |
+| `docs/<slug>` | Documentation-only | `master-dev` | `master-dev` |
+| `chore/<slug>` | Tooling, deps, CI plumbing with no product behavior | `master-dev` | `master-dev` |
+| `refactor/<slug>` | Internal restructure with no intended behavior change | `master-dev` | `master-dev` |
+
+Examples: `fix/api-readiness-timeout`, `hotfix/migrate-approval-bypass`,
+`docs/local-environment-runbook`, `chore/uv-lock-refresh`.
+
+### Forbidden
+
+- Environment or deploy-line names: `test`, `prod`, `local`, `staging`, `dev` as the
+  whole branch name (or as a false long-lived line).
+- Alternate long-lived lines: `main`, `develop`, `release/*` (unless a future contract
+  replaces this standard).
+- Spec feature with a non-matching branch: work tracked as `specs/004-foo/` **must** use
+  branch `004-foo`, not `feature/foo` or `004_foo`.
+- Encoding secrets, hostnames, or customer data in the branch name.
+
+### Development flow
+
+1. Branch from `master-dev` (or from `master` only for `hotfix/*`).
+2. Open a PR into the table target above; `quality-gate` must pass.
 3. After test-environment validation, open a promotion PR from `master-dev` into `master`.
-4. Hotfixes may target `master` when urgent, then MUST be back-merged into `master-dev`.
+4. Hotfixes that land on `master` MUST be back-merged into `master-dev`.
 
 Environment selection for `make migrate` and `make deploy` / `make deploy-down` is **not**
 inferred from the branch. Use explicit `mode=local|test|prod` (and production approval for

@@ -11,6 +11,14 @@ monorepo. Each ADR follows the template established by
 - Failure modes, operational costs, and rollback path
 - Alternatives retained for future review
 
+## Index
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [001](001-github-actions-ci-adapter.md) | GitHub Actions CI adapter | Accepted |
+| [002](002-local-compose-lifecycle.md) | Local dependency lifecycle via Docker Compose | Accepted (implementation verification pending) |
+| [003](003-layered-compose-deploy.md) | Layered Compose and deploy entry isolation | Accepted (implementation verification pending) |
+
 ## When to write an ADR
 
 Create or update an ADR before introducing:

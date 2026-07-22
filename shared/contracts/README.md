@@ -20,6 +20,7 @@ workflow definitions.
 | `repository-workflow/v1/service-health.openapi.yaml` | Repository maintainers | 1.1.0 | OpenAPI |
 | `repository-workflow/v2/` | Repository maintainers | 2.0.0 (pending activation) | JSON Schema / Markdown |
 | `local-environment/v1/` | Repository and infrastructure maintainers | 1.0.0 | JSON Schema / Markdown |
+| `deploy-environment/v1/` | Repository and infrastructure maintainers | 1.0.0 | Markdown |
 
 ## Compatibility and deprecation status
 
@@ -35,3 +36,7 @@ workflow definitions.
 - `local-environment/v1/` owns the SF02 dependency set, URL grammar, workspace identity,
   lock, resource, probe, persistence and recovery rules; incompatible changes require a
   new version and synchronized consumers.
+- `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
+  layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
+  it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation
+  is independent of SF02 public `dev` activation.

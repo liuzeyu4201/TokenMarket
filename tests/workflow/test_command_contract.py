@@ -1,6 +1,6 @@
 """Root Make workflow command contract tests (T015).
 
-These tests verify that the repository root Makefile exposes the seven stable
+These tests verify that the repository root Makefile exposes the stable
 public targets, the stable ``bootstrap`` and ``type-check`` support targets,
 help text describing purpose/side-effects/recovery, fail-fast aggregation, and
 correct exit semantics. They must fail before the root Makefile and workflow
@@ -19,7 +19,17 @@ from .helpers import find_repo_root, load_json, load_text, repo_path, run, valid
 
 ROOT_MAKEFILE = repo_path("Makefile")
 
-PUBLIC_TARGETS = ["dev", "dev-down", "fmt", "lint", "test", "build", "migrate"]
+PUBLIC_TARGETS = [
+    "dev",
+    "dev-down",
+    "deploy",
+    "deploy-down",
+    "fmt",
+    "lint",
+    "test",
+    "build",
+    "migrate",
+]
 SUPPORT_TARGETS = ["bootstrap", "type-check"]
 
 
@@ -123,7 +133,7 @@ class TestPublicAndSupportTargets:
         makefile_text = ROOT_MAKEFILE.read_text(encoding="utf-8")
         for support in SUPPORT_TARGETS:
             # ``bootstrap`` and ``type-check`` must remain supporting targets;
-            # they cannot be aliased to one of the seven public names.
+            # they cannot be aliased to one of the public names.
             for public in PUBLIC_TARGETS:
                 assert (
                     f"{support}: {public}" not in makefile_text

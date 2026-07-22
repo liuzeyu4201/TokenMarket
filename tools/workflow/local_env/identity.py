@@ -217,6 +217,12 @@ def classify_repository_resources(
         observed_project_id = labels.get(LABEL_WORKSPACE_ID, "")
         observed_fingerprint = labels.get(LABEL_WORKSPACE_FINGERPRINT, "")
         if not observed_project_id or not observed_fingerprint:
+            # ADR 003 deploy stack reuses the repository label with
+            # ``com.tokenmarket.stack=deploy`` and environment labels only
+            # (no workspace identity). Those resources are out of SF02 scope
+            # and must not block local lifecycle discovery/stop (T083).
+            if labels.get("com.tokenmarket.stack") == "deploy":
+                continue
             raise OwnershipConflictError(
                 "resource is missing required ownership labels; refusing to "
                 "classify or mutate it"

@@ -14,10 +14,22 @@ Development flow:
 3. After test-environment validation, open a promotion PR from `master-dev` into `master`.
 4. Hotfixes may target `master` when urgent, then MUST be back-merged into `master-dev`.
 
-Environment selection for `make migrate` and future deploy scripts is **not** inferred from
-the branch. Use explicit `mode=local|test|prod` (and production approval for `prod`) per
-`shared/contracts/repository-workflow/v1/environment-mode.md`. Future CD jobs may be
-*scheduled* from `master-dev` / `master` while still passing explicit `mode=` on the command line.
+Environment selection for `make migrate` and `make deploy` / `make deploy-down` is **not**
+inferred from the branch. Use explicit `mode=local|test|prod` (and production approval for
+`prod`) per `shared/contracts/repository-workflow/v1/environment-mode.md`. Future CD jobs may
+be *scheduled* from `master-dev` / `master` while still passing explicit `mode=` on the
+command line.
+
+### Layered Compose (ADR 003)
+
+| Command | Environment | What runs |
+|---------|-------------|-----------|
+| `make dev` / `make dev-down` | local only | Middleware containers; apps stay host processes |
+| `make build` | any | Five service images + asset bundles |
+| `make deploy` / `make deploy-down` | test or prod only | Middleware + app containers on the shared host |
+| `make migrate` | local / test / prod | Reviewed Alembic only; never starts containers |
+
+See [`deploy.md`](deploy.md) and `docs/decisions/003-layered-compose-deploy.md`.
 
 ## Local configuration
 

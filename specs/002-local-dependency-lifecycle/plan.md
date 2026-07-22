@@ -107,7 +107,7 @@ specs/002-local-dependency-lifecycle/
 ```text
 Makefile                                  # Stable dev/dev-down delegation and updated help only
 .env.example                              # SF02 fields, comments and unusable placeholders
-AGENTS.md                                 # Active feature context
+CLAUDE.md                                 # Active feature context
 docs/decisions/
 └── 002-local-compose-lifecycle.md         # Accepted before implementation merge
 tools/workflow/

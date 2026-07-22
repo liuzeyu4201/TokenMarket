@@ -8,7 +8,7 @@ Public activation of `make dev` / `make dev-down` and default event v2 requires 
 |----------|------|--------|
 | [quality-gates.md](./quality-gates.md) | T068 | **PASS** — toolchain through build + image-scan green (2026-07-22) |
 | [linux-amd64.md](./linux-amd64.md) | T069 | **Pending** — needs Linux x86_64 + Docker |
-| [macos-arm64.md](./macos-arm64.md) | T070 | **Pending** — needs Docker Desktop on this host |
+| [macos-arm64.md](./macos-arm64.md) | T070 | **PASS** — 20/20 cold + 10/10 repeats on Darwin arm64 (2026-07-22) |
 | [developer-usability.md](./developer-usability.md) | T071 | **Pending** — 10-person protocol (human owner) |
 | ADR 002 implementation verification | T073–T074 | Design **Accepted**; verification **Pending** until dual-platform + T068–T071 |
 

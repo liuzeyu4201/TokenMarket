@@ -369,6 +369,7 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
     ),
     "repository-workflow/v2/": ("Repository maintainers", "2.0.0"),
     "local-environment/v1/": ("Repository and infrastructure maintainers", "1.0.0"),
+    "deploy-environment/v1/": ("Repository and infrastructure maintainers", "1.0.0"),
 }
 
 
@@ -444,3 +445,6 @@ def test_contract_catalog_records_compatibility_and_deprecation_status() -> None
     assert "Repository and infrastructure maintainers" in text
     assert "new version" in text
     assert "synchronized consumers" in text
+    # Deploy-environment v1 catalog entry (ADR 003).
+    assert "deploy-environment/v1/" in text
+    assert "make deploy" in text

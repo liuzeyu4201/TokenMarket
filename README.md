@@ -60,13 +60,16 @@ make ci                # 本地复现完整 CI 门禁
 
 | 命令 | 用途 |
 |------|------|
-| `make dev` / `make dev-down` | 本地 PostgreSQL/Redis/Grafana 生命周期（公共入口在双平台证据前仍返回 `SF02_NOT_READY`；见 `ops/runbooks/local-environment.md`） |
+| `make dev` / `make dev-down` | **本地**中间件（PostgreSQL/Redis/Grafana）；业务进程在本机运行。公共入口在双平台证据前仍返回 `SF02_NOT_READY`（见 `ops/runbooks/local-environment.md`） |
+| `make deploy` / `make deploy-down` | **测试/生产**全栈（中间件 + 五个业务镜像）；必须 `mode=test\|prod`。适配器落地前 fail-closed（ADR 003 / `ops/runbooks/deploy.md`） |
 | `make fmt` | 应用仓库格式化工具 |
 | `make lint` | 汇总静态分析、类型检查与边界检查 |
 | `make test` | 汇总所有组件自动化测试 |
 | `make build` | 构建五个服务镜像与三个确定性资产包 |
 | `make migrate` | 按所有者顺序执行已评审迁移 |
 | `make ci` | 本地复现 hosted `quality-gate` 的完整顺序 |
+
+**分层约定**：本地开发 = 主机进程 + `make dev`；测试/生产主机 = `make build` 后 `make deploy mode=…`。勿把业务服务写入 `infra/docker/compose.local.yml`。
 
 ## 安全与合规
 

@@ -2,8 +2,11 @@
 
 Owner: repository workflow owner
 
-Public entry points: `make dev`, `make dev-down` (remain `SF02_NOT_READY` until
-activation evidence for both Linux x86_64 and macOS arm64 passes).
+Public entry points: `make dev`, `make dev-down`. The lifecycle adapter is
+implemented and exercised by guarded tests; public targets remain
+`SF02_NOT_READY` until dual-platform evidence (Linux x86_64 + macOS arm64),
+usability protocol, and atomic activation (T074) complete. See
+`specs/002-local-dependency-lifecycle/evidence/README.md`.
 
 ## Safe inspection
 

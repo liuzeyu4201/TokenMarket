@@ -16,13 +16,16 @@ MODE_ORIGIN := $(origin mode)
 # Activation-ready copy for SF02 lifecycle targets is prepared here (T047) but
 # remains descriptive until the final atomic public switch (T074). Until then
 # both targets still fail closed with SF02_NOT_READY at runtime.
+# Deploy targets (ADR 003) are listed and fail closed until deploy_env lands.
 .PHONY: help
 help:
 	@echo "TokenMarket repository workflow"
 	@echo ""
 	@echo "Public targets:"
-	@echo "  make dev            Start local PostgreSQL/Redis/Grafana (SF02; gated until activation)"
-	@echo "  make dev-down       Stop local runtime instances; retain named volumes (SF02; gated)"
+	@echo "  make dev            Start local PostgreSQL/Redis/Grafana (SF02; adapter ready, public activation pending evidence)"
+	@echo "  make dev-down       Stop local runtime instances; retain named volumes (SF02; public activation pending)"
+	@echo "  make deploy         Deploy middleware+apps stack (ADR 003; requires mode=test|prod)"
+	@echo "  make deploy-down    Stop deploy stack; retain named volumes (requires mode=test|prod)"
 	@echo "  make fmt            Apply repository formatters (modifies source)"
 	@echo "  make lint           Run static analysis, type checks and boundary checks"
 	@echo "  make test           Run all component tests"
@@ -37,16 +40,19 @@ help:
 	@echo ""
 	@echo "Prerequisites: Go, Python/uv, Node/npm, Docker (see .tool-versions)"
 	@echo "Side effects: fmt modifies declared source; build creates local images;"
-	@echo "  dev creates project containers/networks/volumes; dev-down stops runtime"
-	@echo "  instances and keeps PostgreSQL/Redis named volumes (no prune/volume delete)"
+	@echo "  dev creates local project containers/networks/volumes; dev-down stops runtime"
+	@echo "  instances and keeps PostgreSQL/Redis named volumes (no prune/volume delete);"
+	@echo "  deploy/deploy-down target shared test|prod stacks (gated until adapter lands)"
 	@echo "Recovery: fix the reported diagnostic (mode/config/port/auth/runtime) and"
 	@echo "  rerun the same command; for moved workspaces use the original path identity"
+	@echo "Layers: local apps are host processes + make dev middleware; test/prod use"
+	@echo "  make build then make deploy mode=test|prod (see docs/decisions/003-layered-compose-deploy.md)"
 
 # Public targets delegate to the maintained workflow tool.
-.PHONY: dev dev-down fmt lint test build migrate
+.PHONY: dev dev-down deploy deploy-down fmt lint test build migrate
 .PHONY: bootstrap type-check toolchain-check fmt-check migrate-check migrate-integration-check security-check runtime-smoke image-scan
 
-dev dev-down fmt lint test build migrate bootstrap type-check toolchain-check fmt-check migrate-check migrate-integration-check security-check runtime-smoke image-scan:
+dev dev-down deploy deploy-down fmt lint test build migrate bootstrap type-check toolchain-check fmt-check migrate-check migrate-integration-check security-check runtime-smoke image-scan:
 	@uv run --project "$(REPO_ROOT)/tools/workflow" python -m workflow.cli \
 		"$(subst migrate-check,migrate-check,$@)" \
 		$(if $(MODE),--mode $(MODE)) \

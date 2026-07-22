@@ -1,0 +1,114 @@
+# Application services for the deploy stack (Layer A).
+#
+# Consumed only via `compose.deploy.yml` behind `make deploy` / `make deploy-down`.
+# Images are produced by `make build`; this file never uses `build:` contexts.
+# Local day-to-day development runs these processes on the host, not here.
+
+services:
+  proxy-gateway:
+    image: ${TOKENMARKET_DEPLOY_IMAGE_PROXY_GATEWAY}
+    stop_grace_period: 30s
+    environment:
+      PORT: "8080"
+    ports:
+      - target: 8080
+        published: "${TOKENMARKET_DEPLOY_GATEWAY_HOST_PORT}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1:8080/health/live >/dev/null
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    labels: &tokenmarket-app-labels
+      com.tokenmarket.repository: tokenmarket
+      com.tokenmarket.environment: ${TOKENMARKET_DEPLOY_ENVIRONMENT}
+      com.tokenmarket.stack: deploy
+
+  api-service:
+    image: ${TOKENMARKET_DEPLOY_IMAGE_API_SERVICE}
+    stop_grace_period: 30s
+    environment:
+      PORT: "8000"
+      DATABASE_URL: ${TOKENMARKET_DEPLOY_APP_DATABASE_URL}
+    ports:
+      - target: 8000
+        published: "${TOKENMARKET_DEPLOY_API_HOST_PORT}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    labels: *tokenmarket-app-labels
+
+  billing-service:
+    image: ${TOKENMARKET_DEPLOY_IMAGE_BILLING_SERVICE}
+    stop_grace_period: 30s
+    environment:
+      PORT: "8001"
+      DATABASE_URL: ${TOKENMARKET_DEPLOY_APP_DATABASE_URL}
+    ports:
+      - target: 8001
+        published: "${TOKENMARKET_DEPLOY_BILLING_HOST_PORT}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/live')"
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    labels: *tokenmarket-app-labels
+
+  admin-service:
+    image: ${TOKENMARKET_DEPLOY_IMAGE_ADMIN_SERVICE}
+    stop_grace_period: 30s
+    environment:
+      PORT: "8002"
+    ports:
+      - target: 8002
+        published: "${TOKENMARKET_DEPLOY_ADMIN_HOST_PORT}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health/live')"
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    labels: *tokenmarket-app-labels
+
+  frontend:
+    image: ${TOKENMARKET_DEPLOY_IMAGE_FRONTEND}
+    stop_grace_period: 15s
+    ports:
+      - target: 3000
+        published: "${TOKENMARKET_DEPLOY_FRONTEND_HOST_PORT}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1:3000/health/live >/dev/null
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    labels: *tokenmarket-app-labels

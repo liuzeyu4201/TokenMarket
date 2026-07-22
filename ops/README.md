@@ -14,3 +14,12 @@ workflow tooling. SF01 validates these assets and bundles them deterministically
 - Supported host platforms for SF02: macOS arm64 and Linux x86_64.
 - Business services are not started by `make dev`; only API Service and Billing
   Service implement PostgreSQL readiness probes in this feature.
+
+## Deploy stack (ADR 003)
+
+- Compose layers: `infra/docker/compose.middleware.yml`, `compose.app.yml`,
+  `compose.deploy.yml` (never expand `compose.local.yml` with apps).
+- Contract: `shared/contracts/deploy-environment/v1/lifecycle.md`.
+- Runbook: [`runbooks/deploy.md`](runbooks/deploy.md).
+- Public `make deploy` / `make deploy-down` require `mode=test|prod` and remain
+  fail-closed until the deploy adapter is implemented.

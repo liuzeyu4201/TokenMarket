@@ -204,7 +204,32 @@ def execute_action(
 
     try:
         if action in ("dev", "dev-down"):
-            raise WorkflowError("SF02_NOT_READY", "SF02 must provide the lifecycle adapter")
+            # Guarded lifecycle adapter exists (execute_dev_guarded); public
+            # activation waits for dual-platform evidence (T069–T071) then T074.
+            raise WorkflowError(
+                "SF02_NOT_READY",
+                "SF02 local dependency lifecycle is implemented but not publicly "
+                "activated; dual-platform evidence and usability gates remain "
+                "(see specs/002-local-dependency-lifecycle/evidence/ and "
+                "ops/runbooks/local-environment.md)",
+            )
+
+        if action in ("deploy", "deploy-down"):
+            from .deploy_env import deploy_down, deploy_up
+
+            if action == "deploy":
+                return deploy_up(
+                    repo_root,
+                    mode=mode,
+                    mode_origin=mode_origin,
+                    plain=plain,
+                )
+            return deploy_down(
+                repo_root,
+                mode=mode,
+                mode_origin=mode_origin,
+                plain=plain,
+            )
 
         if action == "migrate":
             selection = validate_mode(mode, mode_origin)
@@ -463,6 +488,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "migrate",
             "dev",
             "dev-down",
+            "deploy",
+            "deploy-down",
             "migrate-check",
             "migrate-integration-check",
             "security-check",
@@ -553,12 +580,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 _HELP_TEXT = """TokenMarket repository workflow
 
 Public targets:
-  dev, dev-down   Local dependency lifecycle (blocked until SF02)
-  fmt             Apply repository formatters
-  lint            Run static analysis, type checks and boundary checks
-  test            Run all component tests
-  build           Build five service images and three asset bundles
-  migrate         Apply reviewed migrations to selected environment
+  dev, dev-down         Local dependency lifecycle (implemented; public activation pending evidence)
+  deploy, deploy-down   Test/prod full stack (requires mode=test|prod; ADR 003)
+  fmt                   Apply repository formatters
+  lint                  Run static analysis, type checks and boundary checks
+  test                  Run all component tests
+  build                 Build five service images and three asset bundles
+  migrate               Apply reviewed migrations to selected environment
 
 Support targets:
   bootstrap       Prepare locked project dependencies

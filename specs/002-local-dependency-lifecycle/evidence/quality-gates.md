@@ -46,6 +46,22 @@
 - 10-person usability → **T071**
 - Public activation → **T074** (do not run until T069–T071 pass)
 
+## Toolchain drift note (T084)
+
+**Pinned contract** (do not relax): `ops/workflow/toolchains.json` and
+`.tool-versions` require **Node exact `24.18.0`** (npm bundled with that
+release). CI and evidence hosts must match.
+
+| Situation | Recovery |
+|-----------|----------|
+| Host default Node is `24.13.x` (or other non-exact) | `nvm install 24.18.0 && nvm use 24.18.0` (or equivalent asdf/mise), then re-run `make toolchain-check` |
+| Root `make build` fails with `TOOL_VERSION_UNSUPPORTED` for node | Same as above; component `make -C services/*/ build` still works via Docker-only paths but is **not** a substitute for the root gate |
+| Intentional pin change | Reviewed PR updating `.tool-versions` + `toolchains.json` integrity references together |
+
+**This session (2026-07-22, later)**: default shell Node was `24.13.0`; after
+`nvm use 24.18.0`, `make toolchain-check` returned 0. The pin remains
+`24.18.0` — host drift is operator recovery, not a contract downgrade.
+
 ## Conclusion
 
 T068 offline + Docker quality matrix required for SF02 is recorded **PASS**. Public lifecycle remains fail-closed.

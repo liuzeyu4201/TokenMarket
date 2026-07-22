@@ -105,6 +105,56 @@ def test_public_dev_targets_remain_fail_closed(capsys) -> None:
         assert "SF02_NOT_READY" in out
 
 
+def test_local_compose_never_includes_application_or_deploy_merge() -> None:
+    """T083: ADR 003 app/deploy assets must not expand compose.local.yml."""
+    repo = find_repo_root()
+    local = (repo / "infra" / "docker" / "compose.local.yml").read_text(encoding="utf-8")
+    assert "compose.app.yml" not in local
+    assert "compose.deploy.yml" not in local
+    assert "compose.middleware.yml" not in local
+    assert "TOKENMARKET_DEPLOY_" not in local
+    for service in (
+        "proxy-gateway",
+        "api-service",
+        "billing-service",
+        "admin-service",
+        "frontend",
+    ):
+        assert not __import__("re").search(
+            rf"(?m)^\s*{service}\s*:",
+            local,
+        ), f"compose.local.yml must not define {service}"
+
+
+def test_local_env_package_does_not_import_deploy_env() -> None:
+    """T083: SF02 lifecycle package stays independent of deploy_env."""
+    repo = find_repo_root()
+    package = repo / "tools" / "workflow" / "local_env"
+    for path in package.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert "deploy_env" not in text, f"{path} must not depend on deploy_env"
+        assert "compose.app.yml" not in text
+        assert "compose.deploy.yml" not in text
+
+
+def test_public_dev_does_not_dispatch_deploy_stack(capsys) -> None:
+    """T083: make dev fail-closed path never routes into deploy_up."""
+    from workflow import cli as workflow_cli
+
+    code = workflow_cli.execute_action(
+        "dev",
+        mode=None,
+        mode_origin="omitted",
+        plain=True,
+        repo_root=find_repo_root(),
+    )
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "SF02_NOT_READY" in out
+    assert "tokenmarket-test" not in out
+    assert "compose.deploy" not in out
+
+
 def test_config_rejects_remote_and_wildcard_endpoints() -> None:
     """T067: non-loopback and wildcard hosts fail closed before Docker."""
     import pytest

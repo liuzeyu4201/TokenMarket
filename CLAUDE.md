@@ -18,7 +18,11 @@ The root Makefile is the required workflow entry point as implementation is scaf
 
 - `make dev` / `make dev-down`: local PostgreSQL 15, Redis 7, and Grafana OSS
   lifecycle (SF02). Public targets remain `SF02_NOT_READY` until dual-platform
-  activation; Kafka is out of the SF02 dependency set.
+  activation; Kafka is out of the SF02 dependency set. Business services are
+  host processes in local development — never added to `compose.local.yml`.
+- `make deploy` / `make deploy-down`: test/prod full stack (middleware + five
+  app images) per ADR 003. Require explicit `mode=test|prod`. Phase 1 fails
+  closed before Docker; assets live under `infra/docker/compose.{middleware,app,deploy}.yml`.
 - `make test`: run all Go, Python, and frontend test suites.
 - `make lint`: run static analysis and type checks across components.
 - `make fmt`: apply repository formatters.
@@ -106,3 +110,6 @@ environment variables or an approved secret provider.
 - Only API Service and Billing Service gain PostgreSQL-aware readiness in SF02. Their liveness
   remains independent; Gateway and Admin Service must not gain undeclared dependency probes, and
   no business service becomes part of `make dev`.
+- `003-deploy-compose-layers` / ADR 003: layered Compose — Layer L local deps, Layer I images,
+  Layer A apps, Layer D deploy merge. Public deploy targets are gated until `tools/workflow/deploy_env`
+  is implemented; do not revive root-level full-stack `docker-compose.yml` sketches from older docs.

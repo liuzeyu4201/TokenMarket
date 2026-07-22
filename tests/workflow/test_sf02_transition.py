@@ -235,15 +235,28 @@ def test_dev_down_fails_with_sf02_not_ready() -> None:
 
 
 def test_dev_does_not_read_configuration() -> None:
-    """`make dev` must fail with SF02_NOT_READY before reading real env files."""
+    """`make dev` must fail with SF02_NOT_READY before reading real env files.
+
+    ADR 003 deploy configs (``.env.test`` / ``.env.prod``) may exist on a
+    shared workspace; they are ignored by the SF02 local lifecycle and must
+    not cause this pre-config proof to fail. ``.env.local`` is still treated
+    as a local-lifecycle config that would confuse the order proof.
+    """
     root = find_repo_root()
-    allowed = {".env.example", ".env.local.example"}
+    # Templates and deploy-only ignored configs are allowed (T083).
+    allowed = {
+        ".env.example",
+        ".env.local.example",
+        ".env.test",
+        ".env.prod",
+        ".env.test.example",
+        ".env.prod.example",
+    }
     for env_file in root.glob(".env*"):
         if env_file.name in allowed or env_file.name.endswith(".example"):
             continue
-        # Real .env files must not be present in a fresh checkout; if they are,
-        # the workspace has already been mutated and the test cannot prove the
-        # pre-config failure order.
+        # Real SF02 local config must not be present when proving pre-config
+        # fail-closed order; deploy-only files are excluded above.
         pytest.fail(f"unexpected environment file in repository root: {env_file}")
 
     result = _run_make("dev")

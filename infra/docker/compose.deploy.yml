@@ -1,0 +1,13 @@
+# Deploy stack (Layer D): middleware + application services.
+#
+# Invoked only by the repository workflow adapter behind
+# `make deploy` / `make deploy-down` with mode=test|prod.
+# Do not run this file with a bare `docker compose up`.
+#
+# Includes:
+#   - compose.middleware.yml  (PostgreSQL, Redis, Grafana)
+#   - compose.app.yml         (gateway, api, billing, admin, frontend)
+
+include:
+  - path: compose.middleware.yml
+  - path: compose.app.yml

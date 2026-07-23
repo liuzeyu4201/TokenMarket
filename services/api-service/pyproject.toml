@@ -19,6 +19,7 @@ dependencies = [
     "pydantic-settings==2.7.1",
     "sqlalchemy[asyncio]==2.0.37",
     "uvicorn[standard]==0.34.0",
+    "redis==5.2.1",
 ]
 
 [project.optional-dependencies]
@@ -57,3 +58,6 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: tests that require Docker/PostgreSQL or external services",
+]

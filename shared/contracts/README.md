@@ -21,6 +21,7 @@ workflow definitions.
 | `repository-workflow/v2/` | Repository maintainers | 2.0.0 (pending activation) | JSON Schema / Markdown |
 | `local-environment/v1/` | Repository and infrastructure maintainers | 1.0.0 | JSON Schema / Markdown |
 | `deploy-environment/v1/` | Repository and infrastructure maintainers | 1.0.0 | Markdown |
+| `user-registration/v1/` | API Service (user domain) | 1.0.0 | OpenAPI / Markdown |
 
 ## Compatibility and deprecation status
 
@@ -40,3 +41,6 @@ workflow definitions.
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation
   is independent of SF02 public `dev` activation.
+- `user-registration/v1/` owns `POST /api/v1/auth/register`, unified business envelope codes,
+  CN mobile normalization rules, and privacy constraints for registration; breaking changes
+  require a new version and synchronized API Service + frontend consumers.

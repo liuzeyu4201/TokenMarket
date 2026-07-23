@@ -22,7 +22,19 @@ lint: fmt-check type-check
 	uv run --locked --extra dev flake8 --max-line-length 88 app tests
 
 test:
-	PYTHONPATH=. uv run --locked --extra dev pytest --cov=app --cov-report=term-missing tests
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app \
+		--cov-report=term-missing \
+		--cov-fail-under=0 \
+		tests
+	# Domain registration packages must stay ≥80% (Constitution V / T072)
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app.domain.users \
+		--cov=app.api.v1.auth \
+		--cov=app.rate_limit \
+		--cov-report=term-missing \
+		--cov-fail-under=80 \
+		tests/unit tests/integration -q
 
 build:
 	docker build -t $(IMAGE_TAG) .

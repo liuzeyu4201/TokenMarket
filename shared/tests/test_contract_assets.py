@@ -52,6 +52,15 @@ def test_shared_build_produces_deterministic_asset_archive() -> None:
     assert archives, "shared build must produce a deterministic asset archive"
 
 
+def test_user_registration_v1_assets_exist() -> None:
+    base = REPO_ROOT / "shared" / "contracts" / "user-registration" / "v1"
+    assert (base / "user-registration.openapi.yaml").is_file()
+    assert (base / "business-codes.md").is_file()
+    assert (base / "phone-normalization.md").is_file()
+    readme = REPO_ROOT / "shared" / "contracts" / "README.md"
+    assert "user-registration/v1" in readme.read_text(encoding="utf-8")
+
+
 def test_shared_schema_validation_fails_on_drift() -> None:
     result = subprocess.run(
         ["make", "lint"],

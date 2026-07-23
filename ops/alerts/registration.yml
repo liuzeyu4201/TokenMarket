@@ -1,0 +1,40 @@
+# Prometheus alert rules for TokenMarket user registration (SF03 / 003).
+# Metric names must match services/api-service/app/observability.py
+groups:
+  - name: tokenmarket-registration
+    rules:
+      - alert: TokenMarketRegistrationHighErrorRate
+        expr: |
+          sum(rate(tokenmarket_registration_attempts_total{result=~"internal_error|service_unavailable"}[5m]))
+          /
+          clamp_min(sum(rate(tokenmarket_registration_attempts_total[5m])), 1e-9)
+          > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          owner: api-service
+        annotations:
+          summary: Elevated registration error rate
+          description: Registration 5xx/unavailable ratio exceeded 10% for 5m. See ops/runbooks/registration.md
+
+      - alert: TokenMarketRegistrationServiceUnavailable
+        expr: |
+          sum(rate(tokenmarket_registration_attempts_total{result="service_unavailable"}[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          owner: api-service
+        annotations:
+          summary: Registration service unavailable spikes
+          description: SERVICE_UNAVAILABLE responses elevated. Check PostgreSQL and Redis. Runbook ops/runbooks/registration.md
+
+      - alert: TokenMarketRateLimitBackendUnavailable
+        expr: |
+          increase(tokenmarket_rate_limit_backend_unavailable_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          owner: api-service
+        annotations:
+          summary: Registration rate-limit backend (Redis) unavailable
+          description: Fail-closed registration path; restore Redis. Runbook ops/runbooks/registration.md

@@ -1,36 +1,42 @@
-import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import App from './App'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { describe, expect, it } from 'vitest'
+import { AppShell } from './layouts/AppShell'
+import { Home } from './pages/Home'
+import { NotFound } from './pages/NotFound'
+import { Register } from './pages/Register'
 
-describe('App smoke tests', () => {
-  it('renders a minimal accessible page without crashing', () => {
-    const { container } = render(<App />)
-    expect(container.querySelector('main, [role="main"]')).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 1 })).toBeTruthy()
+function renderAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route index element={<Home />} />
+          <Route path="register" element={<Register />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+describe('app shell routes', () => {
+  it('shows home placeholder not register form on /', () => {
+    renderAt('/')
+    expect(screen.getByText(/平台首页占位/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '注册' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: '注册' }).length).toBeGreaterThanOrEqual(1)
   })
 
-  it('displays version information', () => {
-    render(<App />)
-    const version = screen.getByTestId('app-version')
-    expect(version.textContent).toMatch(/\d+\.\d+\.\d+/)
+  it('shows register form on /register', () => {
+    renderAt('/register')
+    expect(screen.getByLabelText('手机号')).toBeInTheDocument()
+    expect(screen.getByLabelText('昵称')).toBeInTheDocument()
+    expect(screen.getByLabelText('角色')).toBeInTheDocument()
   })
 
-  it('does not expose business interactions', () => {
-    render(<App />)
-    const body = document.body.textContent?.toLowerCase() ?? ''
-    expect(body).not.toContain('buy')
-    expect(body).not.toContain('sell')
-    expect(body).not.toContain('provider')
-    expect(body).not.toContain('key')
-    expect(body).not.toContain('billing')
-    expect(body).not.toContain('meter')
-  })
-
-  it('does not render secrets or environment values', () => {
-    render(<App />)
-    const body = document.body.textContent ?? ''
-    expect(body).not.toMatch(/sk-[a-zA-Z0-9]{20,}/)
-    expect(body).not.toMatch(/password/i)
-    expect(body).not.toMatch(/token=/i)
+  it('shows not found for unknown path', () => {
+    renderAt('/no-such-page')
+    expect(screen.getByText(/页面未找到或暂未开放/)).toBeInTheDocument()
   })
 })

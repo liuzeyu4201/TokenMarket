@@ -29,3 +29,9 @@ reviewed and versioned here before a consumer or producer is implemented.
 - API and event contracts are owned by the feature team that introduces them.
 - Cross-service contracts require review from both producing and consuming team
   owners.
+
+## Current public HTTP surfaces
+
+| Contract | Path |
+|----------|------|
+| User registration v1 | [`shared/contracts/user-registration/v1/`](../../shared/contracts/user-registration/v1/) (`user-registration.openapi.yaml`) |

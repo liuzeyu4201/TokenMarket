@@ -57,3 +57,42 @@ def redact_headers(headers: dict[str, Any]) -> dict[str, Any]:
 def generate_request_id() -> str:
     """Return a new opaque request id."""
     return str(uuid.uuid4())
+
+
+# Registration metrics — no phone / high-cardinality labels (FR ER-006)
+REGISTRATION_ATTEMPTS_TOTAL = Counter(
+    "tokenmarket_registration_attempts_total",
+    "Registration attempts by coarse result class.",
+    ["result"],
+)
+REGISTRATION_DURATION_SECONDS = Histogram(
+    "tokenmarket_registration_duration_seconds",
+    "Registration request duration in seconds.",
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0),
+)
+REGISTRATION_RATE_LIMITED_TOTAL = Counter(
+    "tokenmarket_registration_rate_limited_total",
+    "Registration attempts rejected by rate limit.",
+)
+RATE_LIMIT_BACKEND_UNAVAILABLE_TOTAL = Counter(
+    "tokenmarket_rate_limit_backend_unavailable_total",
+    "Rate-limit backend (Redis) unavailable on registration path.",
+)
+
+
+def record_registration_attempt(result: str) -> None:
+    """Increment attempt counter; result is a low-cardinality class."""
+    safe = result.replace(" ", "_")[:64]
+    REGISTRATION_ATTEMPTS_TOTAL.labels(result=safe).inc()
+
+
+def record_registration_duration(seconds: float) -> None:
+    REGISTRATION_DURATION_SECONDS.observe(max(seconds, 0.0))
+
+
+def record_rate_limited() -> None:
+    REGISTRATION_RATE_LIMITED_TOTAL.inc()
+
+
+def record_rate_limit_backend_unavailable() -> None:
+    RATE_LIMIT_BACKEND_UNAVAILABLE_TOTAL.inc()

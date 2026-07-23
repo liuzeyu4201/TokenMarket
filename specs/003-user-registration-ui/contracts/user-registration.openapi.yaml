@@ -1,0 +1,176 @@
+openapi: 3.1.0
+info:
+  title: TokenMarket User Registration API
+  version: 1.0.0
+  description: |
+    SF03 user registration (no session issuance) plus envelope and error semantics
+    for the 003-user-registration-ui feature. Phone normalization rules are defined in
+    phone-normalization.md; business codes in business-codes.md.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local API Service (direct; not via proxy-gateway)
+paths:
+  /api/v1/auth/register:
+    post:
+      operationId: registerUser
+      summary: Register a new user account
+      description: |
+        Creates an active user from phone, nickname, and role. Does not issue tokens.
+        Requires Idempotency-Key. Rate-limited by client IP and normalized phone.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+          description: Client-generated key; replay-safe for 24 hours on identical body.
+        - name: X-Request-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              valid:
+                value:
+                  phone: "13800138000"
+                  nickname: "测试用户"
+                  role: buyer
+      responses:
+        '200':
+          description: Registration succeeded or idempotent replay of success
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterSuccessEnvelope'
+        '400':
+          description: Validation or missing idempotency key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Phone taken, account unavailable, idempotency conflict/expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+components:
+  schemas:
+    UserRole:
+      type: string
+      enum: [buyer, seller, both]
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [phone, nickname, role]
+      properties:
+        phone:
+          type: string
+          description: Raw phone; server normalizes to CN 11-digit mobile.
+          minLength: 1
+          maxLength: 32
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 50
+        role:
+          $ref: '#/components/schemas/UserRole'
+      description: Client must not send user id or status.
+    RegisterSuccessData:
+      type: object
+      additionalProperties: false
+      required: [user_id, role, status, created_at]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/UserRole'
+        status:
+          type: string
+          enum: [active]
+        created_at:
+          type: string
+          format: date-time
+        phone_masked:
+          type: string
+          description: Optional masked phone for display (never full MSISDN).
+          examples: ["*******8000"]
+    ApiEnvelopeBase:
+      type: object
+      required: [code, message, request_id, timestamp]
+      properties:
+        code:
+          type: string
+          description: Business code; "0" means success.
+        message:
+          type: string
+        request_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        data:
+          nullable: true
+    RegisterSuccessEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          required: [code, data]
+          properties:
+            code:
+              type: string
+              enum: ["0"]
+            data:
+              $ref: '#/components/schemas/RegisterSuccessData'
+    ErrorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - PHONE_ALREADY_REGISTERED
+                - ACCOUNT_UNAVAILABLE
+                - IDEMPOTENCY_KEY_CONFLICT
+                - IDEMPOTENCY_KEY_EXPIRED
+                - IDEMPOTENCY_KEY_REQUIRED
+                - RATE_LIMITED
+                - SERVICE_UNAVAILABLE
+                - INTERNAL_ERROR
+            data:
+              nullable: true
+              description: Optional field errors or safe diagnostics (no PII dumps).

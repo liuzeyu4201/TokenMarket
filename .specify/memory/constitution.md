@@ -1,6 +1,7 @@
 <!--
 Sync Impact Report
-- Version change: template (unratified) -> 1.0.0; 1.0.0 -> 1.1.0 (long-lived branches master/master-dev)
+- Version change: template (unratified) -> 1.0.0; 1.0.0 -> 1.1.0 (long-lived branches
+  master/master-dev); 1.1.0 -> 1.2.0 (Chinese-first engineering documentation)
 - Modified principles:
   - Placeholder Principle 1 -> I. Architecture Boundaries and Contract-First Design
   - Placeholder Principle 2 -> II. Secure by Default (NON-NEGOTIABLE)
@@ -10,6 +11,7 @@ Sync Impact Report
 - Added principles:
   - VI. Observable and Reliable Operation
   - VII. Reproducible Delivery and Controlled Change
+  - VIII. Chinese-First Engineering Documentation (1.2.0)
 - Added sections:
   - Technology and Architecture Constraints
   - Development Workflow and Quality Gates
@@ -19,6 +21,7 @@ Sync Impact Report
   - ✅ updated: .specify/templates/spec-template.md
   - ✅ updated: .specify/templates/tasks-template.md
   - ✅ reviewed/no change: .specify/templates/checklist-template.md
+  - ✅ reviewed/no change: .specify/templates/constitution-template.md
   - ✅ reviewed/no command templates present: .specify/templates/commands/*.md
 - Runtime guidance reviewed:
   - ✅ aligned as technical references: 项目开发/1-项目架构与目录结构.md
@@ -30,6 +33,8 @@ Sync Impact Report
 - Follow-up TODOs:
   - Amend the V0.1 feature spec before implementation; plaintext passwords and provider
     API keys are not eligible for a development-stage exception.
+  - No bulk translation of existing English documents is required by v1.2.0; new and
+    substantially revised project-authored content must follow Principle VIII.
 -->
 
 # TokenMarket Engineering Constitution
@@ -219,6 +224,30 @@ redacted telemetry and pre-defined operating behavior.
 Rationale: reproducibility and controlled rollout make a change auditable and reversible
 across independently deployable components.
 
+### VIII. Chinese-First Engineering Documentation
+
+- Project-authored Markdown documents MUST default to Simplified Chinese. This includes
+  feature Spec, Plan, Tasks, Checklist, ADR, runbook, project handoff report, and
+  development guidance documents under active authorship.
+- Hand-written explanatory code comments MUST default to Simplified Chinese. Comments MUST
+  explain design intent, constraints, invariants, failure behavior, and non-obvious reasons;
+  they MUST NOT restate code syntax. Principle IV continues to govern comment substance;
+  this principle governs the default language of those comments.
+- Code identifiers, API field names, CLI commands, paths, environment variables, protocols,
+  standards, library names, and proper nouns MUST remain in their original form and MUST NOT
+  be translated solely for language consistency.
+- Automatically generated files, third-party content, licenses, external contracts, and
+  machine-consumed artifacts are not required to be translated.
+- Unreviewed bulk translation of the existing repository is not required. Historical English
+  documents may remain as-is until deliberately revised.
+- When an existing English document is edited, newly added text and substantially revised
+  passages MUST follow this principle. Unchanged historical English prose need not be
+  rewritten solely for language alignment.
+
+Rationale: a Chinese-first documentation and comment default matches the team's primary
+working language while keeping executable identifiers, contracts, and external artifacts
+stable and machine-readable.
+
 ## Technology and Architecture Constraints
 
 - The approved baseline is Go 1.22 with Gin for `proxy-gateway`; Python 3.11 with FastAPI,
@@ -293,4 +322,4 @@ across independently deployable components.
   `项目开发/4-前端与DevOps监控规范.md`. These documents may add detail but MUST NOT weaken
   this constitution.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-13 | **Last Amended**: 2026-07-22
+**Version**: 1.2.0 | **Ratified**: 2026-07-13 | **Last Amended**: 2026-07-23

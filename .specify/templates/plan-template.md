@@ -66,6 +66,14 @@
   capacity/backpressure, and failure recovery are defined for new failure modes.
 - **Delivery**: Reproducible toolchains, CI gates, dependency impact, rollout, rollback, and
   requirement-to-test traceability are documented.
+- **Documentation language**: Project-authored Spec, Plan, Tasks, Checklist, ADR, runbook,
+  handoff report, and development guidance default to Simplified Chinese; hand-written
+  explanatory comments default to Simplified Chinese and explain intent/constraints rather
+  than syntax; identifiers, API fields, CLI commands, paths, env vars, protocols, standards,
+  library names, and proper nouns stay in original form; generated/third-party/license/
+  external-contract/machine-consumed files need not be translated; unreviewed bulk translation
+  of historical English is not required; new or substantially revised parts of existing
+  English docs must follow this rule.
 
 Any failed gate MUST block implementation or be recorded below with a linked ADR, accountable
 owner, risk controls, review/expiry date, and remediation task. “MVP” or schedule pressure is

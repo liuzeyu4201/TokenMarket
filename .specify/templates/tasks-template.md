@@ -9,6 +9,11 @@ description: "Task list template for feature implementation"
 
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
+**Language**: Write task descriptions and notes in Simplified Chinese by default
+(constitution Principle VIII). Keep code identifiers, API fields, CLI commands, paths,
+environment variables, protocols, standards, library names, and proper nouns in their
+original form.
+
 **Tests**: Tests are REQUIRED for every behavior change and MUST be written before implementation.
 Documentation-only or non-behavioral mechanical changes may omit new tests only when the task list
 records why no executable behavior changes.

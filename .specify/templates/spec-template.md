@@ -8,6 +8,10 @@
 
 **Input**: User description: "$ARGUMENTS"
 
+**Language**: Fill this specification in Simplified Chinese by default (constitution
+Principle VIII). Keep code identifiers, API fields, CLI commands, paths, environment
+variables, protocols, standards, library names, and proper nouns in their original form.
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--

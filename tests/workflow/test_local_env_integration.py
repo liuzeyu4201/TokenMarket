@@ -7,14 +7,12 @@ dynamic loopback ports, and synthetic credentials (fixtures from
 ``tokenmarket-*`` resources; the fixture finalizer tears every project down
 by exact labels even on failure and proves zero tmtest leftovers.
 
-Host fact (recorded 2026-07): the daemon's configured registry mirrors cannot
-resolve the canonical ``name:tag@index-digest`` pull reference on this host
-(the attempt returns ``not found`` after minutes). The missing-image test
-therefore exercises the bounded pull path with a short injected pull timeout
-and asserts the stable ``IMAGE_UNAVAILABLE`` diagnostic and phase ordering,
-then restores the canonical tag from the sanctioned mirror pull by tag and
-proves convergence. Tests in this file run sequentially (module order) to
-avoid port and lock interference between projects.
+Missing-image cases use a test-scoped ComposeAdapter ``run`` seam to simulate
+a local redis ``image inspect`` miss without deleting or retagging daemon
+images (required on Docker Desktop containerd, where digest-only RepoTags
+cannot be untagged). Other suite tests still exercise the real daemon.
+Tests in this file run sequentially (module order) to avoid port and lock
+interference between projects.
 """
 
 from __future__ import annotations
@@ -32,7 +30,7 @@ from typing import Any, Mapping, Sequence
 import asyncpg  # type: ignore[import-untyped]
 import pytest
 
-from workflow.local_env.compose import default_bind_check
+from workflow.local_env.compose import default_bind_check, default_run
 from workflow.local_env.lifecycle import LifecycleRunOutcome
 from workflow.local_env.models import (
     DependencyHealthResult,
@@ -126,70 +124,134 @@ def _redis_image_ref(factory: RealComposeProjectFactory) -> str:
     return factory.manifest().dependency(DependencyId.REDIS).image_ref
 
 
-def _redis_repo_tags(factory: RealComposeProjectFactory) -> list[str]:
-    """Read the current redis name:tag refs (hard precondition: present).
-
-    Docker 29 with the containerd store lists digest-pinned references inside
-    RepoTags; they cannot be untagged or retagged by name, so only plain
-    ``name:tag`` entries are returned.
-    """
-    inspect = _docker(["image", "inspect", _redis_image_ref(factory)])
-    tags = [tag for tag in json.loads(inspect.stdout)[0]["RepoTags"] if "@sha256:" not in tag]
-    assert tags, "precondition: redis canonical tags exist"
-    return tags
-
-
-def _remove_redis_tags(factory: RealComposeProjectFactory, tags: list[str]) -> None:
-    """Untag every redis RepoTag; the digest refs keep the content local.
-
-    Docker Desktop deregisters just-removed containers asynchronously, so a
-    "being used" untag conflict is retried briefly instead of racing it.
-    """
-    for tag in tags:
-        deadline = time.monotonic() + 20.0
-        while True:
-            result = subprocess.run(
-                ["docker", "rmi", tag],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=DOCKER_SHORT_TIMEOUT,
-            )
-            if result.returncode == 0:
-                break
-            if "being used" in result.stderr and time.monotonic() < deadline:
-                time.sleep(0.5)
-                continue
-            raise AssertionError(f"docker 'rmi' failed for {tag!r}: {result.stderr[:200]}")
-    missing = subprocess.run(
-        ["docker", "image", "inspect", _redis_image_ref(factory)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=DOCKER_SHORT_TIMEOUT,
+def _assert_redis_image_ref_present(factory: RealComposeProjectFactory) -> str:
+    """Prove redis ``image_ref`` is locally inspectable with digest identity."""
+    redis_ref = _redis_image_ref(factory)
+    document = json.loads(_docker(["image", "inspect", redis_ref]).stdout)[0]
+    assert document.get("Os") == "linux", "redis image must be a linux variant"
+    assert document.get("Architecture") in {
+        "amd64",
+        "arm64",
+    }, "redis image must report a native architecture"
+    repo_digests = document.get("RepoDigests")
+    assert isinstance(repo_digests, list) and repo_digests, (
+        "redis image must expose RepoDigests for digest identity verification"
     )
-    assert missing.returncode != 0, "precondition: redis image must be missing now"
+    return redis_ref
 
 
-def _restore_redis_tags(factory: RealComposeProjectFactory, original_tags: list[str]) -> None:
-    """Restore the canonical redis tags from the sanctioned mirror pull.
+def _is_docker_image_inspect(argv: Sequence[str], image_ref: str) -> bool:
+    return (
+        len(argv) >= 4
+        and argv[0] == "docker"
+        and argv[1] == "image"
+        and argv[2] == "inspect"
+        and image_ref in argv
+    )
 
-    docker.io digest pulls are not resolvable through this host's mirrors, so
-    the restore pulls the same reviewed image by tag from
-    ``docker.m.daocloud.io`` (idempotent) and retags any original name:tag
-    the test run did not recreate.
+
+def _is_docker_pull(argv: Sequence[str], image_ref: str) -> bool:
+    return (
+        len(argv) >= 3
+        and argv[0] == "docker"
+        and argv[1] == "pull"
+        and image_ref in argv
+    )
+
+
+def _no_such_image_result(argv: list[str], image_ref: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(
+        args=argv,
+        returncode=1,
+        stdout="",
+        stderr=f"Error: No such image: {image_ref}\n",
+    )
+
+
+class _RedisInspectMissUntilPullRun:
+    """Test-scoped ``run`` seam for the success missing-image path.
+
+    State: hide redis inspect → real redis pull (rc==0 unhides) → real inspect.
     """
-    _docker(["pull", "docker.m.daocloud.io/library/redis:7.2.14-bookworm"], timeout=600.0)
-    for tag in original_tags:
-        check = subprocess.run(
-            ["docker", "image", "inspect", tag],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=DOCKER_SHORT_TIMEOUT,
-        )
-        if check.returncode != 0:
-            _docker(["tag", "docker.m.daocloud.io/library/redis:7.2.14-bookworm", tag])
+
+    def __init__(self, redis_image_ref: str) -> None:
+        self._redis_image_ref = redis_image_ref
+        self._hide_inspect = True
+        self.pull_succeeded = False
+
+    def __call__(
+        self, args: Sequence[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        argv = [str(arg) for arg in args]
+        if _is_docker_image_inspect(argv, self._redis_image_ref) and self._hide_inspect:
+            return _no_such_image_result(argv, self._redis_image_ref)
+        if _is_docker_pull(argv, self._redis_image_ref):
+            result = default_run(argv, **kwargs)
+            if result.returncode == 0:
+                self._hide_inspect = False
+                self.pull_succeeded = True
+            return result
+        return default_run(argv, **kwargs)
+
+
+class _RedisInspectMissTimeoutPullRun:
+    """Test-scoped ``run`` seam: redis inspect miss + deterministic pull timeout."""
+
+    def __init__(self, redis_image_ref: str) -> None:
+        self._redis_image_ref = redis_image_ref
+        self.timeout_raised = False
+
+    def __call__(
+        self, args: Sequence[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        argv = [str(arg) for arg in args]
+        if _is_docker_image_inspect(argv, self._redis_image_ref):
+            return _no_such_image_result(argv, self._redis_image_ref)
+        if _is_docker_pull(argv, self._redis_image_ref):
+            self.timeout_raised = True
+            raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout"))
+        return default_run(argv, **kwargs)
+
+
+def _is_compose_up_detach_pull_never(argv: Sequence[str]) -> bool:
+    """True for the lifecycle reconcile vector: compose up --detach --pull never."""
+    return (
+        len(argv) >= 6
+        and argv[0] == "docker"
+        and "compose" in argv
+        and "up" in argv
+        and "--detach" in argv
+        and "--pull" in argv
+        and "never" in argv
+    )
+
+
+class _ComposeUpPortRaceRun:
+    """Test-scoped ``run`` seam: inject compose-up port-race stderr once path.
+
+    Does not claim the daemon failed publish; only the adapter's run seam does.
+    """
+
+    def __init__(self) -> None:
+        self.compose_up_injections = 0
+
+    def __call__(
+        self, args: Sequence[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        argv = [str(arg) for arg in args]
+        if _is_compose_up_detach_pull_never(argv):
+            self.compose_up_injections += 1
+            return subprocess.CompletedProcess(
+                args=argv,
+                returncode=1,
+                stdout="",
+                stderr=(
+                    "Error response from daemon: failed to set up container networking: "
+                    "driver failed programming external connectivity on endpoint: "
+                    "Bind for 127.0.0.1:0 failed: address already in use\n"
+                ),
+            )
+        return default_run(argv, **kwargs)
 
 
 def _probe_targets(
@@ -326,95 +388,98 @@ def test_cold_start_end_to_end_via_guarded_dispatch(
 async def test_missing_image_pull_is_reported_separately_before_readiness(
     real_compose_project_factory: RealComposeProjectFactory,
 ) -> None:
-    """A genuinely missing image is pulled in its own reported phase.
+    """Simulate a redis inspect miss via test-scoped run seam, then real pull.
 
-    The readiness deadline starts only after the pull and identity
-    verification: pull/verify events precede reconcile/readiness events, the
-    per-dependency pull is reported with its own duration, and the
-    event-derived readiness window (image timing excluded) stays within 60 s.
-    On this host the daemon re-resolves the pinned digest from local content,
-    so the pull succeeds without registry egress; the canonical tags are
-    restored afterwards regardless.
+    Does not delete daemon images. The seam hides only the first redis
+    ``image inspect`` until a successful real ``docker pull`` of the full
+    redis ``image_ref``; the post-pull inspect and Os/Architecture/RepoDigests
+    verification run against the real daemon. Pull/verify events must precede
+    reconcile/readiness, with image timing excluded from the readiness window.
     """
+    redis_ref = _assert_redis_image_ref_present(real_compose_project_factory)
     project = real_compose_project_factory.new()
-    original_tags = _redis_repo_tags(real_compose_project_factory)
-    try:
-        _remove_redis_tags(real_compose_project_factory, original_tags)
-        outcome = await real_compose_project_factory.start(project)
-        assert outcome.status == "PASSED"
+    runner = _RedisInspectMissUntilPullRun(redis_ref)
+    outcome = await real_compose_project_factory.start(
+        project,
+        adapter_factory=real_compose_project_factory.adapter_factory(run=runner),
+    )
+    assert outcome.status == "PASSED"
+    assert runner.pull_succeeded, "redis pull must succeed to unhide inspect"
 
-        pulls = {
-            event["payload"]["dependency"]: event["payload"]
-            for event in outcome.events
-            if event["payload"]["phase"] == "image-pull"
-        }
-        assert set(pulls) == {"postgres", "redis", "grafana"}
-        assert "pulled the reviewed pinned image digest" in str(pulls["redis"]["message"])
-        assert pulls["redis"]["duration_ms"] >= 0
-        assert "no registry access" in str(pulls["postgres"]["message"])
-        assert "no registry access" in str(pulls["grafana"]["message"])
+    pulls = {
+        event["payload"]["dependency"]: event["payload"]
+        for event in outcome.events
+        if event["payload"]["phase"] == "image-pull"
+    }
+    assert set(pulls) == {"postgres", "redis", "grafana"}
+    assert "pulled the reviewed pinned image digest" in str(pulls["redis"]["message"])
+    assert pulls["redis"]["duration_ms"] >= 0
+    assert "no registry access" in str(pulls["postgres"]["message"])
+    assert "no registry access" in str(pulls["grafana"]["message"])
 
-        phases = [event["payload"]["phase"] for event in outcome.events]
-        last_verify = max(index for index, phase in enumerate(phases) if phase == "image-verify")
-        first_reconcile = phases.index("reconcile")
-        first_readiness = phases.index("readiness")
-        assert (
-            last_verify < first_reconcile < first_readiness
-        ), "the readiness deadline starts only after image verification"
-        assert readiness_window_seconds(outcome) <= 60.0
+    phases = [event["payload"]["phase"] for event in outcome.events]
+    last_verify = max(index for index, phase in enumerate(phases) if phase == "image-verify")
+    first_reconcile = phases.index("reconcile")
+    first_readiness = phases.index("readiness")
+    assert (
+        last_verify < first_reconcile < first_readiness
+    ), "the readiness deadline starts only after image verification"
+    assert readiness_window_seconds(outcome) <= 60.0
 
-        snapshot = real_compose_project_factory.snapshot(project)
-        assert len(snapshot.containers) == 3
-        assert len(snapshot.volumes) == 2
-        serialized = _serialized_outcome(outcome)
-        for secret in project.secrets_map.values():
-            assert secret not in serialized
-    finally:
-        _restore_redis_tags(real_compose_project_factory, original_tags)
+    snapshot = real_compose_project_factory.snapshot(project)
+    assert len(snapshot.containers) == 3
+    assert len(snapshot.volumes) == 2
+    serialized = _serialized_outcome(outcome)
+    for secret in project.secrets_map.values():
+        assert secret not in serialized
+    # Daemon cache untouched by the seam: redis image_ref remains inspectable.
+    _assert_redis_image_ref_present(real_compose_project_factory)
 
 
 async def test_missing_image_bounded_pull_failure_precedes_creation(
     real_compose_project_factory: RealComposeProjectFactory,
 ) -> None:
-    """A bounded pull failure is classified before any resource creation.
+    """Simulate inspect miss + deterministic pull TimeoutExpired before create.
 
-    The injected 0.5 s pull timeout makes the unreachable-registry branch
-    deterministic on this host (direct docker.io digest resolution is not
-    available): the run fails with ``IMAGE_UNAVAILABLE`` naming redis in the
-    image-pull phase, the readiness deadline never starts, and nothing is
-    created. Restoring the image lets a rerun converge.
+    A test-scoped run seam returns ``No such image`` for redis inspect and
+    raises ``subprocess.TimeoutExpired`` for ``docker pull <redis image_ref>``
+    so the adapter maps the bound to ``IMAGE_UNAVAILABLE`` without registry
+    timing races or deleting local images. A subsequent default-adapter start
+    must converge with all digests already local.
     """
+    redis_ref = _assert_redis_image_ref_present(real_compose_project_factory)
     project = real_compose_project_factory.new()
-    original_tags = _redis_repo_tags(real_compose_project_factory)
-    try:
-        _remove_redis_tags(real_compose_project_factory, original_tags)
-        outcome = await real_compose_project_factory.start(
-            project,
-            adapter_factory=real_compose_project_factory.adapter_factory(pull_timeout_seconds=0.5),
-        )
-        assert outcome.status == "FAILED"
-        assert outcome.diagnostic_code == "IMAGE_UNAVAILABLE"
-        failures = [
-            event["payload"]
-            for event in outcome.events
-            if event["payload"]["code"] == "IMAGE_UNAVAILABLE"
-        ]
-        assert failures, "expected an IMAGE_UNAVAILABLE image-pull event"
-        assert failures[0]["dependency"] == "redis"
-        assert failures[0]["phase"] == "image-pull"
-        phases = [event["payload"]["phase"] for event in outcome.events]
-        assert "reconcile" not in phases
-        assert "readiness" not in phases
-        snapshot = real_compose_project_factory.snapshot(project)
-        assert not snapshot.containers
-        assert not snapshot.networks
-        assert not snapshot.volumes
-        serialized = _serialized_outcome(outcome)
-        for secret in project.secrets_map.values():
-            assert secret not in serialized
-    finally:
-        _restore_redis_tags(real_compose_project_factory, original_tags)
+    runner = _RedisInspectMissTimeoutPullRun(redis_ref)
+    outcome = await real_compose_project_factory.start(
+        project,
+        adapter_factory=real_compose_project_factory.adapter_factory(
+            run=runner,
+            pull_timeout_seconds=0.5,
+        ),
+    )
+    assert runner.timeout_raised, "pull path must raise subprocess.TimeoutExpired"
+    assert outcome.status == "FAILED"
+    assert outcome.diagnostic_code == "IMAGE_UNAVAILABLE"
+    failures = [
+        event["payload"]
+        for event in outcome.events
+        if event["payload"]["code"] == "IMAGE_UNAVAILABLE"
+    ]
+    assert failures, "expected an IMAGE_UNAVAILABLE image-pull event"
+    assert failures[0]["dependency"] == "redis"
+    assert failures[0]["phase"] == "image-pull"
+    phases = [event["payload"]["phase"] for event in outcome.events]
+    assert "reconcile" not in phases
+    assert "readiness" not in phases
+    snapshot = real_compose_project_factory.snapshot(project)
+    assert not snapshot.containers
+    assert not snapshot.networks
+    assert not snapshot.volumes
+    serialized = _serialized_outcome(outcome)
+    for secret in project.secrets_map.values():
+        assert secret not in serialized
 
+    # Default adapter (no seam): image was never removed from the daemon.
     converged = await real_compose_project_factory.start(project)
     assert converged.status == "PASSED"
     pull_messages = [
@@ -425,6 +490,7 @@ async def test_missing_image_bounded_pull_failure_precedes_creation(
     assert len(pull_messages) == 3
     assert all("no registry access" in message for message in pull_messages)
     assert readiness_window_seconds(converged) <= 60.0
+    _assert_redis_image_ref_present(real_compose_project_factory)
 
 
 async def test_dynamic_loopback_ports_are_unique_and_loopback_bound(
@@ -647,19 +713,30 @@ async def test_port_conflict_names_dependency_before_creation_and_spares_imposto
 async def test_port_bind_race_during_reconcile_is_classified_and_retained(
     real_compose_project_factory: RealComposeProjectFactory,
 ) -> None:
+    """Classify a reconcile-time port race via test-scoped compose-up injection.
+
+    Docker Desktop / WSL2 port namespaces do not reliably surface a real
+    compose publish failure when a WSL ImpostorListener holds the loopback
+    port, so this test injects compose-up stderr containing a product
+    ``_PORT_RACE_MARKERS`` phrase through a test-scoped ``run`` seam. It does
+    **not** claim the daemon itself failed to publish. ImpostorListener plus
+    real ``default_bind_check`` after the first six preflight skips still prove
+    attribution and that the lifecycle never touches the port owner.
+    """
     project = real_compose_project_factory.new()
     impostors = [
         ImpostorListener("127.0.0.1", project.ports[dependency])
         for dependency in ("postgres", "redis", "grafana")
     ]
     bind_calls = {"count": 0}
+    compose_run = _ComposeUpPortRaceRun()
 
     def scripted_bind_check(host: str, port: int) -> None:
         bind_calls["count"] += 1
         if bind_calls["count"] <= 6:
             # The two preflight rounds (three dependencies each) pass so the
-            # conflict is lost only at the real publish step; the attribution
-            # re-checks afterwards use the real bind check.
+            # conflict is classified only after the injected compose-up race;
+            # the attribution re-checks afterwards use the real bind check.
             return
         default_bind_check(host, port)
 
@@ -667,8 +744,15 @@ async def test_port_bind_race_during_reconcile_is_classified_and_retained(
         outcome = await real_compose_project_factory.start(
             project,
             adapter_factory=real_compose_project_factory.adapter_factory(
-                bind_check=scripted_bind_check
+                bind_check=scripted_bind_check,
+                run=compose_run,
             ),
+        )
+        assert compose_run.compose_up_injections == 1, (
+            "exactly one compose up --detach --pull never injection is expected"
+        )
+        assert bind_calls["count"] > 6, (
+            "attribution must invoke real bind_check after the six preflight skips"
         )
         assert outcome.status == "FAILED"
         assert outcome.diagnostic_code == "PORT_CONFLICT"
@@ -682,7 +766,8 @@ async def test_port_bind_race_during_reconcile_is_classified_and_retained(
         assert conflicts[0]["dependency"] == "postgres"
         assert "reconcile" in str(conflicts[0]["message"])
 
-        # Lost-race state is retained for inspection, never cleaned up.
+        # Failed reconcile retains inspectable project state (may be empty if
+        # compose up never mutated); never cleans up on failure.
         retained = real_compose_project_factory.snapshot(project)
         assert len(retained.containers) <= 3
         assert len(retained.volumes) <= 2
@@ -692,8 +777,12 @@ async def test_port_bind_race_during_reconcile_is_classified_and_retained(
         for impostor in impostors:
             impostor.close()
 
+    # Default adapter (no run/bind seams): ports free after impostors close.
     converged = await real_compose_project_factory.start(project)
     assert converged.status == "PASSED"
+    assert compose_run.compose_up_injections == 1, (
+        "converged start must not reuse the injected compose-up run seam"
+    )
     final = real_compose_project_factory.snapshot(project)
     assert len(final.containers) == 3
     assert len(final.volumes) == 2

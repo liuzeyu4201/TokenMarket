@@ -29,6 +29,7 @@ from .conftest import (
 )
 from .helpers import load_json
 from .test_local_env_down import FakeDownWorld
+from .test_local_env_integration import _wait_port_free
 
 
 @pytest.fixture(scope="module")
@@ -172,6 +173,10 @@ async def test_real_compose_ten_cycles_retain_postgres_marker(
             adapter_factory=real_compose_project_factory.adapter_factory(),
         )
         assert down.status == "PASSED", f"cycle {cycle} down: {down.message}"
+        # Docker Desktop / WSL2 在 compose down 后可能短暂保留端口不可绑定状态
+        # （例如 TIME_WAIT），必须等真实可 bind 后再验证持久化重启。
+        for port in project.ports.values():
+            _wait_port_free(port)
         up = await real_compose_project_factory.start(project)
         assert up.status == "PASSED", f"cycle {cycle} start: {up.message}"
 

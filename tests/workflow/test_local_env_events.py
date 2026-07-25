@@ -672,7 +672,7 @@ class TestStrictConsumerMigration:
         ), "a strict v1 reader must reject the v2 envelope instead of misparsing it"
 
     def test_strict_v2_reader_rejects_v1_event(self) -> None:
-        v1_event = getattr(_events_module(), "emit_event")(
+        v1_event = getattr(_events_module(), "emit_event_v1")(
             action="lint",
             component="api-service",
             phase="execution",
@@ -686,7 +686,7 @@ class TestStrictConsumerMigration:
             validate_event_v2(v1_event)
 
     def test_v1_emission_preserves_history_shape(self) -> None:
-        v1_event = getattr(_events_module(), "emit_event")(
+        v1_event = getattr(_events_module(), "emit_event_v1")(
             action="test",
             component="repository",
             phase="execution",

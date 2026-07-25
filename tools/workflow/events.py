@@ -5,14 +5,12 @@ Implements the v1 JSON Lines event contract defined in
 v2 standard-envelope contract defined in
 ``shared/contracts/repository-workflow/v2/workflow-event.schema.json``.
 
-The v1 API (``emit_event``/``EventLog``/``aggregate_status``/``stable_codes``)
-is immutable SF01 history and stays the runtime behavior until the make-workflow
-v2 activation gate passes. The v2 API (``emit_event_v2``/``EventLogV2``/
-``aggregate_status_v2``/``stable_codes_v2``) emits the standard envelope with
-unique UUID event IDs, stable type/version/producer, UTC RFC 3339 timestamps,
-per-lifecycle-run correlation IDs, strict dependency payloads, WAITING
-semantics, stable SF02 diagnostics, bounded messages, and value redaction. No
-dual JSONL stream exists: consumers migrate to the v2 reader before activation.
+After T074 public activation the default public API (``emit_event`` /
+``EventLog`` / ``aggregate_status``) emits and aggregates the v2 standard
+envelope. The immutable v1 emitter remains available as ``emit_event_v1`` for
+historical regression coverage through the deprecation window. The explicit
+v2 API (``emit_event_v2`` / ``EventLogV2`` / ``aggregate_status_v2`` /
+``stable_codes_v2``) is unchanged. No dual JSONL stream is emitted.
 """
 
 from __future__ import annotations
@@ -61,7 +59,7 @@ def _redact(message: str) -> str:
     return message
 
 
-def emit_event(
+def emit_event_v1(
     *,
     action: str,
     component: str,
@@ -72,7 +70,11 @@ def emit_event(
     message: str,
     run_id: str,
 ) -> dict[str, Any]:
-    """Create a single workflow event dict satisfying the v1 schema."""
+    """Create a single workflow event dict satisfying the immutable v1 schema.
+
+    Retained for deprecation-window regression coverage. New public emission
+    uses :func:`emit_event` (v2 standard envelope after T074).
+    """
     return {
         "schema_version": "1.0.0",
         "run_id": run_id,
@@ -86,6 +88,38 @@ def emit_event(
     }
 
 
+def emit_event(
+    *,
+    action: str,
+    component: str,
+    phase: str,
+    status: str,
+    code: DiagnosticCode | DiagnosticCodeV2 | str,
+    duration_ms: int,
+    message: str,
+    run_id: str,
+    dependency: str | None = None,
+) -> dict[str, Any]:
+    """Create a public workflow event (v2 standard envelope after T074).
+
+    Accepts the historical v1 keyword surface (``run_id``, ``DiagnosticCode``)
+    and maps it onto the v2 envelope so existing callers activate atomically.
+    """
+    code_value = code.value if isinstance(code, Enum) else str(code)
+    safe_message = message if message else f"{action} {status.lower()} for {component}"
+    return emit_event_v2(
+        action=action,
+        component=component,
+        phase=phase,
+        status=status,
+        code=DiagnosticCodeV2(code_value),
+        duration_ms=duration_ms,
+        message=safe_message,
+        correlation_id=run_id,
+        dependency=dependency,
+    )
+
+
 def to_jsonl(event: dict[str, Any]) -> str:
     """Serialize an event to a single JSON Lines string."""
     return json.dumps(event, ensure_ascii=False, separators=(",", ":"))
@@ -97,7 +131,23 @@ def stable_codes() -> set[str]:
 
 
 def aggregate_status(events: list[dict[str, Any]]) -> dict[str, Any]:
-    """Compute final aggregate status from a sequence of step events."""
+    """Compute final aggregate status from a sequence of step events.
+
+    After T074, public emission uses the v2 envelope; detect that shape and
+    delegate to :func:`aggregate_status_v2`. Flat v1 events remain supported
+    for historical fixtures through the deprecation window.
+    """
+    if events and isinstance(events[0], dict) and "payload" in events[0]:
+        result = aggregate_status_v2(events)
+        # Preserve the v1 aggregate surface (no waiting key required by callers).
+        return {
+            "status": result["status"],
+            "code": result["code"],
+            "passed": result["passed"],
+            "failed": result["failed"],
+            "skipped": result["skipped"],
+        }
+
     passed = sum(1 for e in events if e.get("status") == "PASSED")
     failed = sum(1 for e in events if e.get("status") == "FAILED")
     skipped = sum(1 for e in events if e.get("status") == "SKIPPED")

@@ -40,7 +40,7 @@ help:
 	@echo "  make migrate         Apply reviewed migrations; local reads ignored .env.local"
 	@echo ""
 	@echo "Advanced local operations:"
-	@echo "  make dev             Start only PostgreSQL/Redis/Grafana (SF02 activation pending)"
+	@echo "  make dev             Start only PostgreSQL/Redis/Grafana (SF02)"
 	@echo "  make dev-down        Stop only middleware; retain PG/Redis data"
 	@echo "  make start scope=apps Start only host application processes"
 	@echo "  make stop scope=apps  Stop only host application processes"

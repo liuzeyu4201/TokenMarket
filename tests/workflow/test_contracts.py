@@ -370,6 +370,7 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
     "repository-workflow/v2/": ("Repository maintainers", "2.0.0"),
     "local-environment/v1/": ("Repository and infrastructure maintainers", "1.0.0"),
     "deploy-environment/v1/": ("Repository and infrastructure maintainers", "1.0.0"),
+    "user-registration/v1/": ("API Service (user domain)", "1.0.0"),
 }
 
 
@@ -422,8 +423,8 @@ def test_contract_catalog_rows_carry_owner_version_and_format() -> None:
         assert row[3], f"{path} format cell must not be empty"
     v2_row = next(row for row in rows if row[0] == "`repository-workflow/v2/`")
     assert (
-        "pending activation" in v2_row[2]
-    ), "workflow v2 must be marked pending activation"
+        "activated" in v2_row[2].lower()
+    ), "workflow v2 must be marked activated after T074"
 
 
 def test_contract_catalog_records_compatibility_and_deprecation_status() -> None:
@@ -434,13 +435,11 @@ def test_contract_catalog_records_compatibility_and_deprecation_status() -> None
     assert "backward-compatible" in text
     assert "503" in text
     assert "unchanged" in text
-    # Workflow v2 activation gate and the v1 deprecation window.
-    assert "pending activation" in text
+    # Workflow v2 activation and the v1 deprecation window.
+    assert "Activated at T074" in text or "activated T074" in text
     assert "SF02_NOT_READY" in text
-    assert "consumer migrates" in text
-    assert "both-platform" in text
-    assert "next tagged release" in text
     assert "deprecation window" in text
+    assert "next tagged release" in text
     # Lifecycle v1 ownership and change control.
     assert "Repository and infrastructure maintainers" in text
     assert "new version" in text

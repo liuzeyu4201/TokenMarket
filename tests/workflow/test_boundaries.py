@@ -89,9 +89,29 @@ def test_compose_down_never_uses_destructive_volume_flags() -> None:
                 raise AssertionError("compose adapter must never invoke prune")
 
 
-def test_public_dev_targets_remain_fail_closed(capsys) -> None:
-    """T067: public activation stays SF02_NOT_READY until T074."""
+def test_public_dev_targets_no_longer_emit_sf02_not_ready(
+    monkeypatch, capsys
+) -> None:
+    """T074: public dev/dev-down dispatch the real lifecycle, not SF02_NOT_READY."""
     from workflow import cli as workflow_cli
+
+    class _Outcome:
+        status = "PASSED"
+        events: list = []
+        plain_lines = ["[PASSED] lifecycle probe"]
+
+    async def _fake_start(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.start_local_environment", _fake_start
+    )
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
+    )
 
     for action in ("dev", "dev-down"):
         code = workflow_cli.execute_action(
@@ -101,9 +121,9 @@ def test_public_dev_targets_remain_fail_closed(capsys) -> None:
             plain=True,
             repo_root=find_repo_root(),
         )
-        assert code == 1
+        assert code == 0
         out = capsys.readouterr().out
-        assert "SF02_NOT_READY" in out
+        assert "SF02_NOT_READY" not in out
 
 
 def test_local_compose_never_includes_application_or_deploy_merge() -> None:
@@ -150,9 +170,21 @@ def test_local_stack_does_not_expand_compose_local() -> None:
         assert "deploy_up" not in text
 
 
-def test_public_dev_does_not_dispatch_deploy_stack(capsys) -> None:
-    """T083: make dev fail-closed path never routes into deploy_up."""
+def test_public_dev_does_not_dispatch_deploy_stack(monkeypatch, capsys) -> None:
+    """T083: make dev lifecycle path never routes into deploy_up."""
     from workflow import cli as workflow_cli
+
+    class _Outcome:
+        status = "PASSED"
+        events: list = []
+        plain_lines = ["[PASSED] lifecycle probe"]
+
+    async def _fake_start(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.start_local_environment", _fake_start
+    )
 
     code = workflow_cli.execute_action(
         "dev",
@@ -161,27 +193,26 @@ def test_public_dev_does_not_dispatch_deploy_stack(capsys) -> None:
         plain=True,
         repo_root=find_repo_root(),
     )
-    assert code == 1
+    assert code == 0
     out = capsys.readouterr().out
-    assert "SF02_NOT_READY" in out
+    assert "SF02_NOT_READY" not in out
     assert "tokenmarket-test" not in out
     assert "compose.deploy" not in out
 
 
-def test_public_start_respects_sf02_activation_gate(monkeypatch, capsys) -> None:
-    """默认 start 不得成为受保护 SF02 生命周期的旁路。"""
+def test_public_start_dispatches_full_scope(monkeypatch) -> None:
+    """T074: 默认 start 走完整 local_stack（中间件 + 应用）。"""
     from workflow import cli as workflow_cli
     from workflow import local_stack
 
-    called = False
+    received: dict[str, object] = {}
 
-    def forbidden_start(*args, **kwargs) -> int:
-        nonlocal called
-        called = True
-        raise AssertionError("start_local must not run before SF02 activation")
+    def fake_start(repo_root, **kwargs) -> int:
+        received.update(kwargs)
+        return 0
 
     monkeypatch.setenv("TOKENMARKET_START_SCOPE", "all")
-    monkeypatch.setattr(local_stack, "start_local", forbidden_start)
+    monkeypatch.setattr(local_stack, "start_local", fake_start)
 
     code = workflow_cli.execute_action(
         "start",
@@ -191,15 +222,12 @@ def test_public_start_respects_sf02_activation_gate(monkeypatch, capsys) -> None
         repo_root=find_repo_root(),
     )
 
-    assert code == 1
-    assert called is False
-    output = capsys.readouterr().out
-    assert "SF02_NOT_READY" in output
-    assert "STEP_FAILED" not in output
+    assert code == 0
+    assert received["scope"] == "all"
 
 
 def test_process_only_start_remains_available(monkeypatch) -> None:
-    """SF02 未激活时仍可显式启动不拥有中间件的主机进程范围。"""
+    """scope=apps 仍只启动主机进程范围。"""
     from workflow import cli as workflow_cli
     from workflow import local_stack
 
@@ -224,20 +252,19 @@ def test_process_only_start_remains_available(monkeypatch) -> None:
     assert received["scope"] == "apps"
 
 
-def test_public_stop_respects_sf02_activation_gate(monkeypatch, capsys) -> None:
-    """默认 stop 也不得绕过 SF02 门禁触碰中间件。"""
+def test_public_stop_dispatches_full_scope(monkeypatch) -> None:
+    """T074: 默认 stop 走完整 local_stack 停止路径。"""
     from workflow import cli as workflow_cli
     from workflow import local_stack
 
-    called = False
+    received: dict[str, object] = {}
 
-    def forbidden_stop(*args, **kwargs) -> int:
-        nonlocal called
-        called = True
-        raise AssertionError("stop_local must not run before SF02 activation")
+    def fake_stop(repo_root, **kwargs) -> int:
+        received.update(kwargs)
+        return 0
 
     monkeypatch.setenv("TOKENMARKET_START_SCOPE", "all")
-    monkeypatch.setattr(local_stack, "stop_local", forbidden_stop)
+    monkeypatch.setattr(local_stack, "stop_local", fake_stop)
 
     code = workflow_cli.execute_action(
         "stop",
@@ -247,9 +274,8 @@ def test_public_stop_respects_sf02_activation_gate(monkeypatch, capsys) -> None:
         repo_root=find_repo_root(),
     )
 
-    assert code == 1
-    assert called is False
-    assert "SF02_NOT_READY" in capsys.readouterr().out
+    assert code == 0
+    assert received["scope"] == "all"
 
 
 def test_config_rejects_remote_and_wildcard_endpoints() -> None:

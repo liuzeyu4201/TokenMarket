@@ -16,10 +16,11 @@ monitoring, migrations, and runbooks. Keep tests within each component's establi
 
 The root Makefile is the required workflow entry point as implementation is scaffolded:
 
-- `make dev` / `make dev-down`: local PostgreSQL 15, Redis 7, and Grafana OSS
-  lifecycle (SF02). Public targets remain `SF02_NOT_READY` until dual-platform
-  activation; Kafka is out of the SF02 dependency set. Business services are
-  host processes in local development — never added to `compose.local.yml`.
+- `make start` / `make stop`: local default — SF02 middleware plus five host
+  application processes. `make dev` / `make dev-down`: middleware only
+  (PostgreSQL 15, Redis 7, Grafana OSS). Kafka is out of the SF02 dependency
+  set. Business services are host processes in local development — never added
+  to `compose.local.yml`.
 - `make deploy` / `make deploy-down`: test/prod full stack (middleware + five
   app images) per ADR 003. Require explicit `mode=test|prod`. Phase 1 fails
   closed before Docker; assets live under `infra/docker/compose.{middleware,app,deploy}.yml`.
@@ -99,17 +100,16 @@ environment variables or an approved secret provider.
 - GitHub Actions is a read-only thin adapter that invokes `make ci`; component commands and
   quality gates must not be duplicated in CI YAML. CI migration evidence uses a pinned isolated
   PostgreSQL 15 container for API-then-Billing forward/backout/retry/head restoration.
-- Until SF02 implements the local dependency lifecycle, `make dev` and `make dev-down` must fail
-  with `SF02_NOT_READY` before reading configuration or accessing Docker. Their public names stay
-  stable when SF02 replaces the internal adapter.
+- SF02 public activation (T074) is complete: `make dev` / `make dev-down` and
+  `make start` / `make stop` run the real local middleware lifecycle; public
+  workflow events default to the v2 standard envelope. Historical
+  `SF02_NOT_READY` remains only as deprecation-window documentation.
 - SF01 scaffolds operational health, metrics, tests and immutable builds only; it must not add
   buyer, seller, provider-Key, proxy, metering, billing or administration business behavior.
-- `002-local-dependency-lifecycle`: active design artifacts live in
-  `specs/002-local-dependency-lifecycle/`; ADR 002 records the accepted Docker Compose design,
-  while implementation verification remains pending. Root Make/event v2 explicitly versions the
-  breaking activation; the implementation gate keeps current v1 `SF02_NOT_READY` behavior until
-  every event consumer migrates and Linux x86_64 plus macOS arm64 lifecycle, isolation,
-  persistence, redaction, recovery and performance acceptance passes.
+- `002-local-dependency-lifecycle`: design and evidence live in
+  `specs/002-local-dependency-lifecycle/`; ADR 002 implementation verification is
+  **Verified**. Dual-platform lifecycle evidence (T069/T070) and owner usability
+  evidence (T071) are recorded under `evidence/`.
 - SF02 is limited to PostgreSQL 15.18, Redis 7.2 and Grafana OSS 13.0 fixed by reviewed
   multi-platform OCI index digests. It derives `tokenmarket-<workspace-path-hash>` project
   ownership, accepts only loopback `DATABASE_URL`/`REDIS_URL`/`GRAFANA_URL` facts from ignored

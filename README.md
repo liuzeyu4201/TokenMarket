@@ -58,8 +58,8 @@ make stop
 
 | 命令 | 用途 |
 |------|------|
-| `make start` / `make stop` | **本地默认入口**：中间件 + 五个主机应用进程；每次启动重读 `.env.local`，配置变化时重启对应应用。SF02 T071/T074 完成前完整范围保持 fail-closed |
-| `make dev` / `make dev-down` | **本地**中间件（PostgreSQL/Redis/Grafana）；业务进程在本机运行。公共入口在 T071/T074 完成前仍返回 `SF02_NOT_READY`（见 `ops/runbooks/local-environment.md`） |
+| `make start` / `make stop` | **本地默认入口**：中间件 + 五个主机应用进程；每次启动重读 `.env.local`，配置变化时重启对应应用（SF02 T074 已激活） |
+| `make dev` / `make dev-down` | **本地**中间件（PostgreSQL/Redis/Grafana）；业务进程在本机运行（见 `ops/runbooks/local-environment.md`） |
 | `make deploy` / `make deploy-down` | **测试/生产**全栈（中间件 + 五个业务镜像）；必须 `mode=test\|prod`。适配器落地前 fail-closed（ADR 003 / `ops/runbooks/deploy.md`） |
 | `make fmt` | 应用仓库格式化工具 |
 | `make lint` | 汇总静态分析、类型检查与边界检查 |

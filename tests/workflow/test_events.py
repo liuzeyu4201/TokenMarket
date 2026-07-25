@@ -29,7 +29,10 @@ def _events_module() -> Any:
 
 
 def _emit_event(**kwargs) -> dict[str, Any]:
-    return getattr(_events_module(), "emit_event")(**kwargs)
+    """Emit a v1 historical event for immutable SF01 regression coverage."""
+    mod = _events_module()
+    emitter = getattr(mod, "emit_event_v1", None) or getattr(mod, "emit_event")
+    return emitter(**kwargs)
 
 
 def _to_jsonl(event: dict[str, Any]) -> str:
@@ -121,9 +124,31 @@ def test_event_module_exports_stable_symbols() -> None:
     """workflow.events must expose the event types and helpers used by the CLI."""
     mod = _events_module()
     assert callable(getattr(mod, "emit_event"))
+    assert callable(getattr(mod, "emit_event_v1"))
     assert callable(getattr(mod, "to_jsonl"))
     assert callable(getattr(mod, "aggregate_status"))
     assert set(_stable_codes()) == VALID_CODES
+
+
+def test_public_emit_event_defaults_to_v2_envelope_after_activation() -> None:
+    """T074: public emit_event produces the v2 standard envelope."""
+    mod = _events_module()
+    event = mod.emit_event(
+        action="test",
+        component="repository",
+        phase="phase-one",
+        status="PASSED",
+        code=mod.DiagnosticCode.OK,
+        duration_ms=12,
+        message="step completed",
+        run_id="run-001",
+    )
+    assert event["schema_version"] == "2.0.0"
+    assert event["event_type"] == "workflow.step"
+    assert event["producer"] == "repository-workflow"
+    assert event["correlation_id"] == "run-001"
+    assert event["payload"]["status"] == "PASSED"
+    assert event["payload"]["code"] == "OK"
 
 
 def test_emit_event_produces_schema_valid_dict() -> None:
@@ -166,6 +191,12 @@ def test_to_jsonl_emits_single_valid_json_object() -> None:
     assert parsed["status"] == "FAILED"
 
 
+def _payload(event: dict[str, Any]) -> dict[str, Any]:
+    """Public EventLog emits v2 envelopes after T074; unwrap for assertions."""
+    payload = event.get("payload")
+    return payload if isinstance(payload, dict) else event
+
+
 def test_event_log_records_step_order() -> None:
     """STARTED events must precede terminal events for the same component/action."""
     log = _event_log(run_id="run-003")
@@ -174,10 +205,14 @@ def test_event_log_records_step_order() -> None:
 
     events = log.events
     assert len(events) == 2
-    assert events[0]["status"] == "STARTED"
-    assert events[1]["status"] == "PASSED"
-    assert events[0]["action"] == events[1]["action"] == "bootstrap"
-    assert events[0]["component"] == events[1]["component"] == "proxy-gateway"
+    assert _payload(events[0])["status"] == "STARTED"
+    assert _payload(events[1])["status"] == "PASSED"
+    assert _payload(events[0])["action"] == _payload(events[1])["action"] == "bootstrap"
+    assert (
+        _payload(events[0])["component"]
+        == _payload(events[1])["component"]
+        == "proxy-gateway"
+    )
 
 
 def test_event_log_skips_remaining_steps_after_failure() -> None:
@@ -208,7 +243,7 @@ def test_event_log_skips_remaining_steps_after_failure() -> None:
     log.skip("test", "billing-service", "execution", reason="previous step failed")
 
     events = log.events
-    statuses = [e["status"] for e in events]
+    statuses = [_payload(e)["status"] for e in events]
     assert statuses == [
         "STARTED",
         "PASSED",
@@ -219,7 +254,7 @@ def test_event_log_skips_remaining_steps_after_failure() -> None:
         "SKIPPED",
     ]
 
-    skipped = events[-1]
+    skipped = _payload(events[-1])
     assert skipped["status"] == "SKIPPED"
     assert skipped["code"] != "OK"
     assert "previous step failed" in skipped["message"]

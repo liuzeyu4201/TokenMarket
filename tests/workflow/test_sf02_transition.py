@@ -1,18 +1,12 @@
-"""SF02 v2 consumer-migration and activation gate tests (T013).
+"""SF02 v2 consumer-migration and activation gate tests (T013 / T074).
 
-These tests replace the SF01 transition-only assertions with the explicit
-Root Make Workflow v2 gate defined in
+These tests implement the Root Make Workflow v2 gate defined in
 ``shared/contracts/repository-workflow/v2/make-workflow.md`` (reviewed source:
 ``specs/002-local-dependency-lifecycle/contracts/make-workflow-v2.md``).
 
-Until every required capability is present — the event v2 envelope emitted,
-every enumerated repository-owned event consumer migrated to it, and the
-dependency manifest, Compose asset, lifecycle adapter, API/Billing readiness
-probes and both-platform evidence complete — the public ``dev``/``dev-down``
-targets must keep their stable names and keep failing closed with
-``SF02_NOT_READY`` before reading configuration, checking Docker, or mutating
-the workspace. The atomic v2 activation is T074; no partial activation and no
-dual execution (``SF02_NOT_READY`` plus local resource mutation) is allowed.
+After T074 every required capability is present and public ``dev``/``dev-down``
+dispatch the real SF02 lifecycle with default event v2 envelopes. Historical
+``SF02_NOT_READY`` fail-closed behavior is no longer emitted on those targets.
 """
 
 from __future__ import annotations
@@ -191,7 +185,7 @@ def cli() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Public fail-closed behavior while the gate is closed
+# Public activated behavior (T074)
 # ---------------------------------------------------------------------------
 
 
@@ -210,123 +204,133 @@ def _run_make(target: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _assert_sf02_block(result: subprocess.CompletedProcess[str], target: str) -> None:
-    """Assert that a result represents a clean SF02_NOT_READY failure."""
-    output = result.stdout + result.stderr
-    assert (
-        result.returncode != 0
-    ), f"make {target} must fail before SF02; expected non-zero exit, got 0"
-    assert SF02_CODE in output, (
-        f"make {target} must emit {SF02_CODE}; got stdout={result.stdout!r} "
-        f"stderr={result.stderr!r}"
+def test_dev_no_longer_emits_sf02_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After T074, public make dev must not fail closed with SF02_NOT_READY."""
+    from workflow import cli as workflow_cli
+
+    class _Outcome:
+        status = "PASSED"
+        events: list = []
+        plain_lines = ["[PASSED] lifecycle probe"]
+
+    async def _fake_start(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.start_local_environment", _fake_start
     )
-
-
-def test_dev_fails_with_sf02_not_ready() -> None:
-    """`make dev` must fail immediately with SF02_NOT_READY."""
-    result = _run_make("dev")
-    _assert_sf02_block(result, "dev")
-
-
-def test_dev_down_fails_with_sf02_not_ready() -> None:
-    """`make dev-down` must fail immediately with SF02_NOT_READY."""
-    result = _run_make("dev-down")
-    _assert_sf02_block(result, "dev-down")
-
-
-def test_dev_does_not_read_configuration() -> None:
-    """`make dev` must fail with SF02_NOT_READY before reading real env files.
-
-    ADR 003 deploy configs (``.env.test`` / ``.env.prod``) may exist on a
-    shared workspace; they are ignored by the SF02 local lifecycle and must
-    not cause this pre-config proof to fail. ``.env.local`` is still treated
-    as a local-lifecycle config that would confuse the order proof.
-    """
-    root = find_repo_root()
-    # Templates and deploy-only ignored configs are allowed (T083).
-    allowed = {
-        ".env.example",
-        ".env.local.example",
-        ".env.test",
-        ".env.prod",
-        ".env.test.example",
-        ".env.prod.example",
-    }
-    for env_file in root.glob(".env*"):
-        if env_file.name in allowed or env_file.name.endswith(".example"):
-            continue
-        if env_file.name == ".env.local":
-            # A developer-owned ignored config may exist in the real workspace.
-            # The behavioral tests below prove the public gate does not open or
-            # read it; its mere presence must not fail the suite.
-            continue
-        # Any other environment file is outside the declared local/deploy set.
-        pytest.fail(f"unexpected environment file in repository root: {env_file}")
-
-    result = _run_make("dev")
-    _assert_sf02_block(result, "dev")
-    assert (
-        "INVALID_CONFIG" not in result.stdout + result.stderr
-    ), "dev must fail with SF02_NOT_READY before any configuration validation"
-
-
-def test_dev_does_not_invoke_docker(tmp_path: Path) -> None:
-    """`make dev` must fail before any Docker executable is consulted."""
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    fake_docker = fake_bin / "docker"
-    fake_docker.write_text("#!/bin/sh\necho 'FAKE_DOCKER_CALLED' >&2\nexit 99\n")
-    fake_docker.chmod(fake_docker.stat().st_mode | stat.S_IXUSR)
-
-    env = os.environ.copy()
-    env["PATH"] = f"{fake_bin}{os.pathsep}{env.get('PATH', '')}"
-
-    result = subprocess.run(
-        ["make", "dev"],
-        cwd=find_repo_root(),
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
+    code = workflow_cli.execute_action(
+        "dev", repo_root=find_repo_root(), plain=True
     )
-    _assert_sf02_block(result, "dev")
-    assert (
-        "FAKE_DOCKER_CALLED" not in result.stdout + result.stderr
-    ), "dev must not execute docker before failing with SF02_NOT_READY"
+    assert code == 0
 
 
-def test_dev_down_has_no_workspace_side_effects() -> None:
+def test_dev_down_no_longer_emits_sf02_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After T074, public make dev-down must not fail closed with SF02_NOT_READY."""
+    from workflow import cli as workflow_cli
+
+    class _Outcome:
+        status = "PASSED"
+        events: list = []
+        plain_lines = ["[PASSED] lifecycle probe"]
+
+    async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
+    )
+    code = workflow_cli.execute_action(
+        "dev-down", repo_root=find_repo_root(), plain=True
+    )
+    assert code == 0
+
+
+def test_public_dev_dispatches_lifecycle(
+    cli: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """execute_action('dev') calls the real lifecycle start path."""
+    called: dict[str, Any] = {}
+
+    class _Outcome:
+        status = "PASSED"
+        events: list = []
+        plain_lines = ["[PASSED] lifecycle probe"]
+
+    async def _fake_start(**kwargs):  # type: ignore[no-untyped-def]
+        called.update(kwargs)
+        return _Outcome()
+
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.start_local_environment", _fake_start
+    )
+    code = cli.execute_action("dev", repo_root=find_repo_root(), plain=True)
+    assert code == 0
+    assert called.get("repo_root") == find_repo_root()
+
+
+def test_dev_down_has_no_repository_root_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """`make dev-down` must not create, modify or remove repository-root entries."""
+    from workflow import cli as workflow_cli
+
+    class _Outcome:
+        status = "PASSED"
+        events: list = []
+        plain_lines = ["[PASSED] lifecycle probe"]
+
+    async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
+    )
     before = _root_snapshot()
-    result = _run_make("dev-down")
+    code = workflow_cli.execute_action(
+        "dev-down", repo_root=find_repo_root(), plain=True
+    )
     after = _root_snapshot()
-    _assert_sf02_block(result, "dev-down")
+    assert code == 0
     assert (
         before == after
-    ), f"make dev-down changed repository-root entries: {before ^ after}"
+    ), f"dev-down changed repository-root entries: {before ^ after}"
 
 
 @pytest.mark.parametrize("action", PUBLIC_TARGETS)
-def test_execute_action_fails_closed_with_sf02_not_ready(
+def test_execute_action_no_longer_uses_sf02_not_ready_gate(
     cli: Any,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
     action: str,
 ) -> None:
-    """cli.execute_action keeps public actions on SF02_NOT_READY until T074."""
+    """cli.execute_action for dev/dev-down must not emit SF02_NOT_READY after T074."""
     monkeypatch.delenv("NO_COLOR", raising=False)
-    result = cli.execute_action(action, repo_root=find_repo_root(), plain=False)
+
+    class _Outcome:
+        status = "PASSED"
+        events: list = []
+        plain_lines = ["[PASSED] lifecycle probe"]
+
+    async def _fake_start(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.start_local_environment", _fake_start
+    )
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
+    )
+    result = cli.execute_action(action, repo_root=find_repo_root(), plain=True)
     output = capsys.readouterr().out
-    assert (
-        result != 0
-    ), f"execute_action({action!r}) must fail while the v2 gate is closed"
-    events = [json.loads(line) for line in output.splitlines() if line.strip()]
-    assert events, f"execute_action({action!r}) must emit workflow events"
-    codes = {event.get("code") for event in events}
-    assert SF02_CODE in codes, f"expected {SF02_CODE} diagnostic, got codes {codes}"
-    assert all(
-        event.get("status") != "PASSED" for event in events
-    ), f"no {action} step may pass while the v2 gate is closed"
+    assert result == 0, f"execute_action({action!r}) should succeed with injected lifecycle"
+    assert SF02_CODE not in output
 
 
 # ---------------------------------------------------------------------------
@@ -379,32 +383,48 @@ def test_consumer_migration_enumeration_is_not_vacuous() -> None:
         ).is_file(), f"enumerated v2 event consumer missing: {name}"
 
 
-def test_activation_gate_is_currently_closed() -> None:
-    """At least one required capability is missing, so the gate stays closed until T074."""
+def test_activation_gate_is_open_after_t074() -> None:
+    """T074 requires every activation capability to hold and the gate to open."""
     capabilities = _activation_capabilities()
     missing = [name for name, present in capabilities.items() if not present]
-    assert missing and not _activation_gate_open(capabilities), (
-        "every v2 activation capability is present; T074 must atomically activate "
-        "dev/dev-down, event v2 and help/recovery text in the same change "
-        f"(capabilities: {capabilities})"
+    assert not missing and _activation_gate_open(capabilities), (
+        "T074 activation requires every capability to be present; missing: "
+        f"{missing}; capabilities: {capabilities}"
     )
 
 
-def test_runtime_behavior_matches_closed_activation_gate(
+def test_runtime_behavior_matches_open_activation_gate(
     cli: Any, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """While the gate is closed, public actions must fail with SF02_NOT_READY."""
+    """When the gate is open, public actions must not emit SF02_NOT_READY."""
     monkeypatch.delenv("NO_COLOR", raising=False)
     capabilities = _activation_capabilities()
-    if _activation_gate_open(capabilities):
-        pytest.fail(
-            "activation gate is open; public v2 activation is atomic in T074 and must "
-            "update tools/workflow/cli.py, the Makefile help text and this gate together"
-        )
+    assert _activation_gate_open(capabilities), (
+        "activation gate must be open after T074; "
+        f"capabilities: {capabilities}"
+    )
+
+    class _Outcome:
+        status = "PASSED"
+        events: list = []
+        plain_lines = ["[PASSED] lifecycle probe"]
+
+    async def _fake_start(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
+        return _Outcome()
+
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.start_local_environment", _fake_start
+    )
+    monkeypatch.setattr(
+        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
+    )
     for action in PUBLIC_TARGETS:
-        result = cli.execute_action(action, repo_root=find_repo_root(), plain=False)
+        result = cli.execute_action(action, repo_root=find_repo_root(), plain=True)
         output = capsys.readouterr().out
-        assert result != 0, f"{action} must fail while the v2 activation gate is closed"
+        assert result == 0, f"{action} must succeed with injected lifecycle after activation"
         assert (
-            SF02_CODE in output
-        ), f"closed gate requires {action} to fail with {SF02_CODE}; got {output!r}"
+            SF02_CODE not in output
+        ), f"open gate forbids {action} from emitting {SF02_CODE}; got {output!r}"

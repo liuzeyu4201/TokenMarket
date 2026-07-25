@@ -45,12 +45,29 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _event_fields(event: dict[str, Any]) -> dict[str, Any]:
+    """Normalize v1 flat events and v2 standard envelopes to common fields."""
+    payload = event.get("payload")
+    if isinstance(payload, dict):
+        return payload
+    return event
+
+
+def _event_duration_ms(event: dict[str, Any]) -> int:
+    fields = _event_fields(event)
+    try:
+        return max(0, int(fields.get("duration_ms") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _print_event(event: dict[str, Any], *, plain: bool = False) -> None:
     """Emit an event as JSONL or plain text."""
     if plain or os.environ.get("NO_COLOR"):
+        fields = _event_fields(event)
         print(
-            f"[{event['status']}] {event['component']} {event['action']}: "
-            f"[{event['code']}] {event['message']}"
+            f"[{fields['status']}] {fields['component']} {fields['action']}: "
+            f"[{fields['code']}] {fields['message']}"
         )
     else:
         print(to_jsonl(event))
@@ -254,27 +271,26 @@ def execute_action(
 
     try:
         if action in ("dev", "dev-down"):
-            # SF02 owns the canonical local middleware lifecycle. Its public
-            # targets remain fail-closed until the atomic T074 activation.
-            raise WorkflowError(
-                "SF02_NOT_READY",
-                "the SF02 local middleware lifecycle is implemented but not "
-                "publicly activated; complete T071 and the atomic T074 activation "
-                "before using make dev/dev-down",
+            # T074: public SF02 middleware lifecycle is activated. Real
+            # compose reconcile replaces the historical SF02_NOT_READY gate.
+            if action == "dev":
+                return execute_dev_guarded(
+                    repo_root=repo_root,
+                    mode=mode,
+                    mode_origin=mode_origin,
+                    plain=plain,
+                )
+            return execute_dev_down_guarded(
+                repo_root=repo_root,
+                mode=mode,
+                mode_origin=mode_origin,
+                plain=plain,
             )
 
         if action in ("start", "stop"):
             from .local_stack import start_local, stop_local
 
             start_scope = (os.environ.get("TOKENMARKET_START_SCOPE") or "all").strip().lower()
-            if start_scope == "all":
-                raise WorkflowError(
-                    "SF02_NOT_READY",
-                    f"make {action} requires the public SF02 "
-                    "middleware lifecycle; complete T071 and the atomic T074 "
-                    "activation first. Host processes remain available through "
-                    f"`make {action} scope=apps`.",
-                )
 
             # Port overrides arrive via environment (Makefile exports).
             port_keys = (
@@ -395,7 +411,7 @@ def execute_action(
                 phase="aggregate",
                 status=final["status"],
                 code=DiagnosticCode(final["code"]),
-                duration_ms=sum(e.get("duration_ms", 0) for e in log.events),
+                duration_ms=sum(_event_duration_ms(e) for e in log.events),
                 message=f"aggregate {action}: {final}",
                 run_id=run_id,
             )
@@ -504,17 +520,12 @@ def execute_dev_guarded(
     clock: ClockFn | None = None,
     sleep: SleepFn | None = None,
 ) -> int:
-    """Internal guarded SF02 dev dispatch (T032); NOT a public target.
+    """SF02 ``make dev`` dispatch (T032/T074).
 
-    Tests import and call this path directly to exercise the real T031 start
-    lifecycle with injectable seams. It is deliberately not wired to any
-    public entry point: ``execute_action("dev")`` and ``execute_action(
-    "dev-down")`` keep the v1 ``SF02_NOT_READY`` fail-closed behavior until
-    the make-workflow v2 activation gate passes (T074), so a closed gate means
-    the public targets still fail before reading configuration, checking
-    Docker, or mutating the workspace. Effective-mode validation inside the
-    lifecycle also fails closed (``INVALID_MODE``) for any non-local or
-    non-command-line mode origin.
+    Public ``execute_action("dev")`` and injectable test seams share this path
+    after T074 activation. Tests may still inject adapter/probe/config seams.
+    Effective-mode validation inside the lifecycle fails closed
+    (``INVALID_MODE``) for any non-local or non-command-line mode origin.
     """
     from .local_env import lifecycle as _lifecycle
 
@@ -550,10 +561,10 @@ def execute_dev_down_guarded(
     adapter_factory: AdapterFactory | None = None,
     clock: ClockFn | None = None,
 ) -> int:
-    """Internal guarded SF02 dev-down dispatch (T049); NOT a public target.
+    """SF02 ``make dev-down`` dispatch (T049/T074).
 
     Mirrors :func:`execute_dev_guarded` for the stop path. Public
-    ``execute_action("dev-down")`` remains ``SF02_NOT_READY`` until T074.
+    ``execute_action("dev-down")`` uses this path after T074 activation.
     """
     from .local_env import lifecycle as _lifecycle
 
@@ -696,7 +707,7 @@ _HELP_TEXT = """TokenMarket repository workflow
 Public targets:
   start                 Start the complete local environment
   stop                  Stop the complete local environment; retain data volumes
-  dev, dev-down         Canonical SF02 middleware lifecycle (activation pending T071/T074)
+  dev, dev-down         Canonical SF02 middleware lifecycle (PostgreSQL/Redis/Grafana)
   deploy, deploy-down   Test/prod full stack (requires mode=test|prod; ADR 003)
   fmt                   Apply repository formatters
   lint                  Run static analysis, type checks and boundary checks

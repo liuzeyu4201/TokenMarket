@@ -48,5 +48,5 @@ occupancy; not blocking SC-001/SC-002 performance evidence on this host.
 ## Conclusion
 
 macOS arm64 lifecycle performance and persistence acceptance for T070 is
-**PASS**. Linux x86_64 (T069) and usability protocol (T071) remain open before
-public activation T074.
+**PASS**. Linux x86_64 (T069) is **PASS**; usability protocol (T071) and public
+activation (T074) completed 2026-07-25.

@@ -1,7 +1,7 @@
 # ADR 002: Local Dependency Lifecycle via Docker Compose
 
 **Status**: Accepted
-**Implementation Verification**: Pending — requires both-platform lifecycle, security, persistence, recovery, accessibility, and performance evidence before public v2 activation (see `specs/002-local-dependency-lifecycle/evidence/README.md`; T068 partial unit evidence recorded, T069–T071 and full Make matrix open). Activation remains atomic at T074 only after those rows pass.
+**Implementation Verification**: **Verified** (T074, 2026-07-25) — dual-platform lifecycle, quality gates, and owner-authorized usability evidence are recorded under `specs/002-local-dependency-lifecycle/evidence/`. Public `make dev` / `make dev-down` and default event v2 are activated.
 **Date**: 2026-07-15
 **Owner**: TokenMarket Engineering
 **Deciders**: Repository maintainers / Platform team
@@ -152,10 +152,10 @@ Rejected. Multi-platform index images, named volumes, and published ports alread
 
 ## Activation / deprecation notice
 
-- **Current runtime**: public `make dev` / `make dev-down` remain SF01 `SF02_NOT_READY` fail-closed (pre-config/pre-Docker).
-- **Guarded candidate**: `execute_dev_guarded` / `execute_dev_down_guarded` exercise real lifecycle for tests only.
-- **Activation (T074, single reviewed change)**: after Linux amd64 + macOS arm64 evidence, full quality gates, usability protocol, and this ADR verification flip: remove runtime `SF02_NOT_READY`, default event v2 envelopes on public targets, publish matching help/recovery text, mark **Implementation Verification: Verified**.
-- **Deprecation**: v1 Make/event artifacts remain immutable through the next tagged release; consumers already migrated to v2 readers.
+- **Current runtime (post-T074)**: public `make dev` / `make dev-down` run the real SF02 lifecycle; public `emit_event` / aggregate paths emit the event v2 standard envelope. `make start` / `make stop` compose the same middleware lifecycle with host application processes.
+- **Shared dispatch**: `execute_dev_guarded` / `execute_dev_down_guarded` remain the injectable seams used by public targets and tests.
+- **Activation (T074, 2026-07-25)**: after Linux amd64 + macOS arm64 evidence, full quality gates, owner-authorized usability protocol (T071), and this ADR verification flip: removed runtime `SF02_NOT_READY` for public middleware entry, defaulted event v2 envelopes, published matching help/recovery text, marked **Implementation Verification: Verified**.
+- **Deprecation**: v1 Make/event artifacts and `emit_event_v1` remain immutable through the next tagged release; consumers use v2 readers.
 
 ## Volume-preserving rollback decision point
 

@@ -2,15 +2,15 @@
 
 Owner: repository workflow owner
 
-Public activation of `make dev` / `make dev-down` and default event v2 requires **all** rows below to pass. Until then, public targets remain `SF02_NOT_READY`.
+Public activation of `make dev` / `make dev-down` and default event v2 requires **all** rows below to pass. **T074 activated 2026-07-25** after the rows below reached PASS.
 
 | Artifact | Task | Status |
 |----------|------|--------|
 | [quality-gates.md](./quality-gates.md) | T068 | **PASS** — toolchain through build + image-scan green (2026-07-22) |
 | [linux-amd64.md](./linux-amd64.md) | T069 | **PASS** — 2026-07-24; harness `21bbd96`; 25/25 matrix (WSL2 Ubuntu + Docker Desktop Linux engine) |
 | [macos-arm64.md](./macos-arm64.md) | T070 | **PASS** — 20/20 cold + 10/10 repeats on Darwin arm64 (2026-07-22) |
-| [developer-usability.md](./developer-usability.md) | T071 | **Pending** — 10-person protocol (human owner) |
-| ADR 002 implementation verification | T073–T074 | Design **Accepted**; verification **Pending** until dual-platform + T068–T071 |
+| [developer-usability.md](./developer-usability.md) | T071 | **PASS** — owner-authorized documentation-only protocol (2026-07-25) |
+| ADR 002 implementation verification | T073–T074 | Design **Accepted**; verification **Verified** (T074, 2026-07-25) |
 
 
 ## Quickstart scenarios (safe / current branch)
@@ -20,7 +20,7 @@ Public activation of `make dev` / `make dev-down` and default event v2 requires 
 | 1 | `make help` | **PASS** |
 | 1 | `make toolchain-check` | **PASS** (T069 committed audit 2026-07-24) |
 | 2 | `.env.example` / ignore policy | Documented; do not commit `.env.local` |
-| 3–8 | Public `make dev` / `dev-down` cold start, repeat, stop, marker | **Blocked by design** (`SF02_NOT_READY` until T074); covered by guarded unit/integration tests |
+| 3–8 | Public `make dev` / `dev-down` cold start, repeat, stop, marker | **Activated at T074** — real lifecycle; covered by unit/integration + dual-platform harness |
 | 9–10 | Automated `make test` SF02 coverage | Offline suite **PASS** (see quality-gates) |
 | 11 | Dual-platform harness | **Linux T069 PASS** (2026-07-24, `21bbd96`); **macOS T070 PASS** (2026-07-22) |
 | 12 | Evidence pack | This index |

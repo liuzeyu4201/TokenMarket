@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 
 import pytest
@@ -18,8 +19,11 @@ import pytest
 from .helpers import find_repo_root, load_json, load_text, repo_path, run, validate_event_v2
 
 ROOT_MAKEFILE = repo_path("Makefile")
+ROOT_QUICKSTART = repo_path("QUICKSTART.md")
 
 PUBLIC_TARGETS = [
+    "start",
+    "stop",
     "dev",
     "dev-down",
     "deploy",
@@ -109,6 +113,32 @@ class TestHelpContract:
             "bootstrap" not in result.stderr.lower() or "docker" not in result.stderr.lower()
         ), "help must not perform side effects such as bootstrap or docker checks"
 
+    def test_help_keeps_internal_scope_out_of_the_default_path(self) -> None:
+        result = _make("help")
+        assert result.returncode == 0
+        output = result.stdout
+        assert output.index("make start") < output.index("make dev")
+        assert "local=" not in output
+        assert "scope=stack" not in output
+        assert "POSTGRES_HOST_PORT" not in output
+        assert "REDIS_HOST_PORT" not in output
+        assert "GRAFANA_HOST_PORT" not in output
+
+
+class TestQuickstartContract:
+    """根 Quickstart 首先展示最短的日常路径。"""
+
+    def test_first_shell_block_is_start_and_stop_only(self) -> None:
+        text = ROOT_QUICKSTART.read_text(encoding="utf-8")
+        match = re.search(r"```bash\n(.*?)\n```", text, re.DOTALL)
+        assert match is not None
+        commands = [
+            line.strip()
+            for line in match.group(1).splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        assert commands == ["make start", "make stop"]
+
 
 class TestPublicAndSupportTargets:
     """Each documented target is defined in the root Makefile."""
@@ -181,6 +211,47 @@ class TestAggregateExitSemantics:
         assert (
             result.returncode == 0
         ), f"aggregate target `{action_name}` must be defined in root Makefile"
+
+
+class TestLocalMigrationConfiguration:
+    """根迁移入口从 ignored 本地配置安全注入数据库连接。"""
+
+    def test_local_migration_reads_env_local_without_shell_export(self, tmp_path) -> None:
+        from workflow.cli import _local_migration_environment
+
+        secret = "tm_local_" + ("m" * 32)
+        (tmp_path / ".env.local").write_text(
+            "\n".join(
+                [
+                    "MODE=local",
+                    ("DATABASE_URL=postgresql://app:" f"{secret}@127.0.0.1:15432/tokenmarket"),
+                    f"REDIS_URL=redis://default:{secret}@127.0.0.1:16379/0",
+                    "GRAFANA_URL=http://127.0.0.1:13000",
+                    f"GRAFANA_ADMIN_PASSWORD={secret}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = _local_migration_environment(
+            tmp_path,
+            base_env={"PATH": "/safe/bin", "DATABASE_URL": "shell-must-not-win"},
+        )
+
+        assert result["PATH"] == "/safe/bin"
+        assert result["DATABASE_URL"] == (f"postgresql://app:{secret}@127.0.0.1:15432/tokenmarket")
+        assert "REDIS_URL" not in result
+        assert "GRAFANA_ADMIN_PASSWORD" not in result
+
+    def test_local_migration_requires_env_local(self, tmp_path) -> None:
+        from workflow.cli import WorkflowError, _local_migration_environment
+
+        with pytest.raises(WorkflowError) as exc:
+            _local_migration_environment(tmp_path, base_env={})
+
+        assert exc.value.code == "INVALID_CONFIG"
+        assert ".env.local" in exc.value.message
 
 
 class TestComponentCoverage:

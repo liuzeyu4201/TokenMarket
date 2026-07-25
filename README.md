@@ -26,18 +26,16 @@ TokenMarket 是一个面向 AI 流量代理与 Token 交易场景的 monorepo �
 
 ## 快速开始
 
-只需安装受支持的工具链版本（见 `.tool-versions`），然后：
+本地启动的默认入口：
 
 ```bash
-make toolchain-check   # 验证工具版本
-make bootstrap         # 安装锁定依赖
-make test              # 运行所有组件测试
-make lint              # 静态分析与边界检查
-make build             # 构建五镜像与三资产包
-make ci                # 本地复现完整 CI 门禁
+make start
+make stop
 ```
 
-完整路径见 [`specs/001-repository-workflow-baseline/quickstart.md`](specs/001-repository-workflow-baseline/quickstart.md)。
+首次准备、配置、迁移、当前 SF02 激活状态和故障恢复见
+[`QUICKSTART.md`](QUICKSTART.md)。质量门禁仍通过 `make test`、`make lint`、
+`make build` 和 `make ci` 执行。
 
 ## 项目结构
 
@@ -60,7 +58,8 @@ make ci                # 本地复现完整 CI 门禁
 
 | 命令 | 用途 |
 |------|------|
-| `make dev` / `make dev-down` | **本地**中间件（PostgreSQL/Redis/Grafana）；业务进程在本机运行。公共入口在双平台证据前仍返回 `SF02_NOT_READY`（见 `ops/runbooks/local-environment.md`） |
+| `make start` / `make stop` | **本地默认入口**：中间件 + 五个主机应用进程；每次启动重读 `.env.local`，配置变化时重启对应应用。SF02 T071/T074 完成前完整范围保持 fail-closed |
+| `make dev` / `make dev-down` | **本地**中间件（PostgreSQL/Redis/Grafana）；业务进程在本机运行。公共入口在 T071/T074 完成前仍返回 `SF02_NOT_READY`（见 `ops/runbooks/local-environment.md`） |
 | `make deploy` / `make deploy-down` | **测试/生产**全栈（中间件 + 五个业务镜像）；必须 `mode=test\|prod`。适配器落地前 fail-closed（ADR 003 / `ops/runbooks/deploy.md`） |
 | `make fmt` | 应用仓库格式化工具 |
 | `make lint` | 汇总静态分析、类型检查与边界检查 |
@@ -69,7 +68,10 @@ make ci                # 本地复现完整 CI 门禁
 | `make migrate` | 按所有者顺序执行已评审迁移 |
 | `make ci` | 本地复现 hosted `quality-gate` 的完整顺序 |
 
-**分层约定**：本地开发 = 主机进程 + `make dev`；测试/生产主机 = `make build` 后 `make deploy mode=…`。勿把业务服务写入 `infra/docker/compose.local.yml`。
+**分层约定**：本地开发默认使用 `make start`；中间件单独操作保留
+`make dev` / `make dev-down`，应用进程单独操作使用 `scope=apps`。测试/生产主机 =
+`make build` 后 `make deploy mode=…`。勿把业务服务写入
+`infra/docker/compose.local.yml`。
 
 ## 安全与合规
 

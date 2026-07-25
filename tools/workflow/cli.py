@@ -17,7 +17,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 from .events import DiagnosticCode, EventLog, aggregate_status, emit_event, to_jsonl
 from .images import image_scan, runtime_smoke
@@ -166,7 +166,56 @@ def resolve_fingerprint(component_path: Path) -> str:
     return "none"
 
 
-def _run_component_action(component: dict[str, Any], action: str, repo_root: Path) -> int:
+def _local_migration_environment(
+    repo_root: Path,
+    *,
+    base_env: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Build the local migration environment from validated ``.env.local``.
+
+    The ignored file remains the sole source for the local database URL.
+    Only ``DATABASE_URL`` is forwarded to migration owners; unrelated local
+    secrets are never copied into child environments.
+    """
+    from .local_env.config import parse_local_environment
+    from .local_env.models import DependencyId, LocalEnvironmentError
+
+    path = repo_root / ".env.local"
+    if not path.is_file():
+        raise WorkflowError(
+            "INVALID_CONFIG",
+            ".env.local is required for local migration; copy .env.example, "
+            "set synthetic local secrets, and retry make migrate",
+        )
+    try:
+        configuration = parse_local_environment(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError) as exc:
+        raise WorkflowError(
+            "INVALID_CONFIG",
+            f".env.local could not be read ({type(exc).__name__})",
+        ) from exc
+    except LocalEnvironmentError as exc:
+        raise WorkflowError(exc.code, exc.message) from exc
+
+    postgres = configuration.connection(DependencyId.POSTGRES)
+    database_url = (
+        f"{postgres.host_scheme}://{postgres.username}:{postgres.secret}@"
+        f"{postgres.host_address}:{postgres.host_port}/{postgres.database}"
+    )
+    environment = dict(base_env if base_env is not None else os.environ)
+    environment["DATABASE_URL"] = database_url
+    environment.pop("REDIS_URL", None)
+    environment.pop("GRAFANA_ADMIN_PASSWORD", None)
+    return environment
+
+
+def _run_component_action(
+    component: dict[str, Any],
+    action: str,
+    repo_root: Path,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> int:
     """Run a single component action via its Makefile adapter."""
     comp_path = repo_root / component["path"]
     make_path = comp_path / "Makefile"
@@ -182,6 +231,7 @@ def _run_component_action(component: dict[str, Any], action: str, repo_root: Pat
         capture_output=True,
         text=True,
         check=False,
+        env=dict(env) if env is not None else None,
     )
     return result.returncode
 
@@ -204,14 +254,59 @@ def execute_action(
 
     try:
         if action in ("dev", "dev-down"):
-            # Guarded lifecycle adapter exists (execute_dev_guarded); public
-            # activation waits for dual-platform evidence (T069–T071) then T074.
+            # SF02 owns the canonical local middleware lifecycle. Its public
+            # targets remain fail-closed until the atomic T074 activation.
             raise WorkflowError(
                 "SF02_NOT_READY",
-                "SF02 local dependency lifecycle is implemented but not publicly "
-                "activated; dual-platform evidence and usability gates remain "
-                "(see specs/002-local-dependency-lifecycle/evidence/ and "
-                "ops/runbooks/local-environment.md)",
+                "the SF02 local middleware lifecycle is implemented but not "
+                "publicly activated; complete T071 and the atomic T074 activation "
+                "before using make dev/dev-down",
+            )
+
+        if action in ("start", "stop"):
+            from .local_stack import start_local, stop_local
+
+            start_scope = (os.environ.get("TOKENMARKET_START_SCOPE") or "all").strip().lower()
+            if start_scope == "all":
+                raise WorkflowError(
+                    "SF02_NOT_READY",
+                    f"make {action} requires the public SF02 "
+                    "middleware lifecycle; complete T071 and the atomic T074 "
+                    "activation first. Host processes remain available through "
+                    f"`make {action} scope=apps`.",
+                )
+
+            # Port overrides arrive via environment (Makefile exports).
+            port_keys = (
+                "GATEWAY_HOST_PORT",
+                "API_HOST_PORT",
+                "BILLING_HOST_PORT",
+                "ADMIN_HOST_PORT",
+                "FRONTEND_HOST_PORT",
+            )
+            port_overrides = {k: os.environ.get(k) for k in port_keys}
+            restart = os.environ.get("RESTART_PROCESS", "").strip() in {
+                "1",
+                "true",
+                "yes",
+            }
+            # Operator UX: always emit redacted plain lines for start/stop.
+            if action == "start":
+                return start_local(
+                    repo_root,
+                    scope=start_scope,
+                    mode=mode,
+                    mode_origin=mode_origin,
+                    plain=True,
+                    port_overrides=port_overrides,
+                    restart_process=restart,
+                )
+            return stop_local(
+                repo_root,
+                scope=start_scope,
+                mode=mode,
+                mode_origin=mode_origin,
+                plain=True,
             )
 
         if action in ("deploy", "deploy-down"):
@@ -231,10 +326,13 @@ def execute_action(
                 plain=plain,
             )
 
+        action_env: Mapping[str, str] | None = None
         if action == "migrate":
             selection = validate_mode(mode, mode_origin)
             if selection.mode == "prod":
                 selection = require_production_approval(selection)
+            if selection.mode == "local":
+                action_env = _local_migration_environment(repo_root)
 
         manifest_path = repo_root / "ops" / "workflow" / "components.json"
         manifest = load_manifest(manifest_path)
@@ -261,7 +359,12 @@ def execute_action(
 
             log.start(action, component["id"], "execution")
             start = time.monotonic()
-            rc = _run_component_action(component, action, repo_root)
+            rc = _run_component_action(
+                component,
+                action,
+                repo_root,
+                env=action_env,
+            )
             duration = int((time.monotonic() - start) * 1000)
 
             if rc == 0:
@@ -316,7 +419,7 @@ def execute_action(
                 component="repository",
                 phase="aggregate",
                 status=final["status"],
-                code=DiagnosticCode(final["code"]),
+                code=DiagnosticCode(exc.code),
                 duration_ms=0,
                 message=exc.message,
                 run_id=run_id,
@@ -341,7 +444,7 @@ def execute_action(
                 component="repository",
                 phase="aggregate",
                 status=final["status"],
-                code=DiagnosticCode(final["code"]),
+                code=DiagnosticCode(exc.code),
                 duration_ms=0,
                 message=exc.message,
                 run_id=run_id,
@@ -365,7 +468,7 @@ def execute_action(
                 component="repository",
                 phase="aggregate",
                 status=final["status"],
-                code=DiagnosticCode(final["code"]),
+                code=DiagnosticCode.CONTRACT_DRIFT,
                 duration_ms=0,
                 message=exc.message,
                 run_id=run_id,
@@ -488,6 +591,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "migrate",
             "dev",
             "dev-down",
+            "start",
+            "stop",
             "deploy",
             "deploy-down",
             "migrate-check",
@@ -499,9 +604,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--mode", default=None)
     parser.add_argument("--mode-origin", default="omitted")
+    parser.add_argument(
+        "--scope",
+        default=None,
+        help="Local start/stop scope: all|apps (default all)",
+    )
     parser.add_argument("--plain", action="store_true")
     parser.add_argument("--repo-root", default=None)
     args = parser.parse_args(argv)
+
+    # Prefer explicit CLI --scope over environment for local start/stop scope.
+    if getattr(args, "scope", None):
+        os.environ["TOKENMARKET_START_SCOPE"] = str(args.scope)
 
     repo_root = Path(args.repo_root) if args.repo_root else _repo_root()
 
@@ -580,7 +694,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 _HELP_TEXT = """TokenMarket repository workflow
 
 Public targets:
-  dev, dev-down         Local dependency lifecycle (implemented; public activation pending evidence)
+  start                 Start the complete local environment
+  stop                  Stop the complete local environment; retain data volumes
+  dev, dev-down         Canonical SF02 middleware lifecycle (activation pending T071/T074)
   deploy, deploy-down   Test/prod full stack (requires mode=test|prod; ADR 003)
   fmt                   Apply repository formatters
   lint                  Run static analysis, type checks and boundary checks
@@ -594,7 +710,9 @@ Support targets:
   toolchain-check Verify declared tool versions
 
 Options:
-  mode=local|test|prod   Environment selector for migration/deployment
+  scope=apps                 Advanced: operate host app processes only
+  mode=local|test|prod       Environment selector for migrate/deploy (start only allows local)
+  API_HOST_PORT=…            Override an app host port (middleware uses .env.local)
 """
 
 

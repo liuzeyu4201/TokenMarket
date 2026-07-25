@@ -36,7 +36,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["workflow", "workflow.local_env"]
+packages = ["workflow", "workflow.local_env", "workflow.local_stack", "workflow.deploy_env"]
 
 [tool.setuptools.package-dir]
 workflow = "."

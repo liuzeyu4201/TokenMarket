@@ -12,51 +12,73 @@ export REPO_ROOT
 MODE ?= $(mode)
 MODE_ORIGIN := $(origin mode)
 
+# Local start/stop scope: all (middleware + apps) or apps (host processes only).
+# Middleware-only operations keep their existing make dev/dev-down contract.
+SCOPE ?= $(scope)
+ifeq ($(SCOPE),)
+SCOPE := all
+endif
+export TOKENMARKET_START_SCOPE := $(SCOPE)
+
+# Optional host port overrides: pass on the Make command line, e.g.
+#   make start scope=apps API_HOST_PORT=18000
+# Command-line Make variables are exported to the recipe environment by default.
+# RESTART_PROCESS=1 forces main-process restart even when liveness already passes.
+
 # Default target shows help without side effects.
-# Activation-ready copy for SF02 lifecycle targets is prepared here (T047) but
-# remains descriptive until the final atomic public switch (T074). Until then
-# both targets still fail closed with SF02_NOT_READY at runtime.
-# Deploy targets (ADR 003) are listed and fail closed until deploy_env lands.
 .PHONY: help
 help:
 	@echo "TokenMarket repository workflow"
 	@echo ""
-	@echo "Public targets:"
-	@echo "  make dev            Start local PostgreSQL/Redis/Grafana (SF02; adapter ready, public activation pending evidence)"
-	@echo "  make dev-down       Stop local runtime instances; retain named volumes (SF02; public activation pending)"
-	@echo "  make deploy         Deploy middleware+apps stack (ADR 003; requires mode=test|prod)"
+	@echo "Daily local development:"
+	@echo "  make start          Start middleware + gateway/api/billing/admin/frontend"
+	@echo "  make stop           Stop the complete local environment; retain PG/Redis data"
+	@echo ""
+	@echo "One-time preparation:"
+	@echo "  make toolchain-check Verify declared tool versions"
+	@echo "  make bootstrap       Prepare locked project dependencies"
+	@echo "  make migrate         Apply reviewed migrations; local reads ignored .env.local"
+	@echo ""
+	@echo "Advanced local operations:"
+	@echo "  make dev             Start only PostgreSQL/Redis/Grafana (SF02 activation pending)"
+	@echo "  make dev-down        Stop only middleware; retain PG/Redis data"
+	@echo "  make start scope=apps Start only host application processes"
+	@echo "  make stop scope=apps  Stop only host application processes"
+	@echo "  RESTART_PROCESS=1     Force restart app processes instead of healthy reuse"
+	@echo "  *_HOST_PORT=…         Override app ports only; middleware ports come from .env.local"
+	@echo ""
+	@echo "Test and delivery:"
+	@echo "  make deploy         Deploy middleware+apps (requires mode=test|prod)"
 	@echo "  make deploy-down    Stop deploy stack; retain named volumes (requires mode=test|prod)"
 	@echo "  make fmt            Apply repository formatters (modifies source)"
 	@echo "  make lint           Run static analysis, type checks and boundary checks"
 	@echo "  make test           Run all component tests"
 	@echo "  make build          Build five service images and three asset bundles"
-	@echo "  make migrate        Apply reviewed migrations to selected environment"
+	@echo "  make ci             Run the complete CI gate"
 	@echo ""
 	@echo "Support targets:"
-	@echo "  make bootstrap      Prepare locked project dependencies"
 	@echo "  make type-check     Run the complete type-check set independently"
-	@echo "  make toolchain-check Verify declared tool versions"
 	@echo "  make security-check Run secret and dependency scans (fail-closed)"
 	@echo ""
 	@echo "Prerequisites: Go, Python/uv, Node/npm, Docker (see .tool-versions)"
-	@echo "Side effects: fmt modifies declared source; build creates local images;"
-	@echo "  dev creates local project containers/networks/volumes; dev-down stops runtime"
-	@echo "  instances and keeps PostgreSQL/Redis named volumes (no prune/volume delete);"
-	@echo "  deploy/deploy-down target shared test|prod stacks (gated until adapter lands)"
-	@echo "Recovery: fix the reported diagnostic (mode/config/port/auth/runtime) and"
-	@echo "  rerun the same command; for moved workspaces use the original path identity"
-	@echo "Layers: local apps are host processes + make dev middleware; test/prod use"
-	@echo "  make build then make deploy mode=test|prod (see docs/decisions/003-layered-compose-deploy.md)"
+	@echo "Side effects: start/dev may create exact-workspace containers and volumes;"
+	@echo "  start reloads .env.local; changed app config restarts affected processes;"
+	@echo "  unchanged healthy resources/processes are reused; stop keeps PG/Redis volumes;"
+	@echo "  application processes run on the host, never in compose.local.yml."
+	@echo "Recovery: fix the reported diagnostic and rerun the same start command;"
+	@echo "  app-only restart: make start scope=apps RESTART_PROCESS=1."
+	@echo "Layers: local = host apps + middleware; test/prod = make build then make deploy mode=…"
 
 # Public targets delegate to the maintained workflow tool.
-.PHONY: dev dev-down deploy deploy-down fmt lint test build migrate
+.PHONY: start stop dev dev-down deploy deploy-down fmt lint test build migrate
 .PHONY: bootstrap type-check toolchain-check fmt-check migrate-check migrate-integration-check security-check runtime-smoke image-scan
 
-dev dev-down deploy deploy-down fmt lint test build migrate bootstrap type-check toolchain-check fmt-check migrate-check migrate-integration-check security-check runtime-smoke image-scan:
+dev dev-down start stop deploy deploy-down fmt lint test build migrate bootstrap type-check toolchain-check fmt-check migrate-check migrate-integration-check security-check runtime-smoke image-scan:
 	@uv run --project "$(REPO_ROOT)/tools/workflow" python -m workflow.cli \
-		"$(subst migrate-check,migrate-check,$@)" \
+		"$@" \
 		$(if $(MODE),--mode $(MODE)) \
 		--mode-origin "$(MODE_ORIGIN)" \
+		--scope "$(SCOPE)" \
 		--repo-root "$(REPO_ROOT)"
 
 # CI gate: fixed ordering, fail-fast, single public entry point. Every step uses

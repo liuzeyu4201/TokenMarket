@@ -13,7 +13,7 @@ from pathlib import Path
 from workflow.local_env import compose as compose_module
 from workflow.local_env.models import parse_manifest
 
-from .helpers import load_json, find_repo_root
+from .helpers import find_repo_root, load_json
 
 
 def test_gateway_and_admin_have_no_dependency_probes() -> None:
@@ -88,6 +88,7 @@ def test_compose_down_never_uses_destructive_volume_flags() -> None:
             if node.value == "prune":
                 raise AssertionError("compose adapter must never invoke prune")
 
+
 def test_public_dev_targets_remain_fail_closed(capsys) -> None:
     """T067: public activation stays SF02_NOT_READY until T074."""
     from workflow import cli as workflow_cli
@@ -135,6 +136,18 @@ def test_local_env_package_does_not_import_deploy_env() -> None:
         assert "deploy_env" not in text, f"{path} must not depend on deploy_env"
         assert "compose.app.yml" not in text
         assert "compose.deploy.yml" not in text
+        assert "local_stack" not in text, f"{path} must not depend on local_stack"
+
+
+def test_local_stack_does_not_expand_compose_local() -> None:
+    """local_stack supervises host processes; compose.local stays middleware-only."""
+    repo = find_repo_root()
+    package = repo / "tools" / "workflow" / "local_stack"
+    for path in package.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert "compose.app.yml" not in text
+        assert "compose.deploy.yml" not in text
+        assert "deploy_up" not in text
 
 
 def test_public_dev_does_not_dispatch_deploy_stack(capsys) -> None:
@@ -153,6 +166,90 @@ def test_public_dev_does_not_dispatch_deploy_stack(capsys) -> None:
     assert "SF02_NOT_READY" in out
     assert "tokenmarket-test" not in out
     assert "compose.deploy" not in out
+
+
+def test_public_start_respects_sf02_activation_gate(monkeypatch, capsys) -> None:
+    """默认 start 不得成为受保护 SF02 生命周期的旁路。"""
+    from workflow import cli as workflow_cli
+    from workflow import local_stack
+
+    called = False
+
+    def forbidden_start(*args, **kwargs) -> int:
+        nonlocal called
+        called = True
+        raise AssertionError("start_local must not run before SF02 activation")
+
+    monkeypatch.setenv("TOKENMARKET_START_SCOPE", "all")
+    monkeypatch.setattr(local_stack, "start_local", forbidden_start)
+
+    code = workflow_cli.execute_action(
+        "start",
+        mode=None,
+        mode_origin="omitted",
+        plain=True,
+        repo_root=find_repo_root(),
+    )
+
+    assert code == 1
+    assert called is False
+    output = capsys.readouterr().out
+    assert "SF02_NOT_READY" in output
+    assert "STEP_FAILED" not in output
+
+
+def test_process_only_start_remains_available(monkeypatch) -> None:
+    """SF02 未激活时仍可显式启动不拥有中间件的主机进程范围。"""
+    from workflow import cli as workflow_cli
+    from workflow import local_stack
+
+    received: dict[str, object] = {}
+
+    def fake_start(repo_root, **kwargs) -> int:
+        received.update(kwargs)
+        return 0
+
+    monkeypatch.setenv("TOKENMARKET_START_SCOPE", "apps")
+    monkeypatch.setattr(local_stack, "start_local", fake_start)
+
+    code = workflow_cli.execute_action(
+        "start",
+        mode=None,
+        mode_origin="omitted",
+        plain=True,
+        repo_root=find_repo_root(),
+    )
+
+    assert code == 0
+    assert received["scope"] == "apps"
+
+
+def test_public_stop_respects_sf02_activation_gate(monkeypatch, capsys) -> None:
+    """默认 stop 也不得绕过 SF02 门禁触碰中间件。"""
+    from workflow import cli as workflow_cli
+    from workflow import local_stack
+
+    called = False
+
+    def forbidden_stop(*args, **kwargs) -> int:
+        nonlocal called
+        called = True
+        raise AssertionError("stop_local must not run before SF02 activation")
+
+    monkeypatch.setenv("TOKENMARKET_START_SCOPE", "all")
+    monkeypatch.setattr(local_stack, "stop_local", forbidden_stop)
+
+    code = workflow_cli.execute_action(
+        "stop",
+        mode=None,
+        mode_origin="omitted",
+        plain=True,
+        repo_root=find_repo_root(),
+    )
+
+    assert code == 1
+    assert called is False
+    assert "SF02_NOT_READY" in capsys.readouterr().out
 
 
 def test_config_rejects_remote_and_wildcard_endpoints() -> None:

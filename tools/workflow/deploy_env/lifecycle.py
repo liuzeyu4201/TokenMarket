@@ -403,6 +403,55 @@ def _require_secret(cfg: dict[str, str], key: str) -> str:
     return value
 
 
+# Auth hooks for compose.app.yml. Always written into child env so Compose can use
+# strict ${TOKENMARKET_DEPLOY_*} interpolation (no ${VAR:-default} forms).
+# Empty optional strings are explicit; numeric/flag defaults match prior scaffolding.
+_AUTH_CHILD_ENV_DEFAULTS: tuple[tuple[str, str, str], ...] = (
+    # (child_env key, optional dotenv key, explicit default when absent)
+    ("TOKENMARKET_DEPLOY_AUTH_BROWSER_ORIGINS", "AUTH_BROWSER_ORIGINS", ""),
+    ("TOKENMARKET_DEPLOY_AUTH_TRUSTED_PROXY_CIDRS", "AUTH_TRUSTED_PROXY_CIDRS", ""),
+    ("TOKENMARKET_DEPLOY_AUTH_SMS_ADAPTER", "AUTH_SMS_ADAPTER", ""),
+    (
+        "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_LEASE_SECONDS",
+        "AUTH_DISPATCHER_LEASE_SECONDS",
+        "30",
+    ),
+    (
+        "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_DRAIN_SECONDS",
+        "AUTH_DISPATCHER_DRAIN_SECONDS",
+        "15",
+    ),
+    (
+        "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_ENABLED",
+        "AUTH_DISPATCHER_ENABLED",
+        "1",
+    ),
+    ("TOKENMARKET_DEPLOY_AUTH_CLEANUP_BATCH_SIZE", "AUTH_CLEANUP_BATCH_SIZE", "500"),
+    (
+        "TOKENMARKET_DEPLOY_AUTH_CLEANUP_MAX_RUNTIME_SECONDS",
+        "AUTH_CLEANUP_MAX_RUNTIME_SECONDS",
+        "900",
+    ),
+    ("TOKENMARKET_DEPLOY_AUTH_TLS_READY", "AUTH_TLS_READY", "false"),
+)
+
+
+def _auth_deploy_child_env(raw: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Build explicit TOKENMARKET_DEPLOY_AUTH_* values for Compose interpolation.
+
+    Missing keys are still emitted (empty string or scaffolding default) so
+    defaults never hide in Compose ``:-`` expressions.
+    """
+    source = raw or {}
+    out: dict[str, str] = {}
+    for child_key, dotenv_key, default in _AUTH_CHILD_ENV_DEFAULTS:
+        if dotenv_key in source:
+            out[child_key] = str(source[dotenv_key]).strip()
+        else:
+            out[child_key] = default
+    return out
+
+
 def load_deploy_config(repo_root: Path, selection: ModeSelection) -> DeployConfig:
     if selection.mode not in ("test", "prod"):
         raise DeployError(
@@ -465,6 +514,7 @@ def load_deploy_config(repo_root: Path, selection: ModeSelection) -> DeployConfi
         "TOKENMARKET_DEPLOY_FRONTEND_HOST_PORT": port("FRONTEND_HOST_PORT", "3080"),
         "TOKENMARKET_DEPLOY_APP_DATABASE_URL": app_database_url,
         **images,
+        **_auth_deploy_child_env(raw),
     }
     return DeployConfig(
         mode=selection.mode,
@@ -693,6 +743,7 @@ def deploy_down(
             "TOKENMARKET_DEPLOY_IMAGE_BILLING_SERVICE": "tokenmarket/billing-service:0.1.0",
             "TOKENMARKET_DEPLOY_IMAGE_ADMIN_SERVICE": "tokenmarket/admin-service:0.1.0",
             "TOKENMARKET_DEPLOY_IMAGE_FRONTEND": "tokenmarket/frontend:0.1.0",
+            **_auth_deploy_child_env(),
         }
         # Prefer real config when present so project labels match.
         try:

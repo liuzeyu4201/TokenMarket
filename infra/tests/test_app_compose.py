@@ -43,6 +43,16 @@ CHILD_ENV = {
         "postgresql://app:tm_local_placeholder_not_a_real_secret_xxxx"
         "@postgres:5432/tokenmarket"
     ),
+    # Explicit auth hooks (strict Compose interpolation; empty = generator-written empty).
+    "TOKENMARKET_DEPLOY_AUTH_BROWSER_ORIGINS": "",
+    "TOKENMARKET_DEPLOY_AUTH_TRUSTED_PROXY_CIDRS": "",
+    "TOKENMARKET_DEPLOY_AUTH_SMS_ADAPTER": "",
+    "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_LEASE_SECONDS": "30",
+    "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_DRAIN_SECONDS": "15",
+    "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_ENABLED": "1",
+    "TOKENMARKET_DEPLOY_AUTH_CLEANUP_BATCH_SIZE": "500",
+    "TOKENMARKET_DEPLOY_AUTH_CLEANUP_MAX_RUNTIME_SECONDS": "900",
+    "TOKENMARKET_DEPLOY_AUTH_TLS_READY": "false",
 }
 
 FORBIDDEN_RAW_FORMS = {

@@ -35,19 +35,21 @@ services:
     environment:
       PORT: "8000"
       DATABASE_URL: ${TOKENMARKET_DEPLOY_APP_DATABASE_URL}
-      # Feature 004 auth activation hooks (values from deploy child env / .env.test|.prod).
-      # Dispatcher, cleanup schedule metadata, TLS readiness, SMS adapter, and trusted
-      # proxy/origin are fail-closed by tools/workflow/deploy_env.verify_auth_release_manifest
-      # when AUTH_RELEASE_MANIFEST is supplied; secrets must never be committed.
-      AUTH_BROWSER_ORIGINS: ${TOKENMARKET_DEPLOY_AUTH_BROWSER_ORIGINS:-}
-      AUTH_TRUSTED_PROXY_CIDRS: ${TOKENMARKET_DEPLOY_AUTH_TRUSTED_PROXY_CIDRS:-}
-      AUTH_SMS_ADAPTER: ${TOKENMARKET_DEPLOY_AUTH_SMS_ADAPTER:-}
-      AUTH_DISPATCHER_LEASE_SECONDS: ${TOKENMARKET_DEPLOY_AUTH_DISPATCHER_LEASE_SECONDS:-30}
-      AUTH_DISPATCHER_DRAIN_SECONDS: ${TOKENMARKET_DEPLOY_AUTH_DISPATCHER_DRAIN_SECONDS:-15}
-      AUTH_DISPATCHER_ENABLED: ${TOKENMARKET_DEPLOY_AUTH_DISPATCHER_ENABLED:-1}
-      AUTH_CLEANUP_BATCH_SIZE: ${TOKENMARKET_DEPLOY_AUTH_CLEANUP_BATCH_SIZE:-500}
-      AUTH_CLEANUP_MAX_RUNTIME_SECONDS: ${TOKENMARKET_DEPLOY_AUTH_CLEANUP_MAX_RUNTIME_SECONDS:-900}
-      AUTH_TLS_READY: ${TOKENMARKET_DEPLOY_AUTH_TLS_READY:-false}
+      # Feature 004 auth activation hooks. Values come only from the validated deploy
+      # child environment (tools/workflow/deploy_env); empty strings are written there
+      # explicitly when unset. Dispatcher, cleanup schedule metadata, TLS readiness,
+      # SMS adapter, and trusted proxy/origin are fail-closed by
+      # verify_auth_release_manifest when AUTH_RELEASE_MANIFEST is supplied;
+      # secrets must never be committed.
+      AUTH_BROWSER_ORIGINS: ${TOKENMARKET_DEPLOY_AUTH_BROWSER_ORIGINS}
+      AUTH_TRUSTED_PROXY_CIDRS: ${TOKENMARKET_DEPLOY_AUTH_TRUSTED_PROXY_CIDRS}
+      AUTH_SMS_ADAPTER: ${TOKENMARKET_DEPLOY_AUTH_SMS_ADAPTER}
+      AUTH_DISPATCHER_LEASE_SECONDS: ${TOKENMARKET_DEPLOY_AUTH_DISPATCHER_LEASE_SECONDS}
+      AUTH_DISPATCHER_DRAIN_SECONDS: ${TOKENMARKET_DEPLOY_AUTH_DISPATCHER_DRAIN_SECONDS}
+      AUTH_DISPATCHER_ENABLED: ${TOKENMARKET_DEPLOY_AUTH_DISPATCHER_ENABLED}
+      AUTH_CLEANUP_BATCH_SIZE: ${TOKENMARKET_DEPLOY_AUTH_CLEANUP_BATCH_SIZE}
+      AUTH_CLEANUP_MAX_RUNTIME_SECONDS: ${TOKENMARKET_DEPLOY_AUTH_CLEANUP_MAX_RUNTIME_SECONDS}
+      AUTH_TLS_READY: ${TOKENMARKET_DEPLOY_AUTH_TLS_READY}
     ports:
       - target: 8000
         published: "${TOKENMARKET_DEPLOY_API_HOST_PORT}"

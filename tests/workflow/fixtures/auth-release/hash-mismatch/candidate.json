@@ -1,0 +1,54 @@
+{
+  "activation": {
+    "browser_origins": [
+      "https://app.example.test"
+    ],
+    "cleanup_batch_size": 500,
+    "cleanup_max_runtime_seconds": 900,
+    "cleanup_schedule_cron": "17 * * * *",
+    "dispatcher_enabled": true,
+    "dispatcher_lease_seconds": 30,
+    "hmac_keys_configured": true,
+    "sms_adapter": "approved-provider",
+    "tls_ready": true,
+    "trusted_proxy_cidrs": [
+      "10.0.0.0/8"
+    ]
+  },
+  "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "evidence": {
+    "api_performance": {
+      "path": "synthetic/api_performance.md",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "backup_restore": {
+      "path": "synthetic/backup_restore.md",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "browser": {
+      "path": "synthetic/browser.md",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "quality_gates": {
+      "path": "synthetic/quality_gates.md",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "quickstart": {
+      "path": "synthetic/quickstart.md",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "traceability": {
+      "path": "synthetic/traceability.md",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  },
+  "frontend_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "image_digests": {
+    "api-service": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "frontend": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "increment": "p1",
+  "kind": "tokenmarket.auth_release_manifest",
+  "schema_version": "1.0.0",
+  "semantic_version": "0.1.0"
+}

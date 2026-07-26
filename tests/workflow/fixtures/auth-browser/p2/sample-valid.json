@@ -1,0 +1,28 @@
+{
+  "increment": "p2",
+  "candidate_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "commit_sha": "deadbeefcafebabe",
+  "browser": { "name": "Chromium", "version": "131.0.0.0" },
+  "viewport_min_width_px": 320,
+  "keyboard_only_completion_rate": 1.0,
+  "wcag_22_aa": {
+    "normal_text_min_ratio": 4.5,
+    "ui_component_min_ratio": 3.0,
+    "focus_min_ratio": 3.0,
+    "disabled_exception_documented": true
+  },
+  "states_exercised": [
+    "idle",
+    "requesting",
+    "accepted",
+    "countdown",
+    "verifying",
+    "success",
+    "field-error",
+    "code-error",
+    "expired",
+    "rate-limited",
+    "unavailable"
+  ],
+  "outliers": []
+}

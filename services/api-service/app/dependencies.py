@@ -1,4 +1,4 @@
-"""FastAPI dependencies: DB session, rate limiter."""
+"""FastAPI dependencies: DB session, rate limiter, client IP."""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from app.auth_rate_limit import AuthRateLimiter, MemoryAuthRateLimiter
 from app.rate_limit import MemoryRateLimiter, RateLimiter
+from app.security.trusted_proxy import resolve_client_ip
 
 
 def _async_url(database_url: str) -> str:
@@ -50,10 +52,39 @@ def get_rate_limiter(request: Request) -> RateLimiter:
     return limiter  # type: ignore[no-any-return]
 
 
+def get_auth_rate_limiter(request: Request) -> AuthRateLimiter:
+    """Auth challenge rolling limiter; fail closed if not configured."""
+    limiter = getattr(request.app.state, "auth_rate_limiter", None)
+    if limiter is None:
+        return MemoryAuthRateLimiter(fail=True)
+    return limiter  # type: ignore[no-any-return]
+
+
+def get_auth_settings(request: Request) -> "AuthSettings":
+    """Return process AuthSettings from app state (or load lazily)."""
+    from app.config import AuthSettings, load_auth_settings
+
+    settings = getattr(request.app.state, "auth_settings", None)
+    if isinstance(settings, AuthSettings):
+        return settings
+    return load_auth_settings()
+
+
 def client_ip(request: Request) -> str:
-    xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
-    if xff:
-        return xff.split(",")[0].strip() or "unknown"
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
+    """Resolve client IP via trusted-proxy CIDR policy (FR-008c).
+
+    Untrusted peers never honor ``X-Forwarded-For``. When no CIDRs are
+    configured, the socket peer is used so direct clients cannot forge
+    rate-limit identity.
+    """
+    settings = getattr(request.app.state, "auth_settings", None)
+    if settings is not None:
+        trusted = settings.trusted_proxy_cidr_list
+    else:
+        # Lifespan not yet wired or unit context — fail closed (ignore XFF).
+        trusted = []
+    peer = request.client.host if request.client else None
+    xff = request.headers.get("x-forwarded-for") or request.headers.get(
+        "X-Forwarded-For"
+    )
+    return resolve_client_ip(peer, xff, trusted)

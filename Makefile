@@ -25,6 +25,12 @@ export TOKENMARKET_START_SCOPE := $(SCOPE)
 # Command-line Make variables are exported to the recipe environment by default.
 # RESTART_PROCESS=1 forces main-process restart even when liveness already passes.
 
+# Optional feature-004 auth release gate for make deploy (not a public target):
+#   make deploy mode=test auth_release_manifest=path/to/candidate.json
+# Exported so tools/workflow/deploy_env can fail closed before Docker.
+AUTH_RELEASE_MANIFEST ?= $(auth_release_manifest)
+export AUTH_RELEASE_MANIFEST
+
 # Default target shows help without side effects.
 .PHONY: help
 help:

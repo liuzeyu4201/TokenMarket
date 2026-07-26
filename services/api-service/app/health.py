@@ -6,6 +6,11 @@ scripted fakes in tests) and answers with the unchanged SF01 200 shape on
 success or the contracted SF02 503 dependency shape on failure. Failure
 bodies name only ``postgres`` and a stable safe code; URLs, usernames,
 databases, exception bodies, SQL, and passwords never appear.
+
+Auth readiness (keys / TLS / SMS adapter) is evaluated via
+:func:`check_auth_readiness` and attached as a separate dependency when the
+process is outside local scaffolding, so existing postgres-only probes remain
+stable for SF02 contracts.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from .config import AuthReadinessResult, check_auth_readiness, resolve_app_mode
 from .database import ProbeCallable, ProbeErrorCategory, ProbeResult
 from .observability import record_readiness_probe
 
@@ -29,6 +35,14 @@ def _response(request: Request, status: str) -> dict[str, Any]:
         "version": request.app.state.version,
         "request_id": request.state.request_id,
     }
+
+
+def evaluate_auth_readiness(request: Request | None = None) -> AuthReadinessResult:
+    """Callable auth readiness check for tests and process preflight."""
+    settings = None
+    if request is not None:
+        settings = getattr(request.app.state, "auth_settings", None)
+    return check_auth_readiness(settings)
 
 
 @router.get("/health/live")
@@ -45,13 +59,34 @@ async def readiness(request: Request) -> JSONResponse:
     except Exception:  # a broken probe is still a safe not-ready answer
         result = ProbeResult.failure(ProbeErrorCategory.UNAVAILABLE)
     record_readiness_probe(result.ok, time.monotonic() - started)
-    if result.ok:
+
+    # Auth fail-closed for non-local modes. Local scaffolding keeps the
+    # historical postgres-only readiness contract so SF02 tests stay green.
+    mode = resolve_app_mode()
+    auth_result = AuthReadinessResult.success()
+    if mode in ("test", "prod"):
+        auth_result = evaluate_auth_readiness(request)
+
+    if result.ok and auth_result.ok:
         return JSONResponse(content=_response(request, "ready"))
-    code = (
-        "INVALID_CONFIG"
-        if result.category is ProbeErrorCategory.INVALID_CONFIG
-        else "DEPENDENCY_NOT_READY"
-    )
+
     body = _response(request, "not_ready")
-    body["dependencies"] = [{"name": "postgres", "status": "not_ready", "code": code}]
+    dependencies: list[dict[str, str]] = []
+    if not result.ok:
+        code = (
+            "INVALID_CONFIG"
+            if result.category is ProbeErrorCategory.INVALID_CONFIG
+            else "DEPENDENCY_NOT_READY"
+        )
+        dependencies.append({"name": "postgres", "status": "not_ready", "code": code})
+    if not auth_result.ok:
+        # Surface a single stable code without leaking key material.
+        dependencies.append(
+            {
+                "name": "auth",
+                "status": "not_ready",
+                "code": "INVALID_CONFIG",
+            }
+        )
+    body["dependencies"] = dependencies
     return JSONResponse(status_code=503, content=body)

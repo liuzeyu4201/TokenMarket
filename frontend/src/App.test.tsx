@@ -1,42 +1,104 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthProvider } from './auth/AuthContext'
+import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './layouts/AppShell'
+import { Dashboard } from './pages/Dashboard'
 import { Home } from './pages/Home'
+import { Login } from './pages/Login'
 import { NotFound } from './pages/NotFound'
 import { Register } from './pages/Register'
+import { PhoneAuthClientError } from './api/v1/phoneAuth'
+
+const bootstrapSession = vi.fn()
+
+vi.mock('./api/v1/phoneAuth', async () => {
+  const actual = await vi.importActual<typeof import('./api/v1/phoneAuth')>(
+    './api/v1/phoneAuth',
+  )
+  return {
+    ...actual,
+    bootstrapSession: (...args: unknown[]) => bootstrapSession(...args),
+    logoutSession: vi.fn(),
+  }
+})
 
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route index element={<Home />} />
-          <Route path="register" element={<Register />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route index element={<Home />} />
+            <Route path="register" element={<Register />} />
+            <Route path="login" element={<Login />} />
+            <Route
+              path="dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
     </MemoryRouter>,
   )
 }
 
 describe('app shell routes', () => {
-  it('shows home placeholder not register form on /', () => {
+  beforeEach(() => {
+    bootstrapSession.mockReset()
+    bootstrapSession.mockRejectedValue(
+      new PhoneAuthClientError('未登录', 'UNAUTHENTICATED', 'clear_session', 401),
+    )
+  })
+
+  it('shows home placeholder not register form on /', async () => {
     renderAt('/')
-    expect(screen.getByText(/平台首页占位/)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText(/平台首页占位/)).toBeInTheDocument()
+    })
     expect(screen.queryByRole('button', { name: '注册' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: '注册' }).length).toBeGreaterThanOrEqual(1)
   })
 
-  it('shows register form on /register', () => {
+  it('shows register form on /register', async () => {
     renderAt('/register')
-    expect(screen.getByLabelText('手机号')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByLabelText('手机号')).toBeInTheDocument()
+    })
     expect(screen.getByLabelText('昵称')).toBeInTheDocument()
     expect(screen.getByLabelText('角色')).toBeInTheDocument()
   })
 
-  it('shows not found for unknown path', () => {
+  it('shows login form on /login', async () => {
+    renderAt('/login')
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument()
+    })
+    expect(screen.getByLabelText('手机号')).toBeInTheDocument()
+    expect(screen.getByLabelText('验证码')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '获取验证码' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '前往注册' })).toBeInTheDocument()
+  })
+
+  it('redirects anonymous /dashboard visitors to login', async () => {
+    renderAt('/dashboard')
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('dashboard-protected')).not.toBeInTheDocument()
+  })
+
+  it('shows not found for unknown path', async () => {
     renderAt('/no-such-page')
-    expect(screen.getByText(/页面未找到或暂未开放/)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText(/页面未找到或暂未开放/)).toBeInTheDocument()
+    })
   })
 })

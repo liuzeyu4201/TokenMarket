@@ -16,7 +16,9 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "generate:phone-auth-types": "openapi-typescript ../shared/contracts/phone-auth-session/v1/phone-auth-session.openapi.yaml -o src/api/generated/phoneAuth.ts",
+    "check:phone-auth-types": "npm run generate:phone-auth-types && git diff --exit-code -- src/api/generated/phoneAuth.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -32,12 +34,14 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",
+    "@vitejs/plugin-basic-ssl": "2.3.0",
     "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^10.0.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
     "jsdom": "^29.1.1",
+    "openapi-typescript": "7.13.0",
     "prettier": "^3.9.5",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.63.0",

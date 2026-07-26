@@ -118,8 +118,11 @@ def build_service_specs(
         api_managed["CORS_ALLOW_ORIGINS"] = cors_origins
     billing_managed = py_managed_env({"PORT": str(ports.billing)})
     admin_managed = {"PORT": str(ports.admin)}
+    # Same-origin relative `/api` via Vite HTTPS proxy (FR-012a). Never inject a
+    # direct API host into VITE_API_BASE_URL — Secure cookies require same origin.
     frontend_managed = {
-        "VITE_API_BASE_URL": f"http://127.0.0.1:{ports.api}",
+        "VITE_API_BASE_URL": "",
+        "VITE_API_PROXY_TARGET": f"http://127.0.0.1:{ports.api}",
     }
 
     return [

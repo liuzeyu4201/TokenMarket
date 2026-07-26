@@ -7,7 +7,39 @@
 # Includes:
 #   - compose.middleware.yml  (PostgreSQL, Redis, Grafana)
 #   - compose.app.yml         (gateway, api, billing, admin, frontend)
+#
+# Authentication retention cleanup (feature 004):
+#   Platform schedules (test/prod only) invoke the same-version API Service image:
+#     python -m app.maintenance.auth_cleanup --batch-size 500 --max-runtime-seconds 900
+#   Cron (UTC): 17 * * * *  — see ops/schedules/authentication-cleanup.yml
+#   Local compose/make start must NOT enable this job; operators run the entrypoint
+#   manually. Concurrency is single-owner via DB advisory lock inside the command.
+#   Optional profile `auth-cleanup` below is a documentation hook for platforms that
+#   consume compose profiles; it is never part of the default deploy service set.
 
 include:
   - path: compose.middleware.yml
   - path: compose.app.yml
+
+# Optional one-shot profile — not started by default deploy. Platforms that wire
+# cleanup through Compose may enable profile=auth-cleanup with the deployed API image.
+services:
+  auth-cleanup:
+    profiles: ["auth-cleanup"]
+    image: ${TOKENMARKET_DEPLOY_IMAGE_API_SERVICE}
+    restart: "no"
+    environment:
+      DATABASE_URL: ${TOKENMARKET_DEPLOY_APP_DATABASE_URL}
+    entrypoint:
+      - python
+      - -m
+      - app.maintenance.auth_cleanup
+      - --batch-size
+      - "500"
+      - --max-runtime-seconds
+      - "900"
+    labels:
+      com.tokenmarket.repository: tokenmarket
+      com.tokenmarket.environment: ${TOKENMARKET_DEPLOY_ENVIRONMENT:-}
+      com.tokenmarket.stack: deploy
+      com.tokenmarket.job: authentication-cleanup

@@ -117,12 +117,20 @@ def run_security_checks(repo_root: Any, *, max_retries: int = 1) -> None:
     Scans cover Git history (gitleaks), Go vulnerabilities (govulncheck),
     Python lock files (pip-audit) and npm dependencies (npm audit). Any
     required scanner that is missing or reports findings raises an error.
+
+    Authentication feature (004) additionally validates reviewed dev-dependency
+    pins/licenses via ``dependency_policy`` before external scanners run.
     """
     import shutil
     import subprocess
     import tempfile
 
     repo_root = Path(repo_root)
+
+    # Fail closed on unpinned or disallowed auth dev dependencies (004 T007).
+    from .dependency_policy import validate_auth_dev_dependencies
+
+    validate_auth_dev_dependencies(repo_root)
 
     gitleaks_config = repo_root / ".gitleaks.toml"
     gitleaks_cmd = ["gitleaks", "detect", "-v", "-s", str(repo_root)]

@@ -1,0 +1,549 @@
+openapi: 3.1.0
+info:
+  title: TokenMarket Phone Authentication and Session API
+  version: 1.0.0
+  description: |
+    SF04 phone verification challenge, single active browser session, session
+    bootstrap, and idempotent logout. Authentication credential is delivered only
+    through a Secure HttpOnly host-only cookie; it never appears in response bodies.
+servers:
+  - url: https://127.0.0.1:5173
+    description: Local same-origin Vite HTTPS entry
+  - url: /
+    description: Same-origin deployed entry
+tags:
+  - name: authentication
+paths:
+  /api/v1/auth/verification-challenges:
+    post:
+      tags: [authentication]
+      operationId: requestVerificationChallenge
+      summary: Request a phone verification challenge
+      description: |
+        Returns the same accepted response shape for active, unknown, suspended, and
+        deleted accounts. Only an eligible active user receives a usable challenge.
+        The accepted result and pending challenge are committed before this response;
+        recipient-specific delivery is performed later by the API Service dispatcher.
+        This operation never waits for or exposes that delivery result.
+        Replays with the same Idempotency-Key and normalized phone recover the first
+        determined result for 60 seconds and do not send another message.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/BrowserOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestChallengeRequest'
+            examples:
+              valid:
+                value:
+                  phone: "13800138000"
+      responses:
+        '202':
+          description: |
+            Generic accepted response. The response does not assert account existence
+            or actual recipient delivery and is returned before recipient-specific
+            dispatch begins.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChallengeAcceptedEnvelope'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '409':
+          description: Idempotency key conflict or expired key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Phone or trusted-client-IP rolling hourly limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitedEnvelope'
+        '503':
+          $ref: '#/components/responses/AuthDependencyUnavailable'
+
+  /api/v1/auth/sessions:
+    post:
+      tags: [authentication]
+      operationId: createAuthenticatedSession
+      summary: Verify a challenge and create the user's only active session
+      description: |
+        Atomically consumes a delivered challenge, revokes every previous unrevoked
+        session for the same user, and creates one 60-minute session. The raw session
+        credential is set only as __Host-tokenmarket_session.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/BrowserOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+            examples:
+              leadingZero:
+                value:
+                  challenge_id: 454410cb-5f13-412e-b5b0-1c1303f53e56
+                  code: "012345"
+      responses:
+        '200':
+          description: Session created; prior sessions for this user are revoked
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Set-Cookie:
+              description: |
+                __Host-tokenmarket_session=<opaque>; Path=/; Max-Age=3600;
+                Secure; HttpOnly; SameSite=Lax. No Domain attribute.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEnvelope'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Format-valid code did not verify; no session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationFailedEnvelope'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '409':
+          description: Challenge is consumed, locked, superseded, or otherwise unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '410':
+          description: Challenge expired and a new code is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/AuthDependencyUnavailable'
+
+  /api/v1/auth/session:
+    get:
+      tags: [authentication]
+      operationId: getCurrentSession
+      summary: Bootstrap the current browser session
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Current session is valid and the account remains active
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEnvelope'
+        '401':
+          description: Missing, unknown, expired, revoked, or account-ineligible session
+          headers:
+            Set-Cookie:
+              description: Clear cookie with the same host/path/security attributes
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthenticatedEnvelope'
+        '503':
+          $ref: '#/components/responses/AuthDependencyUnavailable'
+
+    delete:
+      tags: [authentication]
+      operationId: deleteCurrentSession
+      summary: Idempotently revoke the exact current session
+      description: |
+        If a valid session cookie exists, Origin and X-CSRF-Token are mandatory.
+        Missing/already-cleared cookies still receive an idempotent success and cannot
+        revoke a later session belonging to the same user.
+      security:
+        - cookieAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/BrowserOrigin'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Exact current session is revoked or was already absent/revoked
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+            Set-Cookie:
+              description: |
+                Clear __Host-tokenmarket_session with Path=/; Max-Age=0; a past
+                Expires value; Secure; HttpOnly; SameSite=Lax; no Domain.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutEnvelope'
+        '403':
+          description: Valid session cookie was present but Origin or CSRF proof failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/AuthDependencyUnavailable'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-tokenmarket_session
+      description: Opaque 60-minute session credential; never readable by frontend scripts.
+
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Client-generated opaque key, 1-64 characters. Same key + normalized phone
+        replays the first result for 60 seconds; same key + another phone conflicts.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    BrowserOrigin:
+      name: Origin
+      in: header
+      required: true
+      description: Exact trusted browser origin. Non-browser internal callers require an explicitly reviewed policy.
+      schema:
+        type: string
+        format: uri
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: |
+        Required when a valid session cookie is present. The value comes from the
+        authenticated session response and is bound to that exact session.
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+
+  headers:
+    RequestId:
+      description: Correlation identifier; never contains credentials or PII
+      schema:
+        type: string
+    NoStore:
+      description: Authentication responses are never browser/shared-cache stored
+      schema:
+        type: string
+        const: no-store
+
+  responses:
+    ValidationError:
+      description: Request shape or field format invalid; malformed code consumes no attempt
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorEnvelope'
+    OriginRejected:
+      description: Browser origin is missing, malformed, null, or not allowlisted
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    AuthDependencyUnavailable:
+      description: Required database, rate-limit, provider-wide delivery, or key configuration unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    UserRole:
+      type: string
+      enum: [buyer, seller, both]
+
+    RequestChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [phone]
+      properties:
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Raw CN mobile input normalized under user-registration/v1 rules.
+
+    ChallengeAcceptedData:
+      type: object
+      additionalProperties: false
+      required:
+        - challenge_id
+        - phone_masked
+        - expires_at
+        - resend_available_at
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+          description: Opaque challenge handle; does not prove account existence.
+        phone_masked:
+          type: string
+          examples: ["*******8000"]
+        expires_at:
+          type: string
+          format: date-time
+        resend_available_at:
+          type: string
+          format: date-time
+
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, code]
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+          minLength: 6
+          maxLength: 6
+          description: Six ASCII decimal digits; leading zero is significant.
+
+    SessionData:
+      type: object
+      additionalProperties: false
+      required:
+        - user_id
+        - nickname
+        - phone_masked
+        - role
+        - expires_at
+        - csrf_token
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 50
+        phone_masked:
+          type: string
+          examples: ["*******8000"]
+        role:
+          $ref: '#/components/schemas/UserRole'
+        expires_at:
+          type: string
+          format: date-time
+        csrf_token:
+          type: string
+          minLength: 32
+          maxLength: 256
+          description: Session-bound CSRF proof; not an authentication credential.
+
+    LogoutData:
+      type: object
+      additionalProperties: false
+      required: [logged_out]
+      properties:
+        logged_out:
+          type: boolean
+          const: true
+
+    FieldErrorData:
+      type: object
+      additionalProperties: false
+      properties:
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    VerificationFailureData:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [retry_code, request_new_code]
+        attempts_remaining:
+          type: integer
+          minimum: 0
+          maximum: 4
+
+    RateLimitData:
+      type: object
+      additionalProperties: false
+      required: [retry_after_seconds]
+      properties:
+        retry_after_seconds:
+          type: integer
+          minimum: 1
+
+    ApiEnvelopeBase:
+      type: object
+      additionalProperties: false
+      required: [code, message, data, request_id, timestamp]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data: {}
+        request_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    ChallengeAcceptedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            code:
+              type: string
+              const: "0"
+            data:
+              $ref: '#/components/schemas/ChallengeAcceptedData'
+
+    SessionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            code:
+              type: string
+              const: "0"
+            data:
+              $ref: '#/components/schemas/SessionData'
+
+    LogoutEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            code:
+              type: string
+              const: "0"
+            data:
+              $ref: '#/components/schemas/LogoutData'
+
+    ErrorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - ORIGIN_REJECTED
+                - CSRF_INVALID
+                - IDEMPOTENCY_KEY_REQUIRED
+                - IDEMPOTENCY_KEY_CONFLICT
+                - IDEMPOTENCY_KEY_EXPIRED
+                - RATE_LIMITED
+                - VERIFICATION_FAILED
+                - CHALLENGE_UNAVAILABLE
+                - CHALLENGE_EXPIRED
+                - UNAUTHENTICATED
+                - DELIVERY_UNAVAILABLE
+                - SERVICE_UNAVAILABLE
+                - INTERNAL_ERROR
+            data:
+              type: [object, "null"]
+
+    ValidationErrorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ErrorEnvelope'
+        - type: object
+          properties:
+            code:
+              type: string
+              const: VALIDATION_ERROR
+            data:
+              $ref: '#/components/schemas/FieldErrorData'
+
+    VerificationFailedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ErrorEnvelope'
+        - type: object
+          properties:
+            code:
+              type: string
+              const: VERIFICATION_FAILED
+            data:
+              $ref: '#/components/schemas/VerificationFailureData'
+
+    RateLimitedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ErrorEnvelope'
+        - type: object
+          properties:
+            code:
+              type: string
+              const: RATE_LIMITED
+            data:
+              $ref: '#/components/schemas/RateLimitData'
+
+    UnauthenticatedEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ErrorEnvelope'
+        - type: object
+          properties:
+            code:
+              type: string
+              const: UNAUTHENTICATED
+            data:
+              type: [object, "null"]

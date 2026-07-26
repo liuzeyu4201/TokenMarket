@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Auth browser P2 evidence fixture schema",
+  "type": "object",
+  "required": [
+    "increment",
+    "candidate_sha256",
+    "commit_sha",
+    "browser",
+    "viewport_min_width_px",
+    "keyboard_only_completion_rate",
+    "wcag_22_aa",
+    "states_exercised",
+    "outliers"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "increment": { "const": "p2" },
+    "candidate_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{7,40}$"
+    },
+    "browser": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "viewport_min_width_px": { "type": "integer", "const": 320 },
+    "keyboard_only_completion_rate": {
+      "type": "number",
+      "minimum": 1.0,
+      "maximum": 1.0
+    },
+    "wcag_22_aa": {
+      "type": "object",
+      "required": [
+        "normal_text_min_ratio",
+        "ui_component_min_ratio",
+        "focus_min_ratio",
+        "disabled_exception_documented"
+      ],
+      "properties": {
+        "normal_text_min_ratio": { "type": "number", "minimum": 4.5 },
+        "ui_component_min_ratio": { "type": "number", "minimum": 3.0 },
+        "focus_min_ratio": { "type": "number", "minimum": 3.0 },
+        "disabled_exception_documented": { "type": "boolean", "const": true }
+      }
+    },
+    "states_exercised": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "string",
+        "enum": [
+          "idle",
+          "requesting",
+          "accepted",
+          "countdown",
+          "verifying",
+          "success",
+          "field-error",
+          "code-error",
+          "expired",
+          "rate-limited",
+          "unavailable"
+        ]
+      }
+    },
+    "outliers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "value", "retained"],
+        "properties": {
+          "metric": { "type": "string" },
+          "value": { "type": "number" },
+          "retained": { "type": "boolean", "const": true }
+        }
+      }
+    }
+  }
+}

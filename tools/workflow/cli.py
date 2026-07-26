@@ -584,8 +584,100 @@ def execute_dev_down_guarded(
     return _emit_lifecycle_outcome(outcome, plain=plain)
 
 
+def _release_candidate_main(argv: Sequence[str], *, repo_root: Path) -> int:
+    """Handle ``workflow release-candidate capture|verify`` (not a Make target)."""
+    from .release_candidate import CaptureConfig, ReleaseCandidateError, capture, verify
+
+    parser = argparse.ArgumentParser(prog="workflow release-candidate")
+    sub = parser.add_subparsers(dest="rc_action", required=True)
+
+    capture_p = sub.add_parser("capture", help="Freeze a release candidate manifest")
+    capture_p.add_argument("--increment", required=True, choices=["p1", "p2", "P1", "P2"])
+    capture_p.add_argument("--output", required=True, help="Manifest JSON output path")
+    capture_p.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Testing only: allow capture on a dirty worktree",
+    )
+    capture_p.add_argument("--semantic-version", default=None)
+    capture_p.add_argument(
+        "--image-digest",
+        action="append",
+        default=[],
+        metavar="NAME=DIGEST",
+        help="Optional OCI digest binding (repeatable)",
+    )
+    capture_p.add_argument("--frontend-digest", default=None)
+
+    verify_p = sub.add_parser("verify", help="Verify a candidate without rebuilding")
+    verify_p.add_argument("--manifest", required=True, help="Path to candidate JSON")
+    verify_p.add_argument(
+        "--skip-git",
+        action="store_true",
+        help="Skip commit/evidence-only git checks (fixture tests)",
+    )
+    verify_p.add_argument(
+        "--skip-hash-recheck",
+        action="store_true",
+        help="Skip lock/contract re-hash (fixture-only manifests)",
+    )
+
+    args = parser.parse_args(list(argv))
+
+    try:
+        if args.rc_action == "capture":
+            digests: dict[str, str] = {}
+            for item in args.image_digest or []:
+                if "=" not in item:
+                    raise ReleaseCandidateError(
+                        "INVALID_USAGE",
+                        f"image-digest must be NAME=DIGEST, got {item!r}",
+                    )
+                name, digest = item.split("=", 1)
+                digests[name.strip()] = digest.strip()
+            result = capture(
+                CaptureConfig(
+                    increment=str(args.increment).lower(),
+                    output=Path(args.output),
+                    repo_root=repo_root,
+                    require_clean=not args.allow_dirty,
+                    semantic_version=args.semantic_version,
+                    image_digests=digests or None,
+                    frontend_digest=args.frontend_digest,
+                )
+            )
+            print(json.dumps({"status": "captured", **result}, sort_keys=True))
+            return 0
+
+        report = verify(
+            manifest_path=Path(args.manifest),
+            repo_root=repo_root,
+            check_git=not args.skip_git,
+            check_hashes=not args.skip_hash_recheck,
+        )
+        print(json.dumps({"status": "verified", **report}, sort_keys=True))
+        return 0
+    except ReleaseCandidateError as exc:
+        print(f"FAILED [{exc.code}] {exc.message}", file=sys.stderr)
+        return 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point for the workflow CLI."""
+    raw = list(argv) if argv is not None else sys.argv[1:]
+
+    # Optional subcommand (not a public Make target): release-candidate capture|verify
+    if raw and raw[0] == "release-candidate":
+        # Optional --repo-root before/after subcommand tokens.
+        repo_root = _repo_root()
+        rest = raw[1:]
+        if "--repo-root" in rest:
+            idx = rest.index("--repo-root")
+            if idx + 1 < len(rest):
+                repo_root = Path(rest[idx + 1])
+                rest = rest[:idx] + rest[idx + 2 :]
+        return _release_candidate_main(rest, repo_root=repo_root)
+
     parser = argparse.ArgumentParser(prog="workflow")
     parser.add_argument(
         "action",
@@ -622,7 +714,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--plain", action="store_true")
     parser.add_argument("--repo-root", default=None)
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw)
 
     # Prefer explicit CLI --scope over environment for local start/stop scope.
     if getattr(args, "scope", None):
@@ -719,6 +811,10 @@ Support targets:
   bootstrap       Prepare locked project dependencies
   type-check      Run the complete type-check set independently
   toolchain-check Verify declared tool versions
+
+Optional tooling (CLI only — not public Make actions):
+  release-candidate capture   Freeze candidate JSON + .sha256 companion
+  release-candidate verify    Verify candidate without rebuild
 
 Options:
   scope=apps                 Advanced: operate host app processes only

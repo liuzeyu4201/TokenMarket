@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Auth browser P1 evidence fixture schema",
+  "type": "object",
+  "required": [
+    "increment",
+    "candidate_sha256",
+    "commit_sha",
+    "browser",
+    "cold_start_samples",
+    "cold_start_p95_ms",
+    "journey_samples",
+    "journey_max_ms",
+    "protected_content_flash",
+    "cookie_csrf_persisted",
+    "privacy_sentinel_hits",
+    "resources",
+    "outliers"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "increment": { "const": "p1" },
+    "candidate_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{7,40}$"
+    },
+    "browser": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "cold_start_samples": { "type": "integer", "const": 20 },
+    "cold_start_p95_ms": { "type": "number", "maximum": 3000 },
+    "journey_samples": { "type": "integer", "const": 20 },
+    "journey_max_ms": { "type": "number", "maximum": 180000 },
+    "protected_content_flash": { "type": "boolean", "const": false },
+    "cookie_csrf_persisted": { "type": "boolean", "const": false },
+    "privacy_sentinel_hits": { "type": "integer", "const": 0 },
+    "resources": {
+      "type": "object",
+      "required": ["cpu_vcpus", "memory_gib"],
+      "properties": {
+        "cpu_vcpus": { "type": "number", "minimum": 1 },
+        "memory_gib": { "type": "number", "minimum": 1 }
+      }
+    },
+    "outliers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "value", "retained"],
+        "properties": {
+          "metric": { "type": "string" },
+          "value": { "type": "number" },
+          "retained": { "type": "boolean", "const": true }
+        }
+      }
+    }
+  }
+}

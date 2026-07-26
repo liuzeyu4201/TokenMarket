@@ -1,41 +1,164 @@
+/*
+ * Design tokens target WCAG 2.2 AA:
+ * - Normal text ≥ 4.5:1 against surface/background
+ * - Large text / UI controls / state borders / focus ≥ 3:1
+ * Disabled/inactive controls may use reduced contrast (documented exception).
+ */
 :root {
+  --color-text: #1a1a1a;
+  --color-text-muted: #3c4043;
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-border: #5f6368;
+  --color-border-subtle: #c5cad3;
+  --color-primary: #0b57d0;
+  --color-primary-hover: #0842a0;
+  --color-primary-contrast: #ffffff;
+  --color-link: #0b57d0;
+  --color-error: #b3261e;
+  --color-error-text: #8c1d18;
+  --color-error-bg: #fce8e6;
+  --color-error-border: #b3261e;
+  --color-success-text: #0d652d;
+  --color-success-bg: #e6f4ea;
+  --color-success-border: #137333;
+  --color-info-text: #174ea6;
+  --color-info-bg: #e8f0fe;
+  --color-info-border: #174ea6;
+  --color-focus-ring: #0b57d0;
+  --color-focus-ring-offset: #ffffff;
+  --color-disabled-fg: #5f6368;
+  --color-disabled-bg: #e8eaed;
+  --space-page-x: 1rem;
+  --min-touch: 2.75rem;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   line-height: 1.5;
-  color: #1a1a1a;
-  background: #f6f7f9;
+  color: var(--color-text);
+  background: var(--color-bg);
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html {
+  /* Prevent accidental horizontal scroll at narrow viewports (320px+). */
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 body {
   margin: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
 }
 
 a {
-  color: #0b57d0;
+  color: var(--color-link);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Screen-reader only utility (status live regions, skip text). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 1.25rem;
-  background: #fff;
-  border-bottom: 1px solid #e2e5ea;
+  gap: 0.75rem;
+  padding: 0.75rem var(--space-page-x);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+  width: 100%;
+  max-width: 100%;
 }
 
 .app-header nav {
   display: flex;
-  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  max-width: 100%;
+}
+
+.app-brand {
+  color: inherit;
+  text-decoration: none;
+}
+
+.session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.session-role {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0.25rem 0;
+  font: inherit;
+  color: var(--color-link);
+  cursor: pointer;
+  text-decoration: underline;
+  min-height: var(--min-touch);
+}
+
+.link-button:disabled,
+.link-button[aria-busy='true'] {
+  /* Disabled/inactive exception: reduced contrast is intentional. */
+  color: var(--color-disabled-fg);
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .app-main {
@@ -43,85 +166,218 @@ a {
   width: 100%;
   max-width: 40rem;
   margin: 0 auto;
-  padding: 1.5rem 1rem 3rem;
+  padding: 1.5rem var(--space-page-x) 3rem;
+  overflow-x: hidden;
 }
 
 .card {
-  background: #fff;
-  border: 1px solid #e2e5ea;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 8px;
   padding: 1.25rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .form-field {
   margin-bottom: 1rem;
+  max-width: 100%;
 }
 
 .form-field label {
   display: block;
   font-weight: 600;
   margin-bottom: 0.35rem;
+  color: var(--color-text);
 }
 
 .form-field input,
 .form-field select {
   width: 100%;
+  max-width: 100%;
   padding: 0.5rem 0.65rem;
-  border: 1px solid #c5cad3;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  min-height: var(--min-touch);
+}
+
+.form-field input:disabled,
+.form-field select:disabled {
+  /* Disabled/inactive exception. */
+  background: var(--color-disabled-bg);
+  color: var(--color-disabled-fg);
+  cursor: not-allowed;
 }
 
 .form-field input[aria-invalid='true'],
 .form-field select[aria-invalid='true'] {
-  border-color: #b3261e;
+  border-color: var(--color-error-border);
+  border-width: 2px;
+}
+
+.field-help {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
 }
 
 .field-error {
-  color: #b3261e;
+  color: var(--color-error-text);
   font-size: 0.875rem;
   margin-top: 0.25rem;
 }
 
 .form-error {
-  background: #fce8e6;
-  color: #8c1d18;
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  border: 1px solid var(--color-error-border);
   padding: 0.75rem;
   border-radius: 6px;
   margin-bottom: 1rem;
 }
 
+.form-error:focus {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .success-box {
-  background: #e6f4ea;
-  color: #137333;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  border: 1px solid var(--color-success-border);
   padding: 1rem;
   border-radius: 6px;
 }
 
 button.primary {
   width: 100%;
+  max-width: 100%;
   padding: 0.65rem 1rem;
   border: none;
   border-radius: 6px;
-  background: #0b57d0;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  min-height: var(--min-touch);
 }
 
-button.primary:disabled {
-  opacity: 0.6;
+button.primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+button.primary:disabled,
+button.primary[aria-busy='true'] {
+  /* Disabled/inactive exception. */
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
+button.secondary {
+  width: 100%;
+  max-width: 100%;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: var(--min-touch);
+}
+
+button.secondary:disabled,
+button.secondary[aria-busy='true'] {
+  /* Disabled/inactive exception. */
+  opacity: 0.65;
+  cursor: not-allowed;
+  color: var(--color-disabled-fg);
+}
+
+.neutral-accept {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+  border: 1px solid var(--color-info-border);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.neutral-accept .hint,
+.hint {
+  font-size: 0.875rem;
+  margin: 0.35rem 0 0;
+  color: var(--color-text-muted);
+}
+
+.auth-footer {
+  margin-top: 1.25rem;
+  text-align: center;
+}
+
+.session-summary {
+  margin: 1rem 0 0;
+}
+
+.session-summary div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.session-summary dt {
+  font-weight: 600;
+  min-width: 4rem;
+}
+
+.session-summary dd {
+  margin: 0;
+}
+
+/* 320px and up: stack chrome, no fixed widths that force horizontal scroll. */
 @media (max-width: 360px) {
+  :root {
+    --space-page-x: 0.75rem;
+  }
+
   .app-header {
     flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .app-header nav {
+    width: 100%;
   }
 
   button.primary {
     position: sticky;
     bottom: 0.5rem;
+  }
+
+  .session-summary div {
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .session-summary dt {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 320px) {
+  .card {
+    padding: 1rem 0.75rem;
+    border-radius: 6px;
+  }
+
+  .app-main {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
   }
 }

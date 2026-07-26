@@ -1,0 +1,57 @@
+# Authentication retention cleanup schedule (feature 004 / SF04).
+#
+# Platform-level one-shot job for test and production only.
+# Local development must NOT register this schedule; operators invoke the same
+# stable module entrypoint manually from the API Service locked environment.
+#
+# Concurrency: the command takes a PostgreSQL advisory lock so only one owner
+# runs at a time; concurrent triggers exit successfully as already_running.
+
+name: authentication-cleanup
+description: >
+  Hourly authentication material retention cleanup for challenges, OTP digests,
+  idempotency records, sessions, and security events.
+
+schedule:
+  # Minute 17 of every UTC hour (worst-case delay still inside 24h hard bound).
+  cron: "17 * * * *"
+  timezone: UTC
+
+environments:
+  - test
+  - prod
+
+# Same-version API Service image as the running API deployment (not a separate
+# maintenance image). Platform injects DATABASE_URL and runs the command once.
+image:
+  source: api-service
+  same_version_as: api-service
+
+command: >-
+  python -m app.maintenance.auth_cleanup
+  --batch-size 500
+  --max-runtime-seconds 900
+
+# Exact logical entrypoint string used by platforms and local operators.
+entrypoint: python -m app.maintenance.auth_cleanup --batch-size 500 --max-runtime-seconds 900
+
+local:
+  enabled: false
+  manual_only: true
+  note: >
+    Invoke the entrypoint above from services/api-service with locked uv env.
+    Do not add a public Make action, startup loop, or second wrapper.
+
+concurrency:
+  max_parallel: 1
+  single_owner: advisory_lock
+
+timeout_seconds: 900
+
+alerts:
+  # Owned by ops/alerts/authentication.yml — documented here for operators.
+  last_success_warning_hours: 2
+  last_success_critical_hours: 4
+  consecutive_failure_critical: 3
+  due_backlog_warning_hours: 1
+  due_backlog_critical_hours: 2

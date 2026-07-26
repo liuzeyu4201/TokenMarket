@@ -3,10 +3,21 @@
 Implements ADR 003 Layer D: merge middleware + app Compose files under a
 fixed environment project name, inject child-only env, never delete volumes
 on ordinary down. Secrets are read from ignored ``.env.test`` / ``.env.prod``.
+
+Feature 004 auth release gate
+-----------------------------
+When ``AUTH_RELEASE_MANIFEST`` (or Make ``auth_release_manifest=…``) is set,
+``deploy_up`` calls :func:`verify_auth_release_manifest` *before* Docker so
+missing manifests, bad companion hashes, incomplete evidence bindings, or
+synthetic/prod-unsafe activation fail closed. This is intentionally decoupled
+from real ``specs/004-…/evidence/`` paths — unit tests use synthetic fixtures
+under ``tests/workflow/fixtures/auth-release/``.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -14,7 +25,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import quote
 
 from ..mode import ModeError, ModeSelection, require_production_approval, validate_mode
@@ -39,6 +50,33 @@ _APP_IMAGES = (
     "IMAGE_FRONTEND",
 )
 
+# P1/P2 blocking evidence keys that must be bound in an auth release manifest.
+REQUIRED_AUTH_EVIDENCE_KEYS: frozenset[str] = frozenset(
+    {
+        "quality_gates",
+        "api_performance",
+        "browser",
+        "backup_restore",
+        "quickstart",
+        "traceability",
+    }
+)
+
+# SMS adapters that must never activate production authentication.
+_SYNTHETIC_SMS_ADAPTERS: frozenset[str] = frozenset(
+    {
+        "",
+        "synthetic",
+        "fake",
+        "mock",
+        "null",
+        "none",
+        "disabled",
+    }
+)
+
+_DIGEST_RE = re.compile(r"^sha256:[a-fA-F0-9]{64}$")
+
 
 class DeployError(Exception):
     """Deploy lifecycle failure with a stable diagnostic code."""
@@ -55,6 +93,275 @@ class DeployConfig:
     project_name: str
     child_env: dict[str, str]
     app_images: tuple[str, ...]
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def auth_release_companion_path(manifest_path: Path) -> Path:
+    """Sibling ``.sha256`` companion next to the auth release manifest JSON."""
+    return manifest_path.with_suffix(manifest_path.suffix + ".sha256")
+
+
+def resolve_auth_release_manifest_path(
+    raw: str | Path,
+    *,
+    repo_root: Path | None = None,
+) -> Path:
+    path = Path(raw)
+    if not path.is_absolute() and repo_root is not None:
+        path = repo_root / path
+    return path
+
+
+def verify_auth_release_manifest(
+    path: str | Path,
+    *,
+    repo_root: Path | None = None,
+    require_activation: bool = True,
+    target_mode: str | None = None,
+) -> dict[str, Any]:
+    """Fail-closed verification of an auth release candidate + evidence binding.
+
+    Checks (in order):
+    1. Manifest file exists and is a JSON object.
+    2. Sibling ``.sha256`` companion exists and matches the JSON bytes.
+    3. Required top-level fields and every :data:`REQUIRED_AUTH_EVIDENCE_KEYS`
+       entry is present under ``evidence`` with a non-empty ``sha256``.
+    4. Image/frontend digests look like ``sha256:<64 hex>`` when present.
+    5. When ``require_activation`` is true, the ``activation`` block is present
+       and fail-closed for TLS, approved SMS, trusted proxy/origin, keys,
+       dispatcher, and cleanup schedule — especially for ``target_mode=prod``.
+
+    Never loads real secrets; activation only carries non-secret readiness flags
+    and adapter *names*. Evidence paths are opaque strings (synthetic fixtures
+    or repo-relative evidence paths) and are not opened here.
+    """
+    manifest_path = resolve_auth_release_manifest_path(path, repo_root=repo_root)
+    if not manifest_path.is_file():
+        raise DeployError(
+            "AUTH_MANIFEST_MISSING",
+            f"auth release manifest not found: {manifest_path}",
+        )
+
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DeployError(
+            "AUTH_MANIFEST_INVALID",
+            f"auth release manifest is not JSON: {exc}",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise DeployError("AUTH_MANIFEST_INVALID", "auth release manifest root must be an object")
+
+    companion = auth_release_companion_path(manifest_path)
+    if not companion.is_file():
+        raise DeployError(
+            "AUTH_COMPANION_MISSING",
+            f"auth release sha256 companion missing: {companion}",
+        )
+    recorded = companion.read_text(encoding="utf-8").strip().split()[0]
+    actual = _sha256_file(manifest_path)
+    if recorded != actual:
+        raise DeployError(
+            "AUTH_HASH_MISMATCH",
+            "auth release manifest sha256 does not match companion",
+        )
+
+    required_top = (
+        "schema_version",
+        "kind",
+        "increment",
+        "commit_sha",
+        "evidence",
+    )
+    for key in required_top:
+        if key not in payload:
+            raise DeployError(
+                "AUTH_MANIFEST_INVALID",
+                f"auth release manifest missing field {key!r}",
+            )
+
+    kind = payload.get("kind")
+    if kind not in (
+        "tokenmarket.auth_release_manifest",
+        "tokenmarket.release_candidate",
+    ):
+        raise DeployError(
+            "AUTH_MANIFEST_INVALID",
+            f"unexpected auth release kind {kind!r}",
+        )
+
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, dict):
+        raise DeployError("AUTH_EVIDENCE_MISSING", "evidence must be an object")
+
+    missing_keys = sorted(REQUIRED_AUTH_EVIDENCE_KEYS - set(evidence.keys()))
+    if missing_keys:
+        raise DeployError(
+            "AUTH_EVIDENCE_MISSING",
+            "required evidence keys missing: " + ", ".join(missing_keys),
+        )
+
+    for key in sorted(REQUIRED_AUTH_EVIDENCE_KEYS):
+        entry = evidence[key]
+        if not isinstance(entry, dict):
+            raise DeployError(
+                "AUTH_EVIDENCE_INVALID",
+                f"evidence.{key} must be an object with path/sha256",
+            )
+        digest = str(entry.get("sha256") or "").strip()
+        if not digest:
+            raise DeployError(
+                "AUTH_EVIDENCE_INVALID",
+                f"evidence.{key} missing sha256 binding",
+            )
+        # Accept either bare hex or sha256:hex forms.
+        bare = digest.removeprefix("sha256:")
+        if len(bare) != 64 or any(c not in "0123456789abcdefABCDEF" for c in bare):
+            raise DeployError(
+                "AUTH_EVIDENCE_INVALID",
+                f"evidence.{key} sha256 is not a 64-hex digest",
+            )
+
+    image_digests = payload.get("image_digests") or {}
+    if image_digests is not None and not isinstance(image_digests, dict):
+        raise DeployError("AUTH_DIGEST_INVALID", "image_digests must be an object")
+    if isinstance(image_digests, dict):
+        for name, digest in image_digests.items():
+            if not isinstance(digest, str) or not _DIGEST_RE.fullmatch(digest):
+                raise DeployError(
+                    "AUTH_DIGEST_MISMATCH",
+                    f"image_digests[{name!r}] is not a sha256:<64hex> digest",
+                )
+
+    frontend_digest = payload.get("frontend_digest")
+    if frontend_digest is not None:
+        if not isinstance(frontend_digest, str) or not _DIGEST_RE.fullmatch(frontend_digest):
+            raise DeployError(
+                "AUTH_DIGEST_MISMATCH",
+                "frontend_digest is not a sha256:<64hex> digest",
+            )
+
+    activation_report: dict[str, Any] | None = None
+    if require_activation:
+        activation_report = verify_auth_activation(
+            payload.get("activation"),
+            target_mode=target_mode,
+        )
+
+    return {
+        "ok": True,
+        "path": str(manifest_path),
+        "manifest_sha256": actual,
+        "increment": payload.get("increment"),
+        "commit_sha": payload.get("commit_sha"),
+        "evidence_keys": sorted(REQUIRED_AUTH_EVIDENCE_KEYS),
+        "activation": activation_report,
+    }
+
+
+def verify_auth_activation(
+    activation: Any,
+    *,
+    target_mode: str | None = None,
+) -> dict[str, Any]:
+    """Fail-closed auth activation checks (TLS, SMS, proxy, keys, dispatcher, cleanup).
+
+    ``activation`` is a non-secret readiness object embedded in the release
+    manifest. Real key material must never appear here — only booleans/names.
+    """
+    if not isinstance(activation, Mapping):
+        raise DeployError(
+            "AUTH_ACTIVATION_MISSING",
+            "activation block missing from auth release manifest",
+        )
+
+    mode = (target_mode or "").strip().lower() or None
+    tls_ready = bool(activation.get("tls_ready"))
+    sms_adapter = str(activation.get("sms_adapter") or "").strip().lower()
+    origins = activation.get("browser_origins") or []
+    proxies = activation.get("trusted_proxy_cidrs") or []
+    keys_ok = bool(activation.get("hmac_keys_configured"))
+    dispatcher_enabled = bool(activation.get("dispatcher_enabled"))
+    cleanup_cron = str(activation.get("cleanup_schedule_cron") or "").strip()
+    cleanup_batch = activation.get("cleanup_batch_size")
+    cleanup_runtime = activation.get("cleanup_max_runtime_seconds")
+
+    if not isinstance(origins, list) or not origins:
+        raise DeployError(
+            "AUTH_ACTIVATION_INVALID",
+            "activation.browser_origins must be a non-empty list",
+        )
+    if not isinstance(proxies, list) or not proxies:
+        raise DeployError(
+            "AUTH_ACTIVATION_INVALID",
+            "activation.trusted_proxy_cidrs must be a non-empty list",
+        )
+    if not keys_ok:
+        raise DeployError(
+            "AUTH_ACTIVATION_INVALID",
+            "activation.hmac_keys_configured must be true (flags only; no secret values)",
+        )
+    if not dispatcher_enabled:
+        raise DeployError(
+            "AUTH_ACTIVATION_INVALID",
+            "activation.dispatcher_enabled must be true for auth release",
+        )
+    if cleanup_cron != "17 * * * *":
+        raise DeployError(
+            "AUTH_ACTIVATION_INVALID",
+            "activation.cleanup_schedule_cron must be UTC '17 * * * *'",
+        )
+    try:
+        if int(cleanup_batch) != 500:  # type: ignore[arg-type]
+            raise DeployError(
+                "AUTH_ACTIVATION_INVALID",
+                "activation.cleanup_batch_size must be 500",
+            )
+        if int(cleanup_runtime) != 900:  # type: ignore[arg-type]
+            raise DeployError(
+                "AUTH_ACTIVATION_INVALID",
+                "activation.cleanup_max_runtime_seconds must be 900",
+            )
+    except (TypeError, ValueError) as exc:
+        raise DeployError(
+            "AUTH_ACTIVATION_INVALID",
+            "activation cleanup batch/runtime must be integers 500/900",
+        ) from exc
+
+    # Prod (and any explicit non-test release) forbids synthetic SMS / unready TLS.
+    strict = mode in (None, "prod", "test")
+    if strict:
+        if not tls_ready:
+            raise DeployError(
+                "AUTH_ACTIVATION_TLS",
+                "activation.tls_ready must be true for auth release deploy",
+            )
+        if sms_adapter in _SYNTHETIC_SMS_ADAPTERS:
+            raise DeployError(
+                "AUTH_ACTIVATION_SMS",
+                "activation.sms_adapter must be an approved non-synthetic provider",
+            )
+
+    return {
+        "ok": True,
+        "tls_ready": tls_ready,
+        "sms_adapter": sms_adapter,
+        "dispatcher_enabled": dispatcher_enabled,
+        "cleanup_schedule_cron": cleanup_cron,
+        "target_mode": mode,
+    }
+
+
+def auth_release_manifest_from_env() -> str | None:
+    """Read optional auth release path from Make/env (no public Make target)."""
+    for key in ("AUTH_RELEASE_MANIFEST", "auth_release_manifest"):
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return None
 
 
 def _parse_dotenv(path: Path) -> dict[str, str]:
@@ -258,6 +565,22 @@ def deploy_up(
             )
         if selection.mode == "prod":
             selection = require_production_approval(selection)
+
+        # Optional feature-004 auth release gate (Make: auth_release_manifest=…).
+        # Runs before Docker so missing/bad manifests fail closed without side effects.
+        auth_manifest = auth_release_manifest_from_env()
+        if auth_manifest:
+            verify_auth_release_manifest(
+                auth_manifest,
+                repo_root=repo_root,
+                require_activation=True,
+                target_mode=selection.mode,
+            )
+            _print(
+                plain,
+                f"[PASSED] auth-release-manifest path={auth_manifest} mode={selection.mode}",
+            )
+
         _ensure_docker()
         cfg = load_deploy_config(repo_root, selection)
         _ensure_app_images(cfg.app_images)

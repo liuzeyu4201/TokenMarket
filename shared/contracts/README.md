@@ -22,6 +22,7 @@ workflow definitions.
 | `local-environment/v1/` | Repository and infrastructure maintainers | 1.0.0 | JSON Schema / Markdown |
 | `deploy-environment/v1/` | Repository and infrastructure maintainers | 1.0.0 | Markdown |
 | `user-registration/v1/` | API Service (user domain) | 1.0.0 | OpenAPI / Markdown |
+| `phone-auth-session/v1/` | API Service (authentication domain) | 1.0.0 | OpenAPI / Markdown |
 
 ## Compatibility and deprecation status
 
@@ -45,3 +46,11 @@ workflow definitions.
 - `user-registration/v1/` owns `POST /api/v1/auth/register`, unified business envelope codes,
   CN mobile normalization rules, and privacy constraints for registration; breaking changes
   require a new version and synchronized API Service + frontend consumers.
+- `phone-auth-session/v1/` owns phone OTP challenge, single active browser session, cookie/CSRF,
+  SMS delivery port, and the four authentication operations
+  (`POST /verification-challenges`, `POST /sessions`, `GET /session`, `DELETE /session`).
+  `POST /verification-challenges` uses **202-before-dispatch** semantics: the neutral 202
+  response and pending challenge are committed before the API Service internal dispatcher
+  performs recipient-specific SMS delivery; the 202 does not assert account existence or
+  actual delivery. Breaking changes require a new version and synchronized API Service +
+  Frontend consumers; registration v1 semantics are not modified by this contract.

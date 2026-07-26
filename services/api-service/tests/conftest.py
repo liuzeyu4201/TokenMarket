@@ -33,8 +33,11 @@ from fastapi.testclient import TestClient
 from app.database import ProbeResult
 from app.main import app
 
-# Re-export registration fixtures for pytest discovery under tests/integration/
-pytest_plugins = ["tests.integration.conftest_register"]
+# Re-export integration plugins for pytest discovery under tests/integration/
+pytest_plugins = [
+    "tests.integration.conftest_register",
+    "tests.integration.conftest_authentication",
+]
 
 POSTGRES_IMAGE = "postgres:15.18-bookworm"
 TEST_LABEL_KEY = "tmtest"

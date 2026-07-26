@@ -371,6 +371,7 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
     "local-environment/v1/": ("Repository and infrastructure maintainers", "1.0.0"),
     "deploy-environment/v1/": ("Repository and infrastructure maintainers", "1.0.0"),
     "user-registration/v1/": ("API Service (user domain)", "1.0.0"),
+    "phone-auth-session/v1/": ("API Service (authentication domain)", "1.0.0"),
 }
 
 

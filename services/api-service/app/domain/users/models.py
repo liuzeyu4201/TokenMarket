@@ -16,11 +16,18 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
+from app.domain.base import Base
 
-class Base(DeclarativeBase):
-    pass
+# Re-export for callers that historically imported Base from this module.
+__all__ = [
+    "Base",
+    "UserRole",
+    "UserStatus",
+    "User",
+    "RegistrationIdempotencyRecord",
+]
 
 
 class UserRole(str, enum.Enum):

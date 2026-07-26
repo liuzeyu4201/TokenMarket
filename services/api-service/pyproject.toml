@@ -32,6 +32,7 @@ dev = [
     "pytest==8.3.5",
     "pytest-asyncio==0.25.3",
     "pytest-cov==6.0.0",
+    "testcontainers[postgres,redis]==4.14.2",
 ]
 
 [build-system]
@@ -60,4 +61,11 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "integration: tests that require Docker/PostgreSQL or external services",
+]
+
+[tool.uv]
+# testcontainers[redis] declares redis>=7; auth runtime remains redis==5.2.1 (plan pin).
+# Override keeps the production client pin while allowing the reviewed testcontainers pin.
+override-dependencies = [
+    "redis==5.2.1",
 ]

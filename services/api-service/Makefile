@@ -35,6 +35,15 @@ test:
 		--cov-report=term-missing \
 		--cov-fail-under=80 \
 		tests/unit tests/integration -q
+	# Authentication domain/route packages must stay ≥80% (004 T017/T029)
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app.domain.authentication \
+		--cov=app.security \
+		--cov=app.api.v1.auth \
+		--cov=app.dispatch \
+		--cov-report=term-missing \
+		--cov-fail-under=80 \
+		tests/unit tests/integration -q
 
 build:
 	docker build -t $(IMAGE_TAG) .

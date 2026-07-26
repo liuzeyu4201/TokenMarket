@@ -1,0 +1,15 @@
+{
+  "increment": "p1",
+  "candidate_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "commit_sha": "c0ffeeabad1dea",
+  "browser": { "name": "Chromium", "version": "131.0.0.0" },
+  "cold_start_samples": 20,
+  "cold_start_p95_ms": 2400,
+  "journey_samples": 20,
+  "journey_max_ms": 120000,
+  "protected_content_flash": false,
+  "cookie_csrf_persisted": false,
+  "privacy_sentinel_hits": 0,
+  "resources": { "cpu_vcpus": 4, "memory_gib": 8 },
+  "outliers": []
+}

@@ -1,4 +1,4 @@
-"""API service with SF02 readiness and user registration (SF03)."""
+"""API service with SF02 readiness, registration (SF03), and phone auth (SF04)."""
 
 from __future__ import annotations
 
@@ -17,12 +17,16 @@ from starlette.responses import Response
 
 from . import database
 from .api.v1.auth import router as auth_router
+from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
+from .dispatch.auth_delivery import AuthDeliveryDispatcher
 from .errors import DependencyUnavailableError
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
+from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .rate_limit import MemoryRateLimiter, build_rate_limiter_from_env
 from .schemas.envelope import error_envelope
+from .sms.synthetic import build_sms_adapter
 
 VERSION = "0.1.0"
 logger = configure_logging()
@@ -30,16 +34,65 @@ logger = configure_logging()
 service_info = Info("app", "API service build information")
 service_info.info({"service": "api-service", "version": VERSION})
 
+_AUTH_PATH_PREFIX = "/api/v1/auth"
+_CORS_ALLOW_METHODS = ["GET", "POST", "DELETE", "OPTIONS"]
+_CORS_ALLOW_HEADERS = [
+    "Content-Type",
+    "X-Request-ID",
+    "Idempotency-Key",
+    "X-CSRF-Token",
+]
+
+
+def _browser_origins() -> list[str]:
+    """Exact browser Origin allowlist from AUTH_BROWSER_ORIGINS (no wildcards)."""
+    clear_auth_settings_cache()
+    try:
+        settings = load_auth_settings()
+        origins = settings.browser_origin_list
+    except Exception:
+        origins = []
+    if origins:
+        return origins
+    # Backward-compatible local default for SF03 registration UI.
+    legacy = os.environ.get(
+        "CORS_ALLOW_ORIGINS",
+        "http://127.0.0.1:5173,http://localhost:5173,"
+        "https://127.0.0.1:5173,https://localhost:5173",
+    )
+    return [o.strip() for o in legacy.split(",") if o.strip() and o.strip() != "*"]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Own readiness engine, session factory, and rate limiter for the process."""
+    """Own readiness engine, session factory, rate limiter, and auth dispatcher."""
     engine: AsyncEngine | None = None
     session_engine: AsyncEngine | None = None
+    dispatcher: AuthDeliveryDispatcher | None = None
     rate_limiter = build_rate_limiter_from_env()
     if rate_limiter is None:
         rate_limiter = MemoryRateLimiter(fail=True)
         logger.warning("REDIS_URL not set; registration rate limiter fail-closed")
+
+    auth_rate_limiter = build_auth_rate_limiter_from_env()
+    if auth_rate_limiter is None:
+        auth_rate_limiter = MemoryAuthRateLimiter(fail=True)
+        logger.warning("REDIS_URL not set; auth rate limiter fail-closed")
+
+    clear_auth_settings_cache()
+    try:
+        auth_settings = load_auth_settings()
+    except Exception:
+        logger.warning("auth settings load failed; using empty defaults")
+        from .config import AuthSettings
+
+        auth_settings = AuthSettings()
+    app.state.auth_settings = auth_settings
+
+    # SMS adapter (tests may replace app.state.sms_adapter before requests).
+    override = getattr(app.state, "sms_adapter_override", None)
+    sms_adapter = build_sms_adapter(auth_settings, override=override)
+    app.state.sms_adapter = sms_adapter
 
     database_url = os.environ.get("DATABASE_URL")
     app.state.session_factory = None
@@ -58,28 +111,47 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.db_engine = engine
     app.state.readiness_probe = database.build_readiness_probe(engine)
     app.state.rate_limiter = rate_limiter
+    app.state.auth_rate_limiter = auth_rate_limiter
+
+    # Start delivery dispatcher when DB + keys are usable (local/test).
+    start_dispatcher = (
+        os.environ.get("AUTH_DISPATCHER_ENABLED", "1") != "0"
+        and app.state.session_factory is not None
+        and auth_settings.key_material("otp").current_usable()
+    )
+    if start_dispatcher:
+        dispatcher = AuthDeliveryDispatcher(
+            app.state.session_factory,
+            auth_settings,
+            sms_adapter,  # type: ignore[arg-type]
+        )
+        app.state.auth_dispatcher = dispatcher
+        dispatcher.start()
+    else:
+        app.state.auth_dispatcher = None
+
     yield
+
+    if dispatcher is not None:
+        await dispatcher.stop()
     await rate_limiter.close()
+    await auth_rate_limiter.close()
     if session_engine is not None:
         await session_engine.dispose()
     if engine is not None:
         await engine.dispose()
-
 
 app = FastAPI(title="TokenMarket API Service", version=VERSION, lifespan=lifespan)
 app.state.version = VERSION
 app.include_router(health_router)
 app.include_router(auth_router)
 
-_cors_origins = os.environ.get(
-    "CORS_ALLOW_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173"
-).split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in _cors_origins if o.strip()],
+    allow_origins=_browser_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_CORS_ALLOW_METHODS,
+    allow_headers=_CORS_ALLOW_HEADERS,
     expose_headers=["X-Request-ID"],
 )
 
@@ -106,6 +178,11 @@ async def request_id_middleware(
     start = time.monotonic()
     response = await call_next(request)
     response.headers["X-Request-ID"] = rid
+
+    # Auth and session responses must never be cached by browsers or proxies.
+    if request.url.path.startswith(_AUTH_PATH_PREFIX):
+        response.headers["Cache-Control"] = "no-store"
+
     logger.info(
         "request end",
         extra={

@@ -1,0 +1,290 @@
+# Prometheus alert rules for TokenMarket phone authentication (SF04 / 004).
+# Metric names must match services/api-service/app/observability.py where defined.
+# Owner: API Service authentication on-call. Runbook: ops/runbooks/authentication.md
+#
+# Recovery: each alert requires two consecutive evaluation windows below the
+# threshold before auto-resolving (see `keep_firing_for` / two-window recovery).
+groups:
+  - name: tokenmarket-authentication
+    rules:
+      # --- Auth readiness ---
+      - alert: TokenMarketAuthReadinessUnavailable
+        expr: |
+          min_over_time(tokenmarket_auth_readiness_up[5m]) == 0
+          or
+          (
+            sum(rate(tokenmarket_postgres_readiness_probe_failures_total[5m]))
+            /
+            clamp_min(sum(rate(tokenmarket_postgres_readiness_probes_total[5m])), 1e-9)
+          ) == 1
+        for: 5m
+        labels:
+          severity: critical
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Authentication readiness unavailable for 5m
+          description: >
+            Auth readiness has been continuously unavailable for 5 minutes.
+            Page API Service authentication on-call.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive evaluation windows with readiness up.
+
+      # --- Server / dependency failure ratio ---
+      - alert: TokenMarketAuthServerFailureRatioWarning
+        expr: |
+          (
+            sum(rate(tokenmarket_auth_challenge_requests_total{result=~"internal_error|service_unavailable|dependency_unavailable"}[10m]))
+            +
+            sum(rate(tokenmarket_auth_verify_attempts_total{result=~"internal_error|service_unavailable|dependency_unavailable"}[10m]))
+          )
+          /
+          clamp_min(
+            sum(rate(tokenmarket_auth_challenge_requests_total[10m]))
+            +
+            sum(rate(tokenmarket_auth_verify_attempts_total[10m])),
+            1e-9
+          ) > 0.05
+          and
+          (
+            sum(increase(tokenmarket_auth_challenge_requests_total[10m]))
+            +
+            sum(increase(tokenmarket_auth_verify_attempts_total[10m]))
+          ) >= 100
+        for: 10m
+        labels:
+          severity: warning
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Auth server/dependency failure ratio elevated (warning)
+          description: >
+            Server/dependency failure ratio >5% over 10m with ≥100 eligible requests.
+            User field errors, OTP mistakes, and normal rate limits are excluded.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows below threshold.
+
+      - alert: TokenMarketAuthServerFailureRatioCritical
+        expr: |
+          (
+            sum(rate(tokenmarket_auth_challenge_requests_total{result=~"internal_error|service_unavailable|dependency_unavailable"}[5m]))
+            +
+            sum(rate(tokenmarket_auth_verify_attempts_total{result=~"internal_error|service_unavailable|dependency_unavailable"}[5m]))
+          )
+          /
+          clamp_min(
+            sum(rate(tokenmarket_auth_challenge_requests_total[5m]))
+            +
+            sum(rate(tokenmarket_auth_verify_attempts_total[5m])),
+            1e-9
+          ) > 0.20
+          and
+          (
+            sum(increase(tokenmarket_auth_challenge_requests_total[5m]))
+            +
+            sum(increase(tokenmarket_auth_verify_attempts_total[5m]))
+          ) >= 50
+        for: 5m
+        labels:
+          severity: critical
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Auth server/dependency failure ratio critical
+          description: >
+            Server/dependency failure ratio >20% over 5m with ≥50 eligible requests.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows below threshold.
+
+      # --- Login success / delivery (provider) ---
+      - alert: TokenMarketAuthProviderFailureRatioWarning
+        expr: |
+          sum(rate(tokenmarket_auth_provider_outcomes_total{outcome=~"rejected|timeout|unknown"}[10m]))
+          /
+          clamp_min(sum(rate(tokenmarket_auth_provider_outcomes_total[10m])), 1e-9)
+          > 0.10
+          and
+          sum(increase(tokenmarket_auth_provider_outcomes_total[10m])) >= 50
+        for: 10m
+        labels:
+          severity: warning
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: SMS provider rejected/timeout/unknown ratio elevated
+          description: >
+            Provider failure ratio >10% over 10m with ≥50 dispatch samples.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows below threshold.
+
+      - alert: TokenMarketAuthProviderFailureRatioCritical
+        expr: |
+          sum(rate(tokenmarket_auth_provider_outcomes_total{outcome=~"rejected|timeout|unknown"}[5m]))
+          /
+          clamp_min(sum(rate(tokenmarket_auth_provider_outcomes_total[5m])), 1e-9)
+          > 0.25
+          and
+          sum(increase(tokenmarket_auth_provider_outcomes_total[5m])) >= 25
+        for: 5m
+        labels:
+          severity: critical
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: SMS provider failure ratio critical
+          description: >
+            Provider failure ratio >25% over 5m with ≥25 dispatch samples.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows below threshold.
+
+      # --- Redis / rate-limit backend ---
+      - alert: TokenMarketAuthRedisUnavailable
+        expr: |
+          increase(tokenmarket_rate_limit_backend_unavailable_total[5m]) > 0
+          or
+          increase(tokenmarket_auth_rate_limited_total{reason="backend_unavailable"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Auth rate-limit Redis backend unavailable
+          description: >
+            Challenge path fails closed when Redis is down. Restore Redis.
+            Existing sessions continue to validate against PostgreSQL.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows with zero backend-unavailable events.
+
+      # --- Dispatcher queue age ---
+      - alert: TokenMarketAuthDispatcherQueueAgeWarning
+        expr: |
+          histogram_quantile(
+            1.0,
+            sum by (le) (rate(tokenmarket_auth_dispatcher_queue_age_seconds_bucket[5m]))
+          ) > 30
+          or
+          max(tokenmarket_auth_dispatcher_oldest_eligible_age_seconds) > 30
+        for: 5m
+        labels:
+          severity: warning
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Oldest eligible dispatcher work >30s for 5m
+          description: >
+            Delivery queue backlog age exceeds 30 seconds for five minutes.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows with oldest eligible work ≤30s.
+
+      - alert: TokenMarketAuthDispatcherQueueAgeCritical
+        expr: |
+          histogram_quantile(
+            1.0,
+            sum by (le) (rate(tokenmarket_auth_dispatcher_queue_age_seconds_bucket[5m]))
+          ) > 120
+          or
+          max(tokenmarket_auth_dispatcher_oldest_eligible_age_seconds) > 120
+        for: 5m
+        labels:
+          severity: critical
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Oldest eligible dispatcher work >120s for 5m
+          description: >
+            Delivery queue backlog age exceeds 120 seconds for five minutes.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows with oldest eligible work ≤120s.
+
+      # --- Session revocation visibility ---
+      - alert: TokenMarketAuthRevocationVisibilityCritical
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(tokenmarket_auth_session_revocation_visibility_seconds_bucket[5m]))
+          ) > 1
+          and
+          sum(increase(tokenmarket_auth_session_revocation_visibility_seconds_count[5m])) >= 20
+        for: 5m
+        labels:
+          severity: critical
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Session revocation visibility p95 >1s
+          description: >
+            p95 time from revoke commit to observed rejection exceeds 1s over 5m
+            with ≥20 samples. See ops/runbooks/authentication.md
+          recovery: Two consecutive windows with p95 ≤1s or sample count below floor.
+
+      # --- Cleanup command health ---
+      - alert: TokenMarketAuthCleanupFailureWarning
+        expr: |
+          increase(tokenmarket_auth_cleanup_runs_total{outcome="error"}[2h]) >= 1
+          or
+          (time() - tokenmarket_auth_cleanup_last_success_timestamp_seconds) > 7200
+        for: 0m
+        labels:
+          severity: warning
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Auth cleanup single failure or last-success >2h
+          description: >
+            One cleanup failure or last successful cleanup older than 2 hours.
+            Schedule: UTC 17 * * * *; command
+            python -m app.maintenance.auth_cleanup --batch-size 500 --max-runtime-seconds 900.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive successful cleanup runs with last-success ≤2h.
+
+      - alert: TokenMarketAuthCleanupFailureCritical
+        expr: |
+          increase(tokenmarket_auth_cleanup_runs_total{outcome="error"}[4h]) >= 3
+          or
+          (time() - tokenmarket_auth_cleanup_last_success_timestamp_seconds) > 14400
+          or
+          max(tokenmarket_auth_cleanup_hard_deadline_breach_total) > 0
+        for: 0m
+        labels:
+          severity: critical
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Auth cleanup repeated failure, last-success >4h, or 24h hard deadline breach
+          description: >
+            Three consecutive cleanup failures, last-success older than 4 hours,
+            or OTP/challenge/idempotency material crossed the 24-hour hard deadline.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive successful runs with no hard-deadline breaches.
+
+      # --- Cleanup due backlog age ---
+      - alert: TokenMarketAuthCleanupBacklogWarning
+        expr: |
+          max(tokenmarket_auth_cleanup_oldest_due_age_seconds) > 3600
+        for: 5m
+        labels:
+          severity: warning
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Auth cleanup due backlog oldest age >1h
+          description: >
+            Oldest due retention row is older than 1 hour past delete_after.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows with oldest due age ≤1h.
+
+      - alert: TokenMarketAuthCleanupBacklogCritical
+        expr: |
+          max(tokenmarket_auth_cleanup_oldest_due_age_seconds) > 7200
+        for: 5m
+        labels:
+          severity: critical
+          owner: api-service
+          component: authentication
+        annotations:
+          summary: Auth cleanup due backlog oldest age >2h
+          description: >
+            Oldest due retention row is older than 2 hours past delete_after.
+            See ops/runbooks/authentication.md
+          recovery: Two consecutive windows with oldest due age ≤2h.

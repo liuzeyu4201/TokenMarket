@@ -1,29 +1,29 @@
-# Contract: CN Mobile Phone Normalization (v1)
+# 契约：CN 手机号规范化（v1）
 
-**Owner**: API Service (user domain)  
-**Consumers**: API Service validators, registration tests, frontend client-side hints (non-authoritative)  
-**Version**: 1.0.0
+**所有者**：API Service（user domain）
+**消费者**：API Service 校验器、注册测试、前端客户端提示（非权威）
+**版本**：1.0.0
 
-## Purpose
+## 目的
 
-Define the single testable normalization algorithm for V0.1 registration phone numbers (FR-002a–c).
+定义 V0.1 注册手机号的单一可测试规范化算法（FR-002a–c）。
 
-## Algorithm
+## 算法
 
-Input: Unicode string `raw`.
+输入：Unicode 字符串 `raw`。
 
-1. If `raw` is null/empty after trim of ends only for emptiness check → error `phone` invalid.
-2. Apply Unicode NFKC.
-3. Map full-width digits U+FF10–U+FF19 to ASCII `0`–`9`.
-4. Remove all Unicode whitespace (categories Zs plus `\t\n\r\f\v`).
-5. If the string matches `^\+?86(1[3-9]\d{9})$`, replace with capture group 1.
-   - Accept both `+86` and `86` prefixes only when the remainder is already 11-digit CN mobile form.
-6. If the string matches `^1[3-9]\d{9}$`, return it as `phone_normalized`.
-7. Otherwise → field validation error on `phone` (format). Do **not** perform uniqueness or soft-delete checks.
+1. 若仅对两端 trim 后的空性检查后 `raw` 为 null/空 → 错误 `phone` invalid。
+2. 应用 Unicode NFKC。
+3. 将全角数字 U+FF10–U+FF19 映射为 ASCII `0`–`9`。
+4. 删除全部 Unicode 空白（类别 Zs 以及 `\t\n\r\f\v`）。
+5. 若字符串匹配 `^\+?86(1[3-9]\d{9})$`，替换为捕获组 1。
+   - 仅当剩余部分已是 11 位 CN 手机形式时，接受 `+86` 与 `86` 前缀。
+6. 若字符串匹配 `^1[3-9]\d{9}$`，将其作为 `phone_normalized` 返回。
+7. 否则 → `phone` 上的字段校验错误（格式）。**不得**执行唯一性或软删除检查。
 
-## Examples
+## 示例
 
-| Input | Output |
+| 输入 | 输出 |
 |-------|--------|
 | `13800138000` | `13800138000` |
 | ` 138 0013 8000 ` | `13800138000` |
@@ -34,6 +34,6 @@ Input: Unicode string `raw`.
 | `+11234567890` | error |
 | `12800138000` | error (second digit not 3–9) |
 
-## Uniqueness key
+## 唯一性键
 
-Only `phone_normalized` is stored and compared. Two inputs that normalize equal are the same phone.
+仅存储并比较 `phone_normalized`。规范化后相等的两个输入视为同一手机号。

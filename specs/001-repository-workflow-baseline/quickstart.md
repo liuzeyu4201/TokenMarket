@@ -2,13 +2,13 @@
 
 **Feature**: `001-repository-workflow-baseline`
 
-**Purpose**: Runnable acceptance guide after implementation; it does not replace automated tests
+**Purpose**: 实现后的可运行验收指南；不替代自动化测试
 
-**Safety**: Do not use real credentials or production configuration
+**Safety**: 不得使用真实凭据或生产配置
 
 ## 1. Prerequisites
 
-Use a fresh checkout or a disposable working copy. Required versions and integrity references are owned by the repository toolchain files; verify rather than relying on whatever is preinstalled.
+使用全新检出或可丢弃的工作副本。必需版本与完整性引用由仓库工具链文件负责；应校验，而非依赖已预装内容。
 
 ```bash
 make help
@@ -18,12 +18,12 @@ make bootstrap
 
 Expected:
 
-- `make help` completes in under 2 seconds and lists `dev`, `dev-down`, `fmt`, `lint`, `test`, `build`, `migrate` with prerequisites, side effects and recovery.
-- `toolchain-check` reports the supported Make, Go, Python/uv, Node/npm, Docker and scanner versions without installing or upgrading them.
-- `bootstrap` prepares only lock-resolved repository-tool, Go, Python-service and frontend dependencies; it does not install system tools or rewrite any lockfile, and a second run resolves the same dependency graph.
-- Missing or unsupported tools fail within 5 seconds before any persistent side effect.
+- `make help` 在 2 秒内完成，并列出 `dev`、`dev-down`、`fmt`、`lint`、`test`、`build`、`migrate` 及其前置条件、副作用与恢复说明。
+- `toolchain-check` 报告受支持的 Make、Go、Python/uv、Node/npm、Docker 与扫描器版本，不安装或升级它们。
+- `bootstrap` 仅准备锁解析的仓库工具、Go、Python 服务与前端依赖；不安装系统工具或重写任何锁文件，且第二次运行解析出相同依赖图。
+- 缺失或不支持的工具在任何持久副作用前 5 秒内失败。
 
-See [`contracts/make-workflow.md`](./contracts/make-workflow.md) for the command contract.
+命令契约见 [`contracts/make-workflow.md`](./contracts/make-workflow.md)。
 
 ## 2. Prepare synthetic local configuration
 
@@ -34,11 +34,11 @@ git status --short
 
 Expected:
 
-- `.env.local` is ignored and does not appear in status.
-- `.env.example` contains names, comments and unusable placeholders only.
-- No command prints configuration values.
+- `.env.local` 被忽略且不出现在 status 中。
+- `.env.example` 仅包含名称、注释与不可用的占位符。
+- 无命令打印配置值。
 
-Do not replace placeholders with provider keys or production values for SF01 validation.
+SF01 验收时不得将占位符替换为提供商密钥或生产值。
 
 ## 3. Validate successful root and supporting actions
 
@@ -53,35 +53,35 @@ make build
 
 Expected:
 
-- All eight required components run real adapters; none is silently skipped.
-- Go gateway, three Python services and frontend each execute a real smoke test.
-- `shared`, `infra` and `ops` each execute negative fixture tests and create a deterministic asset archive.
-- Five immutable service images build with version/SHA tags; no `latest` tag is created.
-- A second `make fmt` produces no new differences.
-- Required component with zero discovered tests or an empty action adapter makes the aggregate fail.
+- 全部八个必需组件运行真实适配器；无一被静默跳过。
+- Go gateway、三个 Python 服务与前端各自执行真实冒烟测试。
+- `shared`、`infra` 与 `ops` 各自执行负向 fixture 测试并创建确定性资产归档。
+- 五个不可变服务镜像以 version/SHA 标签构建；不创建 `latest` 标签。
+- 第二次 `make fmt` 不产生新差异。
+- 必需组件若发现零测试或空动作适配器，聚合必须失败。
 
-Automated tests cover injected component failures; do not delete a real component to test this manually.
+自动化测试覆盖注入的组件失败；不要删除真实组件来手动测试此项。
 
 ## 4. Validate dirty-worktree formatting safety
 
-Run the repository workflow test dedicated to dirty worktrees through the public test target:
+通过公共测试目标运行专用于脏工作树的仓库工作流测试：
 
 ```bash
 make test
 ```
 
-The fixture creates a disposable repository copy containing tracked edits, an out-of-scope file and an untracked file. It proves that `make fmt`:
+该 fixture 创建包含已跟踪编辑、超出范围文件与未跟踪文件的可丢弃仓库副本。它证明 `make fmt`：
 
-- formats only declared files;
-- never runs reset, checkout, stash, clean or delete;
-- preserves out-of-scope and untracked content;
-- produces zero additional differences on the second run.
+- 仅格式化已声明文件；
+- 永不运行 reset、checkout、stash、clean 或 delete；
+- 保留超出范围与未跟踪内容；
+- 第二次运行产生零额外差异。
 
-The canonical behavior is defined in [`contracts/make-workflow.md`](./contracts/make-workflow.md).
+权威行为定义于 [`contracts/make-workflow.md`](./contracts/make-workflow.md)。
 
 ## 5. Validate SF02 transition behavior
 
-Before SF02 is implemented, run each target separately and expect a non-zero result:
+在 SF02 实现前，分别运行各目标并期望非零结果：
 
 ```bash
 make dev
@@ -90,17 +90,17 @@ make dev-down
 
 Expected for both:
 
-- Diagnostic code is `SF02_NOT_READY`.
-- Output states that SF02 must provide the lifecycle adapter.
-- Docker is not inspected or invoked.
-- No configuration file is read.
-- No container, volume, network or worktree file is created, stopped, removed or changed.
+- 诊断码为 `SF02_NOT_READY`。
+- 输出说明 SF02 必须提供生命周期适配器。
+- 不检查或不调用 Docker。
+- 不读取任何配置文件。
+- 不创建、停止、移除或更改任何容器、卷、网络或工作树文件。
 
-This expected failure is a passing SF01 acceptance condition. After SF02, this section is superseded by SF02's lifecycle quickstart while the public target names remain unchanged.
+此预期失败是通过 SF01 验收的条件。SF02 之后，本节由 SF02 的生命周期 quickstart 取代，同时公共目标名称保持不变。
 
 ## 6. Validate environment-mode safety
 
-The grammar and approval rules are in [`contracts/environment-mode.md`](./contracts/environment-mode.md).
+语法与审批规则见 [`contracts/environment-mode.md`](./contracts/environment-mode.md)。
 
 ### Invalid mode
 
@@ -108,7 +108,7 @@ The grammar and approval rules are in [`contracts/environment-mode.md`](./contra
 make migrate mode=PROD
 ```
 
-Expected: non-zero `INVALID_MODE` before any configuration, DNS or network access.
+Expected: 在任何配置、DNS 或网络访问前返回非零 `INVALID_MODE`。
 
 ### Omitted mode
 
@@ -116,7 +116,7 @@ Expected: non-zero `INVALID_MODE` before any configuration, DNS or network acces
 make migrate
 ```
 
-Expected: effective mode is `local`. If no local database is externally available, the command fails safely with the missing local configuration/dependency name; it never starts a database or falls through to test/production.
+Expected: 有效模式为 `local`。若外部无可用本地数据库，命令以缺失的本地配置/依赖名称安全失败；它永不启动数据库或回退到 test/production。
 
 ### Shell-origin escalation
 
@@ -124,7 +124,7 @@ Expected: effective mode is `local`. If no local database is externally availabl
 mode=prod make migrate
 ```
 
-Expected: shell origin cannot select production; the action stays local or fails safe if origin is ambiguous.
+Expected: shell 来源不能选择生产；动作保持 local，或在来源模糊时安全失败。
 
 ### Production without approval
 
@@ -132,9 +132,9 @@ Expected: shell origin cannot select production; the action stays local or fails
 make migrate mode=prod
 ```
 
-Expected: `PROD_APPROVAL_REQUIRED` before production configuration or resource access. This guide intentionally does not provide the production confirmation phrase or approval proof.
+Expected: 在生产配置或资源访问前返回 `PROD_APPROVAL_REQUIRED`。本指南有意不提供生产确认短语或审批证明。
 
-Never use an actual production URL to test these preflight cases.
+永不使用真实生产 URL 测试这些预检用例。
 
 ## 7. Validate migration ownership and round-trip
 
@@ -145,14 +145,14 @@ make migrate-integration-check
 
 Expected:
 
-- Owners are exactly `api-service` then `billing-service`; `admin-service` is explicitly a non-owner.
-- Each initialized migration graph has one head and valid upgrade/downgrade metadata.
-- Zero pending revisions is reported explicitly only after graph and owner validation.
-- The command performs no network operation.
+- 负责人恰好为 `api-service` 然后 `billing-service`；`admin-service` 被明确为非负责人。
+- 每个已初始化迁移图有一个 head 与有效的 upgrade/downgrade 元数据。
+- 仅在图与负责人校验之后，才显式报告零待处理修订。
+- 命令不执行任何网络操作。
 
-`migrate-integration-check` is the separate integration layer: it starts only a fixed-digest PostgreSQL 15 container with synthetic credentials, runs API then Billing forward migration, backout, retry and final-head restoration, then discards the fixture. It never calls `make dev` or contacts a shared database.
+`migrate-integration-check` 是独立集成层：它仅启动带合成凭据的固定 digest PostgreSQL 15 容器，按 API 然后 Billing 运行前向迁移、回退、重试与最终 head 恢复，然后丢弃 fixture。它永不调用 `make dev` 或接触共享数据库。
 
-`make ci` must invoke both migration checks and cannot replace the integration layer with YAML or offline validation.
+`make ci` 必须调用两个迁移检查，且不能用 YAML 或离线校验替代集成层。
 
 ## 8. Validate path and terminal accessibility
 
@@ -163,10 +163,10 @@ make test
 
 Expected:
 
-- Plain-text status remains complete without color or icons.
-- Workflow fixture tests run the repository from a disposable path containing both spaces and Chinese characters.
-- Paths in events are repository-relative and no same-named directory outside the fixture is accessed.
-- JSON Lines events validate against [`contracts/workflow-event.schema.json`](./contracts/workflow-event.schema.json).
+- 无颜色或图标时纯文本状态仍完整。
+- 工作流 fixture 测试从同时含空格与中文字符的可丢弃路径运行仓库。
+- 事件中的路径为仓库相对路径，且不访问 fixture 外同名目录。
+- JSON Lines 事件对照 [`contracts/workflow-event.schema.json`](./contracts/workflow-event.schema.json) 校验通过。
 
 ## 9. Validate security gates
 
@@ -176,18 +176,18 @@ make security-check
 
 Expected:
 
-- Full-history secret scan passes for the repository and detects the synthetic positive fixture.
-- Go, all Python locks and the npm lock are scanned without modifying lockfiles.
-- Scanner/database download failure remains a failed gate after at most one bounded retry.
-- Output redacts fixture values.
+- 全历史密钥扫描对仓库通过，并检测到合成正向 fixture。
+- Go、全部 Python 锁与 npm 锁被扫描且不修改锁文件。
+- 扫描器/数据库下载失败在至多一次有界重试后仍为失败门禁。
+- 输出对 fixture 值脱敏。
 
-After `make build`:
+`make build` 之后：
 
 ```bash
 make image-scan
 ```
 
-Expected: all five immutable images are scanned for HIGH/CRITICAL findings; an exception is accepted only when it contains the required ID, analysis, owner, approval, issue and expiry.
+Expected: 全部五个不可变镜像扫描 HIGH/CRITICAL 发现；例外仅在包含必需 ID、分析、负责人、审批、issue 与到期时间时被接受。
 
 ## 10. Run the complete local CI gate
 
@@ -197,29 +197,29 @@ make ci
 
 Expected:
 
-- The sequence matches [`contracts/ci-gates.md`](./contracts/ci-gates.md).
-- The final event is `PASSED` only when every blocking step produces evidence.
-- Re-running on the same commit produces the same result and no unexpected tracked differences.
-- No service is published or deployed.
+- 顺序匹配 [`contracts/ci-gates.md`](./contracts/ci-gates.md)。
+- 仅当每个阻塞步骤产生证据时，最终事件为 `PASSED`。
+- 在同一提交上重跑产生相同结果且无意外已跟踪差异。
+- 不发布或部署任何服务。
 
 ## 11. Verify hosted CI
 
-Open or update a pull request against `master-dev` after implementation (promote to `master` only after test validation).
+实现后打开或更新针对 `master-dev` 的 pull request（仅在测试验证后晋升到 `master`）。
 
 Expected:
 
-- Exactly one stable required check, `quality-gate`, runs without path filtering.
-- The workflow invokes `make ci` as its only project command.
-- A deliberately failing fixture in a disposable test branch blocks the merge.
-- A successful merge triggers the same gate for the final `master-dev` or `master` commit.
-- Workflow token permissions are read-only and no repository/production secret is available.
+- 恰好一个稳定必需检查 `quality-gate` 运行，无路径过滤。
+- 工作流以 `make ci` 作为其唯一项目命令调用。
+- 可丢弃测试分支上的故意失败 fixture 阻止合并。
+- 成功合并对最终 `master-dev` 或 `master` 提交触发同一门禁。
+- 工作流 token 权限只读，且无可用仓库/生产密钥。
 
 ## 12. Evidence to attach to review
 
-- `make help` and `toolchain-check` output.
-- Component test counts and coverage summaries.
-- Contract, boundary and migration-check results.
-- Five immutable image references plus runtime health smoke results.
-- Secret/dependency/image scan summaries with sensitive values redacted.
-- `quality-gate` URL/result for PR and final `master-dev` / `master` commit.
-- Confirmation that no business schema, provider credential, production resource or deployment was introduced.
+- `make help` 与 `toolchain-check` 输出。
+- 组件测试计数与覆盖率摘要。
+- 契约、边界与 migration-check 结果。
+- 五个不可变镜像引用加运行时健康冒烟结果。
+- 密钥/依赖/镜像扫描摘要，敏感值已脱敏。
+- PR 与最终 `master-dev` / `master` 提交的 `quality-gate` URL/结果。
+- 确认未引入业务 schema、提供商凭据、生产资源或部署。

@@ -1,36 +1,36 @@
-# Specification Quality Checklist: 本地依赖环境生命周期
+# 规格质量检查清单：本地依赖环境生命周期
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-07-15
-**Feature**: [spec.md](../spec.md)
+**目的**：在进入规划前验证规格完整性与质量
+**创建日期**：2026-07-15
+**功能**：[spec.md](../spec.md)
 
-## Content Quality
+## 内容质量
 
-- [x] No implementation details (languages, frameworks, APIs)
-- [x] Focused on user value and business needs
-- [x] Written for non-technical stakeholders
-- [x] All mandatory sections completed
+- [x] 无实现细节（语言、框架、API）
+- [x] 聚焦用户价值与业务需求
+- [x] 面向非技术干系人撰写
+- [x] 全部强制章节已完成
 
-## Requirement Completeness
+## 需求完整性
 
-- [x] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and unambiguous
-- [x] Success criteria are measurable
-- [x] Success criteria are technology-agnostic (no implementation details)
-- [x] All acceptance scenarios are defined
-- [x] Edge cases are identified
-- [x] Scope is clearly bounded
-- [x] Dependencies and assumptions identified
+- [x] 无剩余 `[NEEDS CLARIFICATION]` 标记
+- [x] 需求可测试且无歧义
+- [x] 成功标准可度量
+- [x] 成功标准与技术无关（无实现细节）
+- [x] 全部验收场景已定义
+- [x] 边界情况已识别
+- [x] 范围边界清晰
+- [x] 依赖与假设已识别
 
-## Feature Readiness
+## 功能就绪度
 
-- [x] All functional requirements have clear acceptance criteria
-- [x] User scenarios cover primary flows
-- [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification
+- [x] 全部功能需求均有清晰验收标准
+- [x] 用户场景覆盖主流程
+- [x] 功能满足成功标准中定义的可度量结果
+- [x] 规格中无实现细节泄漏
 
-## Notes
+## 说明
 
-- Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
-- Validation iteration 1: 16/16 items pass; no `[NEEDS CLARIFICATION]` markers remain.
-- Exact dependency families, public command names, service names and ports are externally observable source/SF01 contract constraints; the specification does not prescribe internal code structure or orchestration implementation.
+- 标记为未完成的条目须在 `/speckit-clarify` 或 `/speckit-plan` 前更新规格。
+- 验证迭代 1：16/16 项通过；无剩余 `[NEEDS CLARIFICATION]` 标记。
+- 精确依赖族、公共命令名、服务名与端口为外部可观察的源/SF01 契约约束；规格不规定内部代码结构或编排实现。

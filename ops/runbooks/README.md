@@ -1,4 +1,3 @@
-# Operations runbooks
+# 运维运行手册（runbook）
 
-Step-by-step procedures for repository workflow, migrations, CI recovery and
-operational incidents.
+仓库工作流、迁移、CI 恢复与运维事件的分步操作说明。

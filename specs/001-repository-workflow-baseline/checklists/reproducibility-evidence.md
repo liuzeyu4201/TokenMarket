@@ -1,11 +1,11 @@
-# Reproducibility Evidence
+# 可复现性证据
 
-**Feature**: `specs/001-repository-workflow-baseline/`  
-**Date**: 2026-07-14
+**功能**：`specs/001-repository-workflow-baseline/`
+**日期**：2026-07-14
 
-## Method
+## 方法
 
-Ten consecutive runs of the same four root workflow targets on the same commit:
+在同一提交上连续十次运行相同的四个根工作流目标：
 
 ```bash
 make fmt-check
@@ -15,12 +15,12 @@ make test
 make build
 ```
 
-Between rounds no source file was edited and no dependency was changed. Git
-diff was sampled after each round.
+各轮之间未编辑任何源文件，也未更改任何依赖。每轮后
+对 Git diff 进行抽样。
 
-## Results
+## 结果
 
-| Round | fmt-check | type-check | lint | test | build | Time (s) | Git diff lines |
+| 轮次 | fmt-check | type-check | lint | test | build | 时间 (s) | Git diff 行数 |
 |-------|-----------|------------|------|------|-------|----------|----------------|
 | 1     | 0         | 0          | 0    | 0    | 0     | 14       | 206            |
 | 2     | 0         | 0          | 0    | 0    | 0     | 13       | 206            |
@@ -33,18 +33,17 @@ diff was sampled after each round.
 | 9     | 0         | 0          | 0    | 0    | 0     | 13       | 206            |
 | 10    | 0         | 0          | 0    | 0    | 0     | 12       | 206            |
 
-All exit codes are zero. The 206 diff lines are confined to
-`specs/001-repository-workflow-baseline/tasks.md` checkbox updates performed as
-part of implementation tracking; no unexpected worktree drift was introduced by
-the workflow itself.
+全部退出码为零。这 206 行 diff 仅限于
+作为实现跟踪一部分所做的 `specs/001-repository-workflow-baseline/tasks.md` 复选框更新；
+工作流本身未引入意外的工作树漂移。
 
-## Asset determinism
+## 资产确定性
 
-- `shared/dist/shared-assets.tar.gz`, `infra/dist/infra-assets.tar.gz` and
-  `ops/dist/ops-assets.tar.gz` are produced by deterministic archive builders.
-- Image tags are derived from component version (`0.1.0`), not git state.
+- `shared/dist/shared-assets.tar.gz`、`infra/dist/infra-assets.tar.gz` 与
+  `ops/dist/ops-assets.tar.gz` 由确定性归档构建器生成。
+- 镜像标签源自组件版本（`0.1.0`），而非 git 状态。
 
-## Conclusion
+## 结论
 
-From round 2 onward the workflow produced zero new tracked differences and
-identical pass/fail results, confirming the repository workflow is reproducible.
+自第 2 轮起，工作流产生了零条新的已跟踪差异，并具有
+相同的通过/失败结果，确认仓库工作流可复现。

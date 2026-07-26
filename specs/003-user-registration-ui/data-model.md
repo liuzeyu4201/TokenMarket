@@ -1,11 +1,11 @@
-# Data Model: 用户注册与初始界面
+# 数据模型：用户注册与初始界面
 
-**Feature**: `003-user-registration-ui`  
-**Date**: 2026-07-23  
-**Source of truth**: PostgreSQL via **API Service** ownership  
-**Ephemeral control plane**: Redis registration rate-limit buckets  
+**特性**: `003-user-registration-ui`
+**日期**: 2026-07-23
+**事实源**: PostgreSQL，由 **API Service** 拥有
+**短暂控制面**: Redis 注册限流桶
 
-## Overview
+## 概览
 
 ```text
 Client (Browser)
@@ -21,14 +21,14 @@ API Service
               └── registration_idempotency_records
 ```
 
-## Entity: User（表 `users`）
+## 实体：User（表 `users`）
 
 账户权威实体。本功能只 **创建** active 用户；不登录、不改角色、不硬删除。
 
-| Field | Type | Constraints | Notes |
-|-------|------|-------------|--------|
-| `id` | UUID | PK, server-generated | 对外用户标识 |
-| `phone_normalized` | VARCHAR(11) | UNIQUE NOT NULL, CHECK `^1[3-9][0-9]{9}$` | 仅存规范化结果 |
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | UUID | PK，服务端生成 | 对外用户标识 |
+| `phone_normalized` | VARCHAR(11) | UNIQUE NOT NULL，CHECK `^1[3-9][0-9]{9}$` | 仅存规范化结果 |
 | `nickname` | VARCHAR(50) | NOT NULL | 去首尾空白后 1–50 可显示字符 |
 | `role` | ENUM `user_role` | NOT NULL | `buyer` \| `seller` \| `both` |
 | `status` | ENUM `user_status` | NOT NULL DEFAULT `active` | 本功能只写 `active` |
@@ -37,43 +37,43 @@ API Service
 | `is_deleted` | BOOLEAN | NOT NULL DEFAULT false | 软删除 |
 | `version` | INTEGER | NOT NULL DEFAULT 1 | 乐观锁，创建为 1 |
 
-### Invariants
+### 不变量
 
 1. **全局手机号唯一**：`UNIQUE (phone_normalized)` 覆盖软删除行；禁止同号第二账户。
 2. 新建：`status = active`、`is_deleted = false`、`version = 1`。
 3. 不存储密码、邮箱、明文国家码前缀或原始输入串（原始串仅用于规范化输入，不落库）。
 4. 软删除后：`is_deleted = true`；再注册不得 INSERT，服务层返回 `ACCOUNT_UNAVAILABLE`。
 
-### State transitions (this feature)
+### 状态迁移（本特性）
 
 ```text
 (none) --register--> active, is_deleted=false
 ```
 
-Soft-delete / suspend / restore：out of scope（后续功能）。
+软删除 / 暂停 / 恢复：out of scope（后续功能）。
 
-### Classification
+### 分类
 
 - **PII**: `phone_normalized`（高敏感）、`nickname`（中低）。
-- **Owner**: API Service.
-- **Retention**: 遵循平台账户保留策略；本功能不定义硬删作业。软删保留至平台删除策略执行前。
-- **Backup / restore**: 与 API Service 所用 PostgreSQL 实例共用平台备份与非生产 restore；无特性级独立备份。幂等表非账户事实源，24h 后可清理。
-- **Audit**: 创建时间与后续更新时间必填；不在日志打印完整手机号。
+- **Owner**: API Service。
+- **保留**: 遵循平台账户保留策略；本功能不定义硬删作业。软删保留至平台删除策略执行前。
+- **备份 / 恢复**: 与 API Service 所用 PostgreSQL 实例共用平台备份与非生产 restore；无特性级独立备份。幂等表非账户事实源，24h 后可清理。
+- **审计**: 创建时间与后续更新时间必填；不在日志打印完整手机号。
 
-## Entity: RegistrationIdempotencyRecord（表 `registration_idempotency_records`）
+## 实体：RegistrationIdempotencyRecord（表 `registration_idempotency_records`）
 
-| Field | Type | Constraints | Notes |
-|-------|------|-------------|--------|
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
 | `id` | UUID | PK | 内部 |
 | `idempotency_key` | VARCHAR(64) | UNIQUE NOT NULL | 客户端键 |
-| `request_hash` | CHAR(64) | NOT NULL | hex SHA-256 of canonical request |
+| `request_hash` | CHAR(64) | NOT NULL | 规范请求的 hex SHA-256 |
 | `user_id` | UUID | NULL FK → users.id | 成功创建时必填 |
 | `result_code` | VARCHAR(64) | NOT NULL | 业务码，如 `0` |
 | `result_payload` | JSONB | NOT NULL | 成功时的 `data` 快照（无完整手机号） |
 | `created_at` | TIMESTAMPTZ | NOT NULL | 首次受理 |
 | `expires_at` | TIMESTAMPTZ | NOT NULL | `created_at + interval '24 hours'` |
 
-### Invariants
+### 不变量
 
 1. 同一 `idempotency_key` 仅一行。
 2. 窗口内重放：键存在且 `now < expires_at` 且 hash 相同 → 返回存储的成功包络。
@@ -81,7 +81,7 @@ Soft-delete / suspend / restore：out of scope（后续功能）。
 4. `now >= expires_at` → `IDEMPOTENCY_KEY_EXPIRED`，不返回 `result_payload` 作为成功。
 5. 不保存原始手机号或完整请求明文；`request_hash` 基于规范化字段。
 
-### Canonical request hash input
+### 规范请求哈希输入
 
 ```text
 phone_normalized | nickname_stripped | role
@@ -89,57 +89,57 @@ phone_normalized | nickname_stripped | role
 
 UTF-8，固定分隔符，SHA-256 hex。
 
-## Entity: RegistrationRateLimitBucket（Redis，非 DB 表）
+## 实体：RegistrationRateLimitBucket（Redis，非 DB 表）
 
-| Dimension | Key pattern | Limit | Window |
-|-----------|-------------|-------|--------|
-| IP | `reg:rl:ip:{ip}` | 20 | 15 minutes |
-| Phone | `reg:rl:phone:{phone_normalized}` | 5 | 15 minutes |
+| 维度 | 键模式 | 上限 | 窗口 |
+|------|--------|------|------|
+| IP | `reg:rl:ip:{ip}` | 20 | 15 分钟 |
+| 手机号 | `reg:rl:phone:{phone_normalized}` | 5 | 15 分钟 |
 
-- Value: integer counter.
-- TTL: 900 seconds on first increment.
-- Not a source of truth for accounts.
-- Phone dimension only after successful normalize; invalid phones may still count on IP dimension.
+- 值：整型计数器。
+- TTL：首次递增时 900 秒。
+- 非账户事实源。
+- 手机号维度仅在规范化成功后计数；非法手机号仍可计入 IP 维度。
 
-## Entity: RegistrationFormSession（客户端，非持久）
+## 实体：RegistrationFormSession（客户端，非持久）
 
-| Field | Notes |
-|-------|--------|
-| phone input | 控件内，不写入 localStorage |
+| 字段 | 说明 |
+|------|------|
+| phone 输入 | 控件内，不写入 localStorage |
 | nickname | 控件内 |
 | role | 三选一，无默认也可，实施选“无预选强制选择” |
 | idempotency_key | 本次提交生成；重试复用直至成功或换新提交 |
-| ui phase | editing \| submitting \| success \| error |
-| field errors | 映射服务端字段错误 |
+| ui 阶段 | editing \| submitting \| success \| error |
+| 字段错误 | 映射服务端字段错误 |
 | request_id | 最近一次响应 |
 
 刷新可丢失；不得作为账户是否存在的依据。
 
-## Validation rules (server authority)
+## 校验规则（服务端权威）
 
-| Field | Rules |
-|-------|--------|
+| 字段 | 规则 |
+|------|------|
 | phone | FR-002a–c 规范化后 11 位大陆号 |
 | nickname | trim；长度 1–50；无 C0/C1 控制字符与换行 |
-| role | enum 三值 |
+| role | 枚举三值 |
 | idempotency_key | 非空，≤64，建议 UUID；非法则 400 |
 
-## Relationships
+## 关系
 
 - `RegistrationIdempotencyRecord.user_id` → `User.id`（成功路径）。
-- Rate-limit buckets 无 FK；按字符串维度关联。
+- 限流桶无 FK；按字符串维度关联。
 
-## Migration sketch
+## 迁移草图
 
-Revision after `0001_baseline`:
+接在 `0001_baseline` 之后的修订：
 
-1. CREATE TYPE `user_role`, `user_status`.
-2. CREATE TABLE `users` + UNIQUE phone + checks.
-3. CREATE TABLE `registration_idempotency_records` + UNIQUE key + FK + index on `expires_at`.
-4. Downgrade drops tables/types in reverse order.
+1. CREATE TYPE `user_role`、`user_status`。
+2. CREATE TABLE `users` + UNIQUE phone + checks。
+3. CREATE TABLE `registration_idempotency_records` + UNIQUE key + FK + `expires_at` 索引。
+4. Downgrade 按逆序 drop 表/类型。
 
-## Concurrency
+## 并发
 
-- Unique on `phone_normalized` + unique on `idempotency_key` provide last-line integrity.
-- Service: begin → optional idempotency lookup → insert user → insert idempotency → commit.
-- On unique violation: map to `PHONE_ALREADY_REGISTERED` or re-read soft-deleted → `ACCOUNT_UNAVAILABLE`；或幂等键冲突路径。
+- `phone_normalized` 唯一与 `idempotency_key` 唯一提供最后防线完整性。
+- 服务：begin → 可选幂等查找 → insert user → insert 幂等 → commit。
+- 唯一性冲突：映射为 `PHONE_ALREADY_REGISTERED`，或重读软删除 → `ACCOUNT_UNAVAILABLE`；或幂等键冲突路径。

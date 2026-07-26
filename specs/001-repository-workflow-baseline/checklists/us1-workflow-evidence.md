@@ -1,11 +1,11 @@
-# US1 Workflow Evidence
+# US1 工作流证据
 
-**Feature**: specs/001-repository-workflow-baseline — 仓库工程工作流基线  
-**Story**: US1 — 从仓库根目录完成日常工程动作  
-**Recorded**: 2026-07-15  
-**Environment**: macOS, Go 1.25.12, Python 3.11.15, Node 24.18.0, Docker Desktop
+**功能**：specs/001-repository-workflow-baseline — 仓库工程工作流基线
+**故事**：US1 — 从仓库根目录完成日常工程动作
+**记录日期**：2026-07-15
+**环境**：macOS, Go 1.25.12, Python 3.11.15, Node 24.18.0, Docker Desktop
 
-## 1. Root Makefile Help
+## 1. 根 Makefile 帮助
 
 ```text
 TokenMarket repository workflow
@@ -29,38 +29,38 @@ Side effects: fmt modifies declared source files; build creates local images
 Recovery: fix the reported component error and rerun the same command
 ```
 
-## 2. Frozen Bootstrap Idempotency
+## 2. 冻结 Bootstrap 幂等性
 
-Two consecutive `make bootstrap` runs completed without modifying any lock file
-or dependency resolution:
+连续两次 `make bootstrap` 运行完成时，未修改任何锁文件
+或依赖解析：
 
-- First run: installed/verified uv environments for tools/workflow, api-service,
-  billing-service, admin-service; ran `npm ci` for frontend.
-- Second run: `Resolved ... Checked ...` for all Python projects; `npm ci`
-  reported `up to date`.
+- 第一次运行：为 tools/workflow、api-service、billing-service、
+  admin-service 安装/验证了 uv 环境；为 frontend 运行了 `npm ci`。
+- 第二次运行：所有 Python 项目均为 `Resolved ... Checked ...`；`npm ci`
+  报告 `up to date`。
 
-No `uv.lock` or `package-lock.json` drift was observed between runs.
+各次运行之间未观察到 `uv.lock` 或 `package-lock.json` 漂移。
 
-## 3. Independent Type-Check
+## 3. 独立类型检查
 
 ```text
 [PASSED] repository type-check: [OK] aggregate type-check: {'status': 'PASSED', 'code': 'OK', 'passed': 9, 'failed': 0, 'skipped': 0}
 ```
 
-All eight components plus the repository workflow tool passed their respective
-type checks (Go vet/golangci-lint, mypy, tsc --noEmit).
+全部八个组件加上仓库工作流工具均通过了各自的
+类型检查（Go vet/golangci-lint、mypy、tsc --noEmit）。
 
-## 4. Aggregate Test / Lint / Build
+## 4. 聚合测试 / 静态检查 / 构建
 
-| Command | Result | Passed | Failed | Skipped |
+| 命令 | 结果 | 通过 | 失败 | 跳过 |
 |---------|--------|--------|--------|---------|
 | `make test` | PASSED | 9 | 0 | 0 |
 | `make lint` | PASSED | 9 | 0 | 0 |
 | `make build` | PASSED | 9 | 0 | 0 |
 
-### Component Test Counts
+### 组件测试计数
 
-| Component | Test Count | Runner |
+| 组件 | 测试数量 | 运行器 |
 |-----------|------------|--------|
 | proxy-gateway | 7 | go test -race |
 | api-service | 7 | pytest |
@@ -70,31 +70,31 @@ type checks (Go vet/golangci-lint, mypy, tsc --noEmit).
 | shared | 6 | pytest |
 | infra | 9 | pytest |
 | ops | 10 | pytest |
-| **Total** | **56** | — |
+| **合计** | **56** | — |
 
-### Workflow Contract Tests
+### 工作流契约测试
 
-`tests/workflow` suite: **126 passed, 0 failed**.
+`tests/workflow` 套件：**126 通过，0 失败**。
 
-## 5. PostgreSQL 15 Migration Round Trip
+## 5. PostgreSQL 15 迁移往返
 
 ```text
 [PASSED] repository migrate-check: [OK] migration owners validated: api-service, billing-service; mode=local
 [PASSED] repository migrate-integration-check: [OK] api-service and billing-service forward/backout/retry passed on isolated PostgreSQL 15
 ```
 
-- `migrate-check` validated that `api-service` and `billing-service` are the only
-  migration owners, with `admin-service` listed as a non-owner.
-- `migrate-integration-check` ran API→Billing forward, backout, retry, and final
-  head restoration against an isolated PostgreSQL 15 container without invoking
-  `make dev` or sharing a database.
+- `migrate-check` 验证了 `api-service` 与 `billing-service` 是仅有的
+  迁移所有者，`admin-service` 列为非所有者。
+- `migrate-integration-check` 在隔离的 PostgreSQL 15 容器上运行了
+  API→Billing 的前向、回退、重试与最终 head 恢复，未调用
+  `make dev`，也未共享数据库。
 
-## 6. Five Image Runtime Smoke
+## 6. 五个镜像运行时冒烟
 
-Built and smoke-tested images with independent build contexts, multi-stage
-Dockerfiles, non-root users, and health checks:
+构建并冒烟测试了具有独立构建上下文、多阶段
+Dockerfile、非 root 用户与健康检查的镜像：
 
-| Image | Tag | Size | Health Smoke |
+| 镜像 | 标签 | 大小 | 健康冒烟 |
 |-------|-----|------|--------------|
 | tokenmarket/proxy-gateway | 0.1.0 | 19.8 MB | PASSED |
 | tokenmarket/api-service | 0.1.0 | 275 MB | PASSED |
@@ -102,41 +102,41 @@ Dockerfiles, non-root users, and health checks:
 | tokenmarket/admin-service | 0.1.0 | 229 MB | PASSED |
 | tokenmarket/frontend | 0.1.0 | 76.8 MB | PASSED |
 
-## 7. Three Asset Bundle Summary
+## 7. 三个资产包摘要
 
-`make build` produced deterministic asset archives:
+`make build` 生成了确定性资产归档：
 
-| Bundle | Path | Size |
+| 包 | 路径 | 大小 |
 |--------|------|------|
 | shared-contracts | `shared/dist/shared-contracts.tar.gz` | 8.8 KB |
 | infra-assets | `infra/dist/infra-assets.tar.gz` | 607 B |
 | ops-assets | `ops/dist/ops-assets.tar.gz` | 1.6 KB |
 
-## 8. SF02 Zero-Side-Effect Gate
+## 8. SF02 零副作用门禁
 
-`make dev` and `make dev-down` both failed with `SF02_NOT_READY` before reading
-configuration or accessing Docker:
+`make dev` 与 `make dev-down` 均在读取配置或访问 Docker 之前
+以 `SF02_NOT_READY` 失败：
 
 ```text
 [FAILED] repository dev: [SF02_NOT_READY] SF02 must provide the lifecycle adapter
 [FAILED] repository dev-down: [SF02_NOT_READY] SF02 must provide the lifecycle adapter
 ```
 
-No local resources were started, stopped, or modified.
+未启动、停止或修改任何本地资源。
 
-## 9. Known Local Environment Notes
+## 9. 已知本地环境说明
 
-- Node was switched to `v24.18.0` via nvm for the verification session.
-- Go 1.25.12 and golangci-lint 1.64.8 were installed under `~/.local` to match
-  the toolchain manifest, because the host versions differed.
-- `ops/workflow/toolchains.json` was updated to record the actual npm version
-  bundled with Node 24.18.0 (`11.16.0`) based on the Node.js download archive.
-- `tools/workflow/manifest.py` was extended to accept `*.test.*` test files in
-  addition to `test_*` and `*_test.*`, matching the frontend Vitest convention.
+- 验证会话中通过 nvm 将 Node 切换为 `v24.18.0`。
+- 在 `~/.local` 下安装了 Go 1.25.12 与 golangci-lint 1.64.8，以匹配
+  工具链清单，因为主机版本不一致。
+- 根据 Node.js 下载归档，更新了 `ops/workflow/toolchains.json` 以记录
+  随 Node 24.18.0 附带的实际 npm 版本（`11.16.0`）。
+- 扩展了 `tools/workflow/manifest.py`，除 `test_*` 与 `*_test.*` 外
+  还接受 `*.test.*` 测试文件，以匹配前端 Vitest 约定。
 
-## 10. Sign-off
+## 10. 签核
 
-US1 implementation satisfies the acceptance criteria for root-level engineering
-actions: stable Makefile entry points, real per-component formatting/type-check/
-test/build, immutable image tags, isolated PG15 migration verification, and the
-SF02 transition guard.
+US1 实现满足根级工程动作的验收标准：
+稳定的 Makefile 入口、真实的按组件格式化/类型检查/
+测试/构建、不可变镜像标签、隔离的 PG15 迁移验证，以及
+SF02 过渡护栏。

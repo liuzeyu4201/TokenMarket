@@ -112,7 +112,9 @@ def test_compose_app_file_exists() -> None:
     assert not COMPOSE_FILE.is_symlink()
 
 
-@pytest.mark.parametrize("label,pattern", list(FORBIDDEN_RAW_FORMS.items()), ids=list(FORBIDDEN_RAW_FORMS))
+@pytest.mark.parametrize(
+    "label,pattern", list(FORBIDDEN_RAW_FORMS.items()), ids=list(FORBIDDEN_RAW_FORMS)
+)
 def test_app_forbidden_raw_forms(
     raw_compose_text: str, label: str, pattern: re.Pattern[str]
 ) -> None:

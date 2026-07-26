@@ -91,7 +91,7 @@ def test_component_manifest_exists_and_valid() -> None:
 def test_toolchain_manifest_exists_and_valid() -> None:
     """ops/workflow/toolchains.json must exist and declare required tools."""
     manifest = load_json("ops", "workflow", "toolchains.json")
-    assert manifest["schema_version"] == "1.0.0"
+    assert manifest["schema_version"] == "1.1.0"
     tools = manifest["tools"]
     assert tools
 
@@ -100,10 +100,28 @@ def test_toolchain_manifest_exists_and_valid() -> None:
     missing = required - names
     assert not missing, f"toolchain manifest missing required tools: {missing}"
 
+    docker = None
     for tool in tools:
         assert tool["exact_version"]
         assert tool["version_source"]
         assert tool["affected_components"]
+        if tool["tool"] == "docker":
+            docker = tool
+
+    assert docker is not None
+    assert docker["exact_version"] == "29.5.3"
+    assert docker["install_policy"] == "system-managed"
+    overrides = docker.get("execution_overrides")
+    assert isinstance(overrides, dict)
+    hosted = overrides.get("github-actions-ubuntu-24.04")
+    assert isinstance(hosted, dict)
+    assert hosted.get("match") == "exact-list"
+    allowed = hosted.get("allowed_versions")
+    assert isinstance(allowed, list) and allowed
+    assert allowed == ["28.0.4", "29.5.3"]
+    for version in allowed:
+        assert isinstance(version, str)
+        assert version  # exact non-empty strings only; no ranges
 
 
 def test_migration_owner_manifest_exists_and_valid() -> None:

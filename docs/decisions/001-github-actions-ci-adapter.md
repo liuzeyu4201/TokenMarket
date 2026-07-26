@@ -91,3 +91,4 @@ Any change that alters the Makefile command contract, component manifest, or req
 - `specs/001-repository-workflow-baseline/contracts/make-workflow.md`
 - `ops/workflow/components.json`
 - `ops/workflow/toolchains.json`
+- Related decision: [ADR 004: 托管工具链执行 Profile](./004-hosted-toolchain-execution-profiles.md)

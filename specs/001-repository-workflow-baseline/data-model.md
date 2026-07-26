@@ -125,13 +125,23 @@ declared ── structure created ──> scaffolded ── fmt/lint/test/build 
 | `affected_components` | component IDs | 非空 |
 | `install_policy` | enum | `preinstalled-required`、`locked-package-manager`、`verified-download`、`pinned-container` |
 | `integrity_reference` | checksum/digest/SHA | 下载的二进制、容器与 Actions 必需 |
+| `execution_overrides` | 可选 object | 工具链执行配置文件（execution profile）id → override 对象的映射。每个 override 要求 `match: exact-list` 与非空 `allowed_versions` 字符串列表（仅精确成员匹配）。可选 `rationale` 仅作说明 |
+
+**执行配置文件（execution profile）**（`toolchain-check` 的输入，不是 Make 的 `mode`）：
+
+| Profile id | 选择方式 | 版本解释 |
+|------------|-----------|------------------------|
+| `local`（默认） | 显式 `--toolchain-profile`，否则 `TOKENMARKET_TOOLCHAIN_PROFILE`，再否则默认 | 使用 `exact_version` 与既有匹配规则 |
+| `github-actions-ubuntu-24.04` | 必须显式；永不从 `CI`/`GITHUB_ACTIONS` 推断 | 对有对应 override 的工具使用 exact-list 批准列表；要求 `GITHUB_ACTIONS=true` 与 `RUNNER_OS=Linux` |
 
 **Invariants**:
 
-- 本地与 CI 检查读取同一版本来源。
+- 本地与 CI 检查读取同一版本来源文件（`ops/workflow/toolchains.json`）；解释可仅因显式 execution profile 而不同。
 - 缺失或不支持的版本在组件动作前失败。
+- 未知 profile、空批准列表、未知 `match` 值与托管真实性检查失败均失败关闭。
 - 工作流命令永不静默安装或升级工具链。
 - 缓存命中永不替代版本或完整性校验。
+- SF02 本地依赖生命周期的 Docker/Compose 精确钉选独立于本实体的托管 overrides。
 
 ## Entity: ConfigurationDefinition
 

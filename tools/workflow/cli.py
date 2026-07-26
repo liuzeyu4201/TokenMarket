@@ -73,6 +73,11 @@ def _print_event(event: dict[str, Any], *, plain: bool = False) -> None:
         print(to_jsonl(event))
 
 
+TOOLCHAIN_PROFILE_ENV = "TOKENMARKET_TOOLCHAIN_PROFILE"
+KNOWN_TOOLCHAIN_PROFILES = frozenset({"local", "github-actions-ubuntu-24.04"})
+HOSTED_TOOLCHAIN_PROFILE = "github-actions-ubuntu-24.04"
+
+
 def _load_toolchain_manifest(repo_root: Path) -> dict[str, Any]:
     path = repo_root / "ops" / "workflow" / "toolchains.json"
     with path.open("r", encoding="utf-8") as fh:
@@ -105,8 +110,110 @@ def _actual_version(tool: str) -> str | None:
     return match.group(0) if match else output.strip().split()[-1]
 
 
-def toolchain_check(manifest_path: Path, *, repo_root: Path | None = None) -> None:
-    """Validate declared tools are present and versions match."""
+def resolve_toolchain_profile(
+    *,
+    profile: str | None = None,
+    environment: Mapping[str, str] | None = None,
+) -> str:
+    """Resolve the toolchain execution profile.
+
+    Priority: explicit ``profile`` argument, then
+    ``TOKENMARKET_TOOLCHAIN_PROFILE``, then ``local``.
+
+    ``CI`` / ``GITHUB_ACTIONS`` / ``GITHUB_RUN_ID`` never select a profile;
+    they only prove hosted authenticity after an explicit hosted profile is
+    chosen.
+    """
+    if profile is not None and str(profile).strip() != "":
+        resolved = str(profile).strip()
+    else:
+        env = environment if environment is not None else os.environ
+        raw = env.get(TOOLCHAIN_PROFILE_ENV, "")
+        resolved = raw.strip() if raw else "local"
+    if resolved not in KNOWN_TOOLCHAIN_PROFILES:
+        raise WorkflowError(
+            "INVALID_CONFIG",
+            f"unknown toolchain profile {resolved!r}; "
+            f"allowed: {sorted(KNOWN_TOOLCHAIN_PROFILES)}",
+        )
+    return resolved
+
+
+def _assert_hosted_toolchain_environment(environment: Mapping[str, str]) -> None:
+    """Fail closed unless the hosted profile is proven by GitHub Actions facts."""
+    if environment.get("GITHUB_ACTIONS") != "true":
+        raise WorkflowError(
+            "INVALID_CONFIG",
+            f"toolchain profile {HOSTED_TOOLCHAIN_PROFILE!r} requires "
+            "GITHUB_ACTIONS=true",
+        )
+    if environment.get("RUNNER_OS") != "Linux":
+        raise WorkflowError(
+            "INVALID_CONFIG",
+            f"toolchain profile {HOSTED_TOOLCHAIN_PROFILE!r} requires "
+            "RUNNER_OS=Linux",
+        )
+
+
+def _apply_execution_override(
+    *,
+    tool_name: str,
+    actual: str,
+    override: Mapping[str, Any],
+    profile: str,
+) -> None:
+    """Validate an execution_overrides entry (exact-list only)."""
+    match = override.get("match")
+    if match != "exact-list":
+        raise WorkflowError(
+            "CONTRACT_DRIFT",
+            f"tool {tool_name!r} execution_overrides[{profile!r}].match "
+            f"must be 'exact-list', got {match!r}",
+        )
+    allowed = override.get("allowed_versions")
+    if not isinstance(allowed, list) or not allowed:
+        raise WorkflowError(
+            "CONTRACT_DRIFT",
+            f"tool {tool_name!r} execution_overrides[{profile!r}]."
+            "allowed_versions must be a non-empty list",
+        )
+    if not all(isinstance(item, str) and item for item in allowed):
+        raise WorkflowError(
+            "CONTRACT_DRIFT",
+            f"tool {tool_name!r} execution_overrides[{profile!r}]."
+            "allowed_versions must contain non-empty strings only",
+        )
+    if actual not in allowed:
+        raise WorkflowError(
+            "TOOL_VERSION_UNSUPPORTED",
+            f"tool {tool_name!r} version {actual!r} is not in allowed_versions "
+            f"{allowed!r} for profile {profile!r}",
+        )
+
+
+def toolchain_check(
+    manifest_path: Path,
+    *,
+    repo_root: Path | None = None,
+    profile: str | None = None,
+    environment: Mapping[str, str] | None = None,
+) -> None:
+    """Validate declared tools are present and versions match.
+
+    ``environment`` injects process env for tests; when omitted, ``os.environ``
+    is used. Profile resolution never auto-selects from ``CI`` or
+    ``GITHUB_ACTIONS``.
+    """
+    env: Mapping[str, str]
+    if environment is not None:
+        env = environment
+    else:
+        env = os.environ
+
+    resolved_profile = resolve_toolchain_profile(profile=profile, environment=env)
+    if resolved_profile == HOSTED_TOOLCHAIN_PROFILE:
+        _assert_hosted_toolchain_environment(env)
+
     with manifest_path.open("r", encoding="utf-8") as fh:
         manifest = json.load(fh)
 
@@ -130,14 +237,32 @@ def toolchain_check(manifest_path: Path, *, repo_root: Path | None = None) -> No
             actual = _actual_version(name)
             if actual is None:
                 raise WorkflowError("TOOL_MISSING", f"tool {name!r} is not installed")
-            if not _version_matches(actual, expected):
+
+            override: Mapping[str, Any] | None = None
+            if resolved_profile != "local":
+                overrides = tool.get("execution_overrides")
+                if isinstance(overrides, dict):
+                    candidate = overrides.get(resolved_profile)
+                    if isinstance(candidate, dict):
+                        override = candidate
+
+            if override is not None:
+                _apply_execution_override(
+                    tool_name=name,
+                    actual=actual,
+                    override=override,
+                    profile=resolved_profile,
+                )
+            elif not _version_matches(actual, expected):
                 raise WorkflowError(
                     "TOOL_VERSION_UNSUPPORTED",
                     f"tool {name!r} version {actual!r} does not match expected {expected!r}",
                 )
 
         integrity = tool.get("integrity_reference", "")
-        if integrity and (integrity.startswith("services/") or integrity.startswith("ops/")):
+        if integrity and (
+            integrity.startswith("services/") or integrity.startswith("ops/")
+        ):
             ref_path = repo_root / integrity if repo_root else _repo_root() / integrity
             if not ref_path.is_file():
                 raise WorkflowError(
@@ -159,9 +284,13 @@ def bootstrap(component_path: Path, *, frozen: bool = True) -> None:
         if result.returncode != 0:
             raise WorkflowError("STEP_FAILED", f"uv sync failed in {component_path}")
     elif (component_path / "go.mod").is_file():
-        result = subprocess.run(["go", "mod", "download"], cwd=component_path, check=False)
+        result = subprocess.run(
+            ["go", "mod", "download"], cwd=component_path, check=False
+        )
         if result.returncode != 0:
-            raise WorkflowError("STEP_FAILED", f"go mod download failed in {component_path}")
+            raise WorkflowError(
+                "STEP_FAILED", f"go mod download failed in {component_path}"
+            )
     elif (component_path / "package-lock.json").is_file():
         cmd = ["npm", "ci"]
         result = subprocess.run(cmd, cwd=component_path, check=False)
@@ -290,7 +419,9 @@ def execute_action(
         if action in ("start", "stop"):
             from .local_stack import start_local, stop_local
 
-            start_scope = (os.environ.get("TOKENMARKET_START_SCOPE") or "all").strip().lower()
+            start_scope = (
+                (os.environ.get("TOKENMARKET_START_SCOPE") or "all").strip().lower()
+            )
 
             # Port overrides arrive via environment (Makefile exports).
             port_keys = (
@@ -370,7 +501,9 @@ def execute_action(
                 continue
 
             if failed:
-                log.skip(action, component["id"], "execution", reason="previous step failed")
+                log.skip(
+                    action, component["id"], "execution", reason="previous step failed"
+                )
                 continue
 
             log.start(action, component["id"], "execution")
@@ -592,7 +725,9 @@ def _release_candidate_main(argv: Sequence[str], *, repo_root: Path) -> int:
     sub = parser.add_subparsers(dest="rc_action", required=True)
 
     capture_p = sub.add_parser("capture", help="Freeze a release candidate manifest")
-    capture_p.add_argument("--increment", required=True, choices=["p1", "p2", "P1", "P2"])
+    capture_p.add_argument(
+        "--increment", required=True, choices=["p1", "p2", "P1", "P2"]
+    )
     capture_p.add_argument("--output", required=True, help="Manifest JSON output path")
     capture_p.add_argument(
         "--allow-dirty",
@@ -712,6 +847,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="Local start/stop scope: all|apps (default all)",
     )
+    parser.add_argument(
+        "--toolchain-profile",
+        default=None,
+        help=(
+            "Toolchain execution profile: local | github-actions-ubuntu-24.04 "
+            f"(default: ${TOOLCHAIN_PROFILE_ENV} or local)"
+        ),
+    )
     parser.add_argument("--plain", action="store_true")
     parser.add_argument("--repo-root", default=None)
     args = parser.parse_args(raw)
@@ -728,7 +871,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.action == "toolchain-check":
         try:
-            toolchain_check(repo_root / "ops" / "workflow" / "toolchains.json", repo_root=repo_root)
+            toolchain_check(
+                repo_root / "ops" / "workflow" / "toolchains.json",
+                repo_root=repo_root,
+                profile=args.toolchain_profile,
+            )
             return 0
         except WorkflowError as exc:
             print(f"FAILED [{exc.code}] {exc.message}", file=sys.stderr)
@@ -739,7 +886,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest = load_manifest(repo_root / "ops" / "workflow" / "components.json")
         for component in manifest["components"]:
             comp_path = repo_root / component["path"]
-            if any((comp_path / f).is_file() for f in ("uv.lock", "go.sum", "package-lock.json")):
+            if any(
+                (comp_path / f).is_file()
+                for f in ("uv.lock", "go.sum", "package-lock.json")
+            ):
                 bootstrap(comp_path)
         return 0
 

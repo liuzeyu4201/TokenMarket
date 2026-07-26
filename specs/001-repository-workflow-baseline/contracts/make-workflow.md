@@ -35,7 +35,7 @@ make <target> [mode=local|test|prod]
 |--------|----------|
 | `bootstrap` | 在 `toolchain-check` 之后，仅为工作流工具与适用组件准备已提交锁解析的项目依赖；永不安装系统工具、重写锁或推断新版本；第二次运行为解析幂等 |
 | `type-check` | 运行完整可独立调用的 Go/Python/TypeScript type-check 集合；`lint` 也聚合同一集合，而非定义第二套实现 |
-| `toolchain-check` | 在副作用前校验工具、版本、锁文件与完整性引用 |
+| `toolchain-check` | 在副作用前校验工具、版本、锁文件与完整性引用。Profile 解析顺序：`--toolchain-profile`，然后 `TOKENMARKET_TOOLCHAIN_PROFILE`，再默认 `local`。Profile 永不从 `CI`/`GITHUB_ACTIONS`/`GITHUB_RUN_ID` 推断。托管 profile `github-actions-ubuntu-24.04` 要求 `GITHUB_ACTIONS=true` 与 `RUNNER_OS=Linux`，并仅对声明了 `execution_overrides` 的工具应用 `match: exact-list`；无 override 的工具保持既有 install policy 与版本规则。缺失工具、未知 profile 与未批准版本失败关闭 |
 | `fmt-check` | 供日常使用与 CI 预检的非修改格式化检查 |
 | `structure-check` | 对账组件清单、路径、负责人、测试、适配器与允许的依赖 |
 | `contracts-check` | 校验契约 schema、版本、所有权、链接与生成漂移 |

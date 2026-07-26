@@ -43,7 +43,7 @@
 
 | 门禁 | 证据 |
 |------|----------|
-| Toolchains | 精确受支持版本与全部锁文件已校验 |
+| Toolchains | 在显式工具链执行配置文件（execution profile）下校验已声明工具版本与全部锁文件（默认 `local`；GitHub Actions 设置 `TOKENMARKET_TOOLCHAIN_PROFILE=github-actions-ubuntu-24.04`，并由 runner 提供 `GITHUB_ACTIONS=true` 与 `RUNNER_OS=Linux`）。托管 Docker 版本使用 `ops/workflow/toolchains.json` 中的 exact-list 批准列表；未知 profile 与未批准版本失败关闭 |
 | Bootstrap | 冻结的 workflow/Go/Python/npm 依赖准备成功两次且不改变锁文件或解析结果 |
 | Format | 非修改检查通过；干净检出保持格式幂等 |
 | Type/lint/boundary | 独立 `type-check` 与聚合 lint 对每个适用组件与仓库边界通过 |

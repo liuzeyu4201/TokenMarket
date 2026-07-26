@@ -11,9 +11,7 @@ const createSession = vi.fn()
 const bootstrapSession = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
-  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>(
-    '../api/v1/phoneAuth',
-  )
+  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
   return {
     ...actual,
     requestChallenge: (...args: unknown[]) => requestChallenge(...args),
@@ -316,9 +314,7 @@ describe('Login page', () => {
     await user.type(screen.getByLabelText('验证码'), '654321')
     await user.click(screen.getByRole('button', { name: '登录' }))
     await waitFor(() => {
-      expect(screen.getByTestId('mirror')).toHaveTextContent(
-        'authenticated:user-ctx:唯一上下文',
-      )
+      expect(screen.getByTestId('mirror')).toHaveTextContent('authenticated:user-ctx:唯一上下文')
     })
     const dash = screen.getByRole('heading', { name: '工作台' }).closest('.card')
     expect(dash).toBeTruthy()

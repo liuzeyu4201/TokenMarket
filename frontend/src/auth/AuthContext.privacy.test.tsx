@@ -5,11 +5,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  AUTH_BROADCAST_CHANNEL,
-  AuthProvider,
-  useAuth,
-} from './AuthContext'
+import { AUTH_BROADCAST_CHANNEL, AuthProvider, useAuth } from './AuthContext'
 import { PhoneAuthClientError } from '../api/v1/phoneAuth'
 import type { SessionData } from '../types/auth'
 
@@ -17,9 +13,7 @@ const bootstrapSession = vi.fn()
 const logoutSession = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
-  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>(
-    '../api/v1/phoneAuth',
-  )
+  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
   return {
     ...actual,
     bootstrapSession: (...args: unknown[]) => bootstrapSession(...args),
@@ -149,9 +143,9 @@ describe('AuthContext privacy', () => {
     await waitFor(() => {
       expect(messages).toContain('login')
     })
-    expect(messages.every((m) => m === 'login' || m === 'logout' || m === 'session-invalidated')).toBe(
-      true,
-    )
+    expect(
+      messages.every((m) => m === 'login' || m === 'logout' || m === 'session-invalidated'),
+    ).toBe(true)
     listener.close()
   })
 })

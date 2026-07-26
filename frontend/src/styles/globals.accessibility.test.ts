@@ -72,12 +72,8 @@ describe('globals.css WCAG 2.2 AA token ratios', () => {
   })
 
   it('normal text on background meets 4.5:1', () => {
-    expect(contrastRatio(tokens['color-text'], tokens['color-bg'])).toBeGreaterThanOrEqual(
-      4.5,
-    )
-    expect(
-      contrastRatio(tokens['color-text'], tokens['color-surface']),
-    ).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(tokens['color-text'], tokens['color-bg'])).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(tokens['color-text'], tokens['color-surface'])).toBeGreaterThanOrEqual(4.5)
   })
 
   it('error and success text on their surfaces meet 4.5:1', () => {

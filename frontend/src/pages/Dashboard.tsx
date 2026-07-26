@@ -23,9 +23,7 @@ export function Dashboard() {
     <div className="card" data-testid="dashboard-protected">
       <h1>工作台</h1>
       <p>受保护首页占位。业务能力将陆续开放。</p>
-      <p className="hint">
-        使用顶部导航的「退出」可结束当前会话。刷新后会话由服务端 Cookie 恢复。
-      </p>
+      <p className="hint">使用顶部导航的「退出」可结束当前会话。刷新后会话由服务端 Cookie 恢复。</p>
       <dl className="session-summary" aria-label="当前会话摘要">
         <div>
           <dt>昵称</dt>

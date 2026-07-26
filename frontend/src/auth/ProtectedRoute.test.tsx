@@ -10,9 +10,7 @@ const bootstrapSession = vi.fn()
 const logoutSession = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
-  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>(
-    '../api/v1/phoneAuth',
-  )
+  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
   return {
     ...actual,
     bootstrapSession: (...args: unknown[]) => bootstrapSession(...args),

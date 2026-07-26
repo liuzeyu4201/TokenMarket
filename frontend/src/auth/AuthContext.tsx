@@ -17,11 +17,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import {
-  PhoneAuthClientError,
-  bootstrapSession,
-  logoutSession,
-} from '../api/v1/phoneAuth'
+import { PhoneAuthClientError, bootstrapSession, logoutSession } from '../api/v1/phoneAuth'
 import type { AuthStatus, SessionData, SessionSummary } from '../types/auth'
 import { toSessionSummary } from '../types/auth'
 import { clearChallenge } from './challengeState'

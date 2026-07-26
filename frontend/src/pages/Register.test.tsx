@@ -40,13 +40,18 @@ describe('Register page', () => {
     const user = userEvent.setup()
     const { ApiError } = await import('../api/client')
     registerUser.mockRejectedValue(
-      new ApiError('conflict', 409, {
-        code: 'PHONE_ALREADY_REGISTERED',
-        message: '该手机号已被注册',
-        data: null,
-        request_id: 'req-occupied',
-        timestamp: '',
-      }, 'req-occupied'),
+      new ApiError(
+        'conflict',
+        409,
+        {
+          code: 'PHONE_ALREADY_REGISTERED',
+          message: '该手机号已被注册',
+          data: null,
+          request_id: 'req-occupied',
+          timestamp: '',
+        },
+        'req-occupied',
+      ),
     )
     render(<Register />)
     await fillValid(user)
@@ -61,11 +66,16 @@ describe('Register page', () => {
     const user = userEvent.setup()
     const { ApiError } = await import('../api/client')
     registerUser.mockRejectedValue(
-      new ApiError('unavailable', 409, {
-        code: 'ACCOUNT_UNAVAILABLE',
-        message: '账户不可用，请通过恢复流程处理',
-        request_id: 'req-soft',
-      }, 'req-soft'),
+      new ApiError(
+        'unavailable',
+        409,
+        {
+          code: 'ACCOUNT_UNAVAILABLE',
+          message: '账户不可用，请通过恢复流程处理',
+          request_id: 'req-soft',
+        },
+        'req-soft',
+      ),
     )
     render(<Register />)
     await fillValid(user)
@@ -79,11 +89,16 @@ describe('Register page', () => {
     const user = userEvent.setup()
     const { ApiError } = await import('../api/client')
     registerUser.mockRejectedValue(
-      new ApiError('limited', 429, {
-        code: 'RATE_LIMITED',
-        message: '请求过于频繁，请稍后再试',
-        request_id: 'req-rl',
-      }, 'req-rl'),
+      new ApiError(
+        'limited',
+        429,
+        {
+          code: 'RATE_LIMITED',
+          message: '请求过于频繁，请稍后再试',
+          request_id: 'req-rl',
+        },
+        'req-rl',
+      ),
     )
     render(<Register />)
     await fillValid(user)

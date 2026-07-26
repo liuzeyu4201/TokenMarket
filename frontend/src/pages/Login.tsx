@@ -1,18 +1,6 @@
-import {
-  FormEvent,
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import {
-  PhoneAuthClientError,
-  createSession,
-  requestChallenge,
-} from '../api/v1/phoneAuth'
+import { PhoneAuthClientError, createSession, requestChallenge } from '../api/v1/phoneAuth'
 import { useAuth } from '../auth/AuthContext'
 import {
   clearChallenge,
@@ -41,13 +29,7 @@ export type LoginUiState =
   | 'rate-limited'
   | 'unavailable'
 
-type ErrorKind =
-  | 'field-error'
-  | 'code-error'
-  | 'expired'
-  | 'rate-limited'
-  | 'unavailable'
-  | null
+type ErrorKind = 'field-error' | 'code-error' | 'expired' | 'rate-limited' | 'unavailable' | null
 
 /** Only restore in-app relative paths; block open redirects. */
 export function safeInternalPath(candidate: unknown, fallback = '/dashboard'): string {
@@ -94,9 +76,7 @@ export function Login() {
 
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
-  const [challenge, setChallenge] = useState<ChallengeAcceptedData | null>(() =>
-    loadChallenge(),
-  )
+  const [challenge, setChallenge] = useState<ChallengeAcceptedData | null>(() => loadChallenge())
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [errorKind, setErrorKind] = useState<ErrorKind>(null)
@@ -117,9 +97,7 @@ export function Login() {
   const loginInFlightRef = useRef(false)
   const prevResendPositiveRef = useRef(false)
 
-  const resendSeconds = challenge
-    ? secondsUntilDeadline(challenge.resend_available_at, nowMs)
-    : 0
+  const resendSeconds = challenge ? secondsUntilDeadline(challenge.resend_available_at, nowMs) : 0
   const canResend = !challenge || resendSeconds <= 0
 
   const loginState = useMemo(
@@ -210,10 +188,7 @@ export function Login() {
     codeInFlightRef.current = true
     setRequestingCode(true)
     try {
-      const accepted = await requestChallenge(
-        { phone: phone.trim() },
-        idempotencyKeyRef.current,
-      )
+      const accepted = await requestChallenge({ phone: phone.trim() }, idempotencyKeyRef.current)
       setChallenge(accepted)
       saveChallenge(accepted)
       // Next independent "get code" uses a fresh key after this action completed.
@@ -321,8 +296,7 @@ export function Login() {
           setErrorKind('code-error')
           focusOtp()
         } else if (err.action === 'request_new_code') {
-          const expired =
-            err.code === 'CHALLENGE_EXPIRED' || /过期/.test(err.message)
+          const expired = err.code === 'CHALLENGE_EXPIRED' || /过期/.test(err.message)
           setFormError(err.message)
           setErrorKind(expired ? 'expired' : 'code-error')
           clearChallenge()
@@ -413,9 +387,7 @@ export function Login() {
               请求已受理。请向 <strong>{challenge.phone_masked}</strong>{' '}
               对应终端查收验证码（若可接收），并在有效期内完成登录。
             </p>
-            <p className="hint">
-              受理结果不表示账户是否存在，也不保证短信一定送达。
-            </p>
+            <p className="hint">受理结果不表示账户是否存在，也不保证短信一定送达。</p>
           </div>
           {/* Visual countdown only — not aria-live (avoids per-second SR noise). */}
           {!canResend ? (

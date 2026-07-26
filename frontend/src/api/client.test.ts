@@ -201,7 +201,9 @@ describe('api client same-origin auth', () => {
       ),
     )
 
-    await expect(apiFetch('/api/v1/auth/register', { method: 'POST', body: '{}' })).rejects.toMatchObject({
+    await expect(
+      apiFetch('/api/v1/auth/register', { method: 'POST', body: '{}' }),
+    ).rejects.toMatchObject({
       requestId: 'from-body',
       code: 'VALIDATION_ERROR',
     })

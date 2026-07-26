@@ -14,9 +14,7 @@ import { PhoneAuthClientError } from './api/v1/phoneAuth'
 const bootstrapSession = vi.fn()
 
 vi.mock('./api/v1/phoneAuth', async () => {
-  const actual = await vi.importActual<typeof import('./api/v1/phoneAuth')>(
-    './api/v1/phoneAuth',
-  )
+  const actual = await vi.importActual<typeof import('./api/v1/phoneAuth')>('./api/v1/phoneAuth')
   return {
     ...actual,
     bootstrapSession: (...args: unknown[]) => bootstrapSession(...args),

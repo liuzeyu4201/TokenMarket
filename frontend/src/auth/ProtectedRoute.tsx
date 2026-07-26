@@ -50,13 +50,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (auth.status !== 'authenticated' || !auth.session) {
     const from = `${location.pathname}${location.search}`
-    return (
-      <Navigate
-        to="/login"
-        replace
-        state={{ from: safeReturnPath(from, from) }}
-      />
-    )
+    return <Navigate to="/login" replace state={{ from: safeReturnPath(from, from) }} />
   }
 
   return <>{children}</>

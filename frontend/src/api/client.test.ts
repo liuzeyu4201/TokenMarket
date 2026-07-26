@@ -21,6 +21,41 @@ function jsonResponse(
   })
 }
 
+type FetchMockFn = {
+  mock: {
+    calls: ReadonlyArray<readonly [RequestInfo | URL, RequestInit?] | readonly unknown[]>
+  }
+}
+
+/** Extract input + required RequestInit from a fetch mock call with runtime checks. */
+function requireFetchCall(
+  fetchMock: FetchMockFn,
+  index = 0,
+): { input: RequestInfo | URL; init: RequestInit } {
+  const call = fetchMock.mock.calls[index]
+  expect(call).toBeDefined()
+  if (call === undefined) {
+    throw new Error('expected fetch to be called')
+  }
+  if (call.length < 1) {
+    throw new Error('expected fetch call to include input')
+  }
+  const input = call[0]
+  if (
+    typeof input !== 'string' &&
+    !(typeof URL !== 'undefined' && input instanceof URL) &&
+    !(typeof Request !== 'undefined' && input instanceof Request)
+  ) {
+    throw new Error('expected fetch RequestInfo | URL')
+  }
+  const init = call[1]
+  expect(init).toBeDefined()
+  if (init === undefined || typeof init !== 'object' || init === null) {
+    throw new Error('expected fetch RequestInit')
+  }
+  return { input, init }
+}
+
 describe('api client same-origin auth', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -36,9 +71,10 @@ describe('api client same-origin auth', () => {
     expect(resolveApiUrl('/api/v1/auth/sessions')).not.toContain('localhost:8000')
   })
 
-  it('does not fall back to direct API host when VITE_API_BASE_URL is unset', () => {
-    // Vitest: unsetting leaves import.meta.env value empty/undefined → relative base
-    vi.stubEnv('VITE_API_BASE_URL', undefined as unknown as string)
+  it('uses relative paths when VITE_API_BASE_URL is unset or blank', () => {
+    // Vitest cannot reliably express “env key absent” without unsafe casts.
+    // Blank string hits the same getApiBaseUrl() fallback as an unset value.
+    vi.stubEnv('VITE_API_BASE_URL', '')
     const base = getApiBaseUrl()
     expect(base).toBe('')
     expect(isDirectApiHost(base)).toBe(false)
@@ -63,7 +99,7 @@ describe('api client same-origin auth', () => {
 
   it('sameOriginAuth rejects direct API base and uses relative path when unset', async () => {
     vi.stubEnv('VITE_API_BASE_URL', '')
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       expect(String(input)).toBe('/api/v1/auth/session')
       return jsonResponse({ code: '0', message: 'ok', data: {}, request_id: 'r' })
     })
@@ -73,7 +109,7 @@ describe('api client same-origin auth', () => {
   })
 
   it('uses relative /api paths in fetch URL', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input)
       expect(url).toBe('/api/v1/auth/register')
       return jsonResponse({
@@ -92,33 +128,38 @@ describe('api client same-origin auth', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const { input } = requireFetchCall(fetchMock)
+    const url = String(input)
     expect(url).toBe('/api/v1/auth/register')
     expect(url).not.toMatch(/^https?:\/\/127\.0\.0\.1:8000/)
   })
 
   it('always sends credentials: include', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse({ code: '0', message: 'ok', data: null, request_id: 'r' }),
     )
     vi.stubGlobal('fetch', fetchMock)
 
     await apiFetch('/api/v1/auth/session', { method: 'GET' })
 
-    const init = fetchMock.mock.calls[0][1] as RequestInit
+    const { init } = requireFetchCall(fetchMock)
     expect(init.credentials).toBe('include')
   })
 
   it('sends X-Request-ID as UUID on every request', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse({ code: '0', message: 'ok', data: null, request_id: 'r' }),
     )
     vi.stubGlobal('fetch', fetchMock)
 
     await apiFetch('/api/v1/ping')
 
-    const init = fetchMock.mock.calls[0][1] as RequestInit
-    const headers = init.headers as Record<string, string>
+    const { init } = requireFetchCall(fetchMock)
+    const headers = init.headers
+    expect(headers).toBeDefined()
+    if (headers === undefined || Array.isArray(headers) || headers instanceof Headers) {
+      throw new Error('expected plain header record')
+    }
     expect(headers['X-Request-ID']).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     )
@@ -128,7 +169,7 @@ describe('api client same-origin auth', () => {
     vi.useFakeTimers()
     vi.stubGlobal(
       'fetch',
-      vi.fn((_url: string, init?: RequestInit) => {
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
         return new Promise((_resolve, reject) => {
           init?.signal?.addEventListener('abort', () => {
             reject(new DOMException('Aborted', 'AbortError'))
@@ -150,7 +191,7 @@ describe('api client same-origin auth', () => {
   it('parses unified envelope errors (code, message, request_id)', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
+      vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
         jsonResponse(
           {
             code: 'RATE_LIMITED',
@@ -172,12 +213,14 @@ describe('api client same-origin auth', () => {
       expect.unreachable('should throw')
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError)
-      const apiErr = err as ApiError
-      expect(apiErr.code).toBe('RATE_LIMITED')
-      expect(apiErr.message).toBe('请求过于频繁，请稍后再试')
-      expect(apiErr.status).toBe(429)
-      expect(apiErr.requestId).toBe('req-header-9')
-      expect(apiErr.body).toMatchObject({
+      if (!(err instanceof ApiError)) {
+        throw new Error('expected ApiError')
+      }
+      expect(err.code).toBe('RATE_LIMITED')
+      expect(err.message).toBe('请求过于频繁，请稍后再试')
+      expect(err.status).toBe(429)
+      expect(err.requestId).toBe('req-header-9')
+      expect(err.body).toMatchObject({
         code: 'RATE_LIMITED',
         request_id: 'req-envelope-9',
       })
@@ -187,7 +230,7 @@ describe('api client same-origin auth', () => {
   it('prefers body request_id when response header is absent', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
+      vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
         jsonResponse(
           {
             code: 'VALIDATION_ERROR',

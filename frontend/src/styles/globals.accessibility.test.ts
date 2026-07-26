@@ -1,9 +1,15 @@
 /**
  * WCAG 2.2 AA design-token contrast checks (T114 / T128).
  * Uses relative luminance against documented CSS custom properties in globals.css.
+ *
+ * Note: under the current Vitest config, `*.css?raw` resolves to an empty string
+ * (CSS pipeline mock). Load the real file via Node fs + import.meta.url instead.
  */
+
+/** @vitest-environment node */
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 function parseHex(hex: string): [number, number, number] {
@@ -37,17 +43,17 @@ function contrastRatio(fg: string, bg: string): number {
   return (lighter + 0.05) / (darker + 0.05)
 }
 
-function tokenMap(css: string): Record<string, string> {
+function tokenMap(cssText: string): Record<string, string> {
   const out: Record<string, string> = {}
   const re = /--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;/g
   let m: RegExpExecArray | null
-  while ((m = re.exec(css)) !== null) {
+  while ((m = re.exec(cssText)) !== null) {
     out[m[1]] = m[2]
   }
   return out
 }
 
-const css = readFileSync(resolve(__dirname, 'globals.css'), 'utf8')
+const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'globals.css'), 'utf8')
 const tokens = tokenMap(css)
 
 describe('globals.css WCAG 2.2 AA token ratios', () => {

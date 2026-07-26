@@ -64,7 +64,11 @@ def test_dispatcher_queue_age_thresholds() -> None:
     text = _alerts()
     assert "30" in text  # >30s warning
     assert "120" in text  # >120s critical
-    assert "dispatcher" in text.lower() or "queue" in text.lower() or "eligible" in text.lower()
+    assert (
+        "dispatcher" in text.lower()
+        or "queue" in text.lower()
+        or "eligible" in text.lower()
+    )
 
 
 def test_revocation_visibility_critical() -> None:
@@ -93,4 +97,9 @@ def test_runbook_documents_recovery_and_exclusions() -> None:
 def test_runbook_sms_fail_closed_matrix() -> None:
     rb = _runbook()
     # FR-016: production without approved SMS remains unavailable
-    assert "synthetic" in rb.lower() or "fail" in rb.lower() or "不可用" in rb or "SMS" in rb
+    assert (
+        "synthetic" in rb.lower()
+        or "fail" in rb.lower()
+        or "不可用" in rb
+        or "SMS" in rb
+    )

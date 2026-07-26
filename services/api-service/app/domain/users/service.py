@@ -169,9 +169,11 @@ class RegistrationService:
                 "user_id": str(user.id),
                 "role": user.role.value,
                 "status": "active",
-                "created_at": user.created_at.isoformat()
-                if user.created_at.tzinfo
-                else user.created_at.replace(tzinfo=timezone.utc).isoformat(),
+                "created_at": (
+                    user.created_at.isoformat()
+                    if user.created_at.tzinfo
+                    else user.created_at.replace(tzinfo=timezone.utc).isoformat()
+                ),
                 "phone_masked": mask_phone(phone_normalized),
             }
             await self._idem.create(

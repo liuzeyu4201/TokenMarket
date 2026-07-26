@@ -267,7 +267,9 @@ def record_auth_session_revocation_visibility(seconds: float) -> None:
     AUTH_SESSION_REVOCATION_VISIBILITY_SECONDS.observe(max(seconds, 0.0))
 
 
-def record_auth_dispatcher_claim(result: str, queue_age_seconds: float | None = None) -> None:
+def record_auth_dispatcher_claim(
+    result: str, queue_age_seconds: float | None = None
+) -> None:
     AUTH_DISPATCHER_CLAIMS_TOTAL.labels(result=result.replace(" ", "_")[:64]).inc()
     if queue_age_seconds is not None:
         AUTH_DISPATCHER_QUEUE_AGE_SECONDS.observe(max(queue_age_seconds, 0.0))

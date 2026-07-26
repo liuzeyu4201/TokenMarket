@@ -85,7 +85,9 @@ def test_challenge_request_timing_structure(
         "suspended": [
             account_factory.create_suspended().phone_normalized for _ in range(n)
         ],
-        "deleted": [account_factory.create_deleted().phone_normalized for _ in range(n)],
+        "deleted": [
+            account_factory.create_deleted().phone_normalized for _ in range(n)
+        ],
         "unknown": [account_factory.unknown_phone() for _ in range(n)],
     }
 

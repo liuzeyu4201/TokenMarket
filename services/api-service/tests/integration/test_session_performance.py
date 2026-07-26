@@ -18,10 +18,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.config import clear_auth_settings_cache, load_auth_settings
 from app.dependencies import create_session_engine
 from app.dispatch.auth_delivery import AuthDeliveryDispatcher
-from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.main import app
 from app.rate_limit import MemoryRateLimiter
 from app.security.otp import derive_otp
@@ -157,7 +157,9 @@ def test_session_check_p95_under_50ms_light(
     p95 = _p95(samples)
     # Local integration bound (spec: ≤50ms p95 in acceptance env).
     # Allow generous CI margin while still catching multi-second regressions.
-    assert p95 < 0.25, f"session check p95={p95:.4f}s mean={statistics.mean(samples):.4f}s"
+    assert (
+        p95 < 0.25
+    ), f"session check p95={p95:.4f}s mean={statistics.mean(samples):.4f}s"
 
 
 def test_logout_and_old_session_reject_under_one_second(

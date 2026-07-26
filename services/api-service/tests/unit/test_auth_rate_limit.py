@@ -140,13 +140,9 @@ async def test_phone_limit_five_per_hour() -> None:
     phone = secrets.token_bytes(32)
     ip = secrets.token_bytes(32)
     for n in range(5):
-        d = await lim.check_and_increment(
-            phone_ref=phone, ip_ref=ip, member_id=f"m{n}"
-        )
+        d = await lim.check_and_increment(phone_ref=phone, ip_ref=ip, member_id=f"m{n}")
         assert d.allowed, n
-    denied = await lim.check_and_increment(
-        phone_ref=phone, ip_ref=ip, member_id="m6"
-    )
+    denied = await lim.check_and_increment(phone_ref=phone, ip_ref=ip, member_id="m6")
     assert not denied.allowed
     assert denied.dimension == "phone"
     assert denied.retry_after_seconds >= 1

@@ -89,8 +89,12 @@ class VerificationRequestIdempotencyRecord(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    replay_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    delete_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    replay_until: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    delete_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class VerificationChallenge(Base):
@@ -137,9 +141,7 @@ class VerificationChallenge(Base):
             "uq_vc_phone_ref_current",
             "phone_ref",
             unique=True,
-            postgresql_where=text(
-                "state IN ('pending_delivery', 'delivered')"
-            ),
+            postgresql_where=text("state IN ('pending_delivery', 'delivered')"),
         ),
         Index("idx_vc_phone_ref_created_at", "phone_ref", "created_at"),
         Index(
@@ -203,14 +205,18 @@ class VerificationChallenge(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     consumed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     invalidated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    delete_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delete_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class AuthSession(Base):
@@ -260,7 +266,9 @@ class AuthSession(Base):
     token_digest: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
     token_key_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     role_snapshot: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", values_callable=lambda x: [e.value for e in x]),
+        Enum(
+            UserRole, name="user_role", values_callable=lambda x: [e.value for e in x]
+        ),
         nullable=False,
     )
     issued_at: Mapped[datetime] = mapped_column(
@@ -269,13 +277,17 @@ class AuthSession(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=text("NOW()"),
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     revocation_reason: Mapped[str | None] = mapped_column(String(24), nullable=True)
     created_request_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    delete_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delete_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class AuthenticationSecurityEvent(Base):
@@ -319,4 +331,6 @@ class AuthenticationSecurityEvent(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=text("NOW()"),
     )
-    delete_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delete_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )

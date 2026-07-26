@@ -22,7 +22,9 @@ AUTH_IP_LIMIT = 20
 AUTH_WINDOW_SECONDS = 3600  # rolling 1 hour
 AUTH_TTL_SECONDS = 3700  # slightly > window
 
-_LUA_PATH = Path(__file__).resolve().parent / "domain" / "authentication" / "rate_limit.lua"
+_LUA_PATH = (
+    Path(__file__).resolve().parent / "domain" / "authentication" / "rate_limit.lua"
+)
 _LUA_SCRIPT: str | None = None
 
 
@@ -87,12 +89,12 @@ class RedisAuthRateLimiter:
         self._ip_limit = ip_limit
         self._window_ms = window_seconds * 1000
         self._ttl = ttl_seconds
-        self._script = lua_script if lua_script is not None else load_auth_rate_limit_lua()
+        self._script = (
+            lua_script if lua_script is not None else load_auth_rate_limit_lua()
+        )
         self._sha: str | None = None
 
-    async def _eval(
-        self, keys: list[str], args: list[str | int]
-    ) -> list[object]:
+    async def _eval(self, keys: list[str], args: list[str | int]) -> list[object]:
         try:
             if self._sha is None:
                 self._sha = await self._redis.script_load(self._script)
@@ -215,9 +217,7 @@ def build_auth_rate_limiter_from_env() -> AuthRateLimiter | None:
     if not url:
         return None
     env = (
-        os.environ.get("MODE")
-        or os.environ.get("APP_ENV")
-        or "local"
+        os.environ.get("MODE") or os.environ.get("APP_ENV") or "local"
     ).strip().lower() or "local"
     client = Redis.from_url(url, decode_responses=True)
     return RedisAuthRateLimiter(client, env=env)

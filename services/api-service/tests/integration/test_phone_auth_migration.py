@@ -240,7 +240,7 @@ def test_frozen_migrations_not_edited() -> None:
     assert 'revision: str = "0003_phone_login_session"' in body
     assert 'down_revision: Union[str, None] = "0002_users_registration"' in body
     # Must not rewrite prior revisions in-file
-    assert "op.drop_table(\"users\")" not in body
+    assert 'op.drop_table("users")' not in body
     assert "registration_idempotency_records" not in body or "create_table" in body
 
 

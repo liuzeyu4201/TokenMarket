@@ -105,8 +105,16 @@ def _insert_challenge(
             "user_id": user_id,
             "idempotency_id": idempotency_id,
             "phone_ref": phone_ref,
-            "code_digest": b"\xab" * 32 if state in ("pending_delivery", "delivered", "dispatching") else None,
-            "code_salt": b"\xcd" * 16 if state in ("pending_delivery", "delivered", "dispatching") else None,
+            "code_digest": (
+                b"\xab" * 32
+                if state in ("pending_delivery", "delivered", "dispatching")
+                else None
+            ),
+            "code_salt": (
+                b"\xcd" * 16
+                if state in ("pending_delivery", "delivered", "dispatching")
+                else None
+            ),
             "provider_ref": uuid.uuid4(),
             "send_started_at": send_started_at,
             "dispatch_finished_at": dispatch_finished_at,
@@ -233,12 +241,8 @@ def test_single_current_challenge_partial_unique(
     user = factory.create_active()
     phone_ref = b"\x66" * 32
     with constraint_engine.begin() as conn:
-        id1 = _insert_idempotency(
-            conn, key_digest=b"\x71" * 32, phone_ref=phone_ref
-        )
-        id2 = _insert_idempotency(
-            conn, key_digest=b"\x72" * 32, phone_ref=phone_ref
-        )
+        id1 = _insert_idempotency(conn, key_digest=b"\x71" * 32, phone_ref=phone_ref)
+        id2 = _insert_idempotency(conn, key_digest=b"\x72" * 32, phone_ref=phone_ref)
         _insert_challenge(
             conn,
             idempotency_id=id1,
@@ -266,12 +270,8 @@ def test_superseded_allows_new_current_challenge(
     user = factory.create_active()
     phone_ref = b"\x77" * 32
     with constraint_engine.begin() as conn:
-        id1 = _insert_idempotency(
-            conn, key_digest=b"\x81" * 32, phone_ref=phone_ref
-        )
-        id2 = _insert_idempotency(
-            conn, key_digest=b"\x82" * 32, phone_ref=phone_ref
-        )
+        id1 = _insert_idempotency(conn, key_digest=b"\x81" * 32, phone_ref=phone_ref)
+        id2 = _insert_idempotency(conn, key_digest=b"\x82" * 32, phone_ref=phone_ref)
         _insert_challenge(
             conn,
             idempotency_id=id1,
@@ -293,9 +293,7 @@ def test_send_started_state_check(constraint_engine, factory: AccountFactory) ->
     user = factory.create_active()
     phone_ref = b"\x88" * 32
     with constraint_engine.begin() as conn:
-        idem = _insert_idempotency(
-            conn, key_digest=b"\x91" * 32, phone_ref=phone_ref
-        )
+        idem = _insert_idempotency(conn, key_digest=b"\x91" * 32, phone_ref=phone_ref)
         with pytest.raises(IntegrityError):
             with conn.begin_nested():
                 # pending_delivery cannot have send_started_at
@@ -313,9 +311,7 @@ def test_attempt_count_bounds(constraint_engine, factory: AccountFactory) -> Non
     user = factory.create_active()
     phone_ref = b"\x99" * 32
     with constraint_engine.begin() as conn:
-        idem = _insert_idempotency(
-            conn, key_digest=b"\xa1" * 32, phone_ref=phone_ref
-        )
+        idem = _insert_idempotency(conn, key_digest=b"\xa1" * 32, phone_ref=phone_ref)
         with pytest.raises(IntegrityError):
             with conn.begin_nested():
                 _insert_challenge(
@@ -421,9 +417,7 @@ def test_audit_on_delete_set_null(
             state="consumed",
             consumed_at=now,
         )
-        session_id = _insert_session(
-            conn, user_id=user.id, token_digest=b"\xf3" * 32
-        )
+        session_id = _insert_session(conn, user_id=user.id, token_digest=b"\xf3" * 32)
         event_id = uuid.uuid4()
         conn.execute(
             text(

@@ -91,7 +91,11 @@ def _service_with_challenge(
     repo.get_challenge = get_challenge
     repo.lock_challenge = lock_challenge
     repo.lock_user_by_id = lock_user_by_id
-    repo.is_auth_eligible = lambda u: u is not None and getattr(u, "status", None) == "active" and not getattr(u, "is_deleted", False)
+    repo.is_auth_eligible = (
+        lambda u: u is not None
+        and getattr(u, "status", None) == "active"
+        and not getattr(u, "is_deleted", False)
+    )
     repo.append_security_event = AsyncMock()
     repo.commit = AsyncMock()
     repo.rollback = AsyncMock()
@@ -167,7 +171,9 @@ async def test_fifth_wrong_code_locks_request_new_code() -> None:
     )
     assert result.code == "VERIFICATION_FAILED"
     assert result.data["action"] == "request_new_code"
-    assert "attempts_remaining" not in result.data or result.data.get("attempts_remaining") in (None, 0)
+    assert "attempts_remaining" not in result.data or result.data.get(
+        "attempts_remaining"
+    ) in (None, 0)
     assert ch.state == "locked"
     assert ch.attempt_count == MAX_ATTEMPTS
     assert ch.code_digest is None

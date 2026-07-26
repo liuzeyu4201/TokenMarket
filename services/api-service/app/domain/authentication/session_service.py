@@ -30,7 +30,11 @@ from app.observability import (
     record_auth_session_rejected,
     record_auth_verify,
 )
-from app.repositories.authentication import MAX_ATTEMPTS, AuthenticationRepository, utc_now
+from app.repositories.authentication import (
+    MAX_ATTEMPTS,
+    AuthenticationRepository,
+    utc_now,
+)
 from app.security.csrf import issue_csrf_token, verify_csrf_token
 from app.security.otp import verify_otp_digest
 from app.security.session import (
@@ -89,10 +93,7 @@ def _ensure_aware(dt: datetime) -> datetime:
 
 def _is_six_digit_ascii(code: str) -> bool:
     return (
-        isinstance(code, str)
-        and len(code) == 6
-        and code.isascii()
-        and code.isdigit()
+        isinstance(code, str) and len(code) == 6 and code.isascii() and code.isdigit()
     )
 
 
@@ -425,9 +426,7 @@ class SessionService:
             )
 
         expires_at = _ensure_aware(auth_session.expires_at)
-        already_invalid = (
-            auth_session.revoked_at is not None or now >= expires_at
-        )
+        already_invalid = auth_session.revoked_at is not None or now >= expires_at
 
         if already_invalid:
             await self._repo.rollback()
@@ -474,9 +473,7 @@ class SessionService:
                 clear_cookie=False,
             )
 
-        newly = await self._repo.revoke_session(
-            auth_session, reason="logout", now=now
-        )
+        newly = await self._repo.revoke_session(auth_session, reason="logout", now=now)
         await self._repo.append_security_event(
             event_type="session_revoked",
             outcome="success",
@@ -638,11 +635,7 @@ class SessionService:
         # Resolve OTP key version stored on the challenge.
         key_version = int(challenge.code_key_version or otp_mat.version)
         otp_key = otp_mat.resolve(key_version)
-        if (
-            otp_key is None
-            or not challenge.code_digest
-            or not challenge.code_salt
-        ):
+        if otp_key is None or not challenge.code_digest or not challenge.code_salt:
             await self._repo.rollback()
             record_auth_verify("challenge_unavailable")
             return SessionIssueResult(
@@ -786,9 +779,7 @@ class SessionService:
         emit_auth_event(logger, "auth.session.issued", request_id=request_id)
 
         phone_masked = mask_phone(user.phone_normalized)
-        role_value = (
-            user.role.value if hasattr(user.role, "value") else str(user.role)
-        )
+        role_value = user.role.value if hasattr(user.role, "value") else str(user.role)
         return SessionIssueResult(
             kind="success",
             http_status=200,

@@ -13,10 +13,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.config import clear_auth_settings_cache, load_auth_settings
 from app.dependencies import create_session_engine
 from app.dispatch.auth_delivery import AuthDeliveryDispatcher
-from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.main import app
 from app.rate_limit import MemoryRateLimiter
 from app.security.otp import derive_otp

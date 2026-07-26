@@ -80,9 +80,7 @@ async def test_soft_deleted_account_unavailable(session: AsyncSession) -> None:
     )
     assert first.kind == "success"
     await session.execute(
-        update(User)
-        .where(User.phone_normalized == phone)
-        .values(is_deleted=True)
+        update(User).where(User.phone_normalized == phone).values(is_deleted=True)
     )
     await session.commit()
     again = await svc.register(
@@ -114,9 +112,7 @@ async def test_idempotency_conflict_different_body(session: AsyncSession) -> Non
     svc = RegistrationService(session)
     phone = unique_phone()
     key = str(uuid.uuid4())
-    await svc.register(
-        phone=phone, nickname="同", role="buyer", idempotency_key=key
-    )
+    await svc.register(phone=phone, nickname="同", role="buyer", idempotency_key=key)
     conflict = await svc.register(
         phone=phone, nickname="不同", role="buyer", idempotency_key=key
     )

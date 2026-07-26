@@ -10,7 +10,9 @@ from app.observability import redact_headers, redact_message
 
 
 def test_redact_headers_redacts_authorization() -> None:
-    out = redact_headers({"Authorization": "Bearer super-secret-token", "X-Request-ID": "r1"})
+    out = redact_headers(
+        {"Authorization": "Bearer super-secret-token", "X-Request-ID": "r1"}
+    )
     assert out["Authorization"] == "[REDACTED]"
     assert out["X-Request-ID"] == "r1"
 

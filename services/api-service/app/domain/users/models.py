@@ -47,14 +47,22 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    phone_normalized: Mapped[str] = mapped_column(String(11), unique=True, nullable=False)
+    phone_normalized: Mapped[str] = mapped_column(
+        String(11), unique=True, nullable=False
+    )
     nickname: Mapped[str] = mapped_column(String(50), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", values_callable=lambda x: [e.value for e in x]),
+        Enum(
+            UserRole, name="user_role", values_callable=lambda x: [e.value for e in x]
+        ),
         nullable=False,
     )
     status: Mapped[UserStatus] = mapped_column(
-        Enum(UserStatus, name="user_status", values_callable=lambda x: [e.value for e in x]),
+        Enum(
+            UserStatus,
+            name="user_status",
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=UserStatus.active,
         server_default=text("'active'"),
@@ -85,7 +93,9 @@ class RegistrationIdempotencyRecord(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False
+    )
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
@@ -98,4 +108,6 @@ class RegistrationIdempotencyRecord(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=text("NOW()"),
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )

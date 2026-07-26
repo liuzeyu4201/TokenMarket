@@ -254,9 +254,11 @@ class DeliveryService:
             await self._repo.rollback()
             return DeliveryOutcome(
                 challenge_id=challenge_id,
-                state="delivery_failed"
-                if locked.state == "delivery_failed"
-                else "delivered",
+                state=(
+                    "delivery_failed"
+                    if locked.state == "delivery_failed"
+                    else "delivered"
+                ),
                 provider_outcome="already_final",
                 sent=True,
             )

@@ -258,7 +258,9 @@ class AuthenticationRepository:
         await self._session.flush()
         return challenge
 
-    async def get_challenge(self, challenge_id: uuid.UUID) -> VerificationChallenge | None:
+    async def get_challenge(
+        self, challenge_id: uuid.UUID
+    ) -> VerificationChallenge | None:
         return await self._session.get(VerificationChallenge, challenge_id)
 
     async def lock_challenge(

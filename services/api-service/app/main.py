@@ -17,13 +17,13 @@ from starlette.responses import Response
 
 from . import database
 from .api.v1.auth import router as auth_router
+from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
 from .errors import DependencyUnavailableError
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
-from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .rate_limit import MemoryRateLimiter, build_rate_limiter_from_env
 from .schemas.envelope import error_envelope
 from .sms.synthetic import build_sms_adapter
@@ -140,6 +140,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await session_engine.dispose()
     if engine is not None:
         await engine.dispose()
+
 
 app = FastAPI(title="TokenMarket API Service", version=VERSION, lifespan=lifespan)
 app.state.version = VERSION

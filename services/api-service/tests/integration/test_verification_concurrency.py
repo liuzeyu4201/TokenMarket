@@ -153,7 +153,11 @@ def test_100_concurrent_correct_otp_at_most_one_session(
     others = [c for c in codes if c != "0"]
     assert len(others) == 99
     for c in others:
-        assert c in ("VERIFICATION_FAILED", "CHALLENGE_UNAVAILABLE", "CHALLENGE_EXPIRED")
+        assert c in (
+            "VERIFICATION_FAILED",
+            "CHALLENGE_UNAVAILABLE",
+            "CHALLENGE_EXPIRED",
+        )
 
     engine = create_engine(auth_migrated_postgres, pool_pre_ping=True)
     try:
@@ -287,9 +291,7 @@ def test_dual_device_100_login_rounds_single_active(
     import os
     import time as time_mod
 
-    full = (
-        os.environ.get("TM_PERF") == "1" or os.environ.get("AUTH_SC002A_FULL") == "1"
-    )
+    full = os.environ.get("TM_PERF") == "1" or os.environ.get("AUTH_SC002A_FULL") == "1"
     rounds = 100 if full else 5
     user = account_factory.create_active()
 

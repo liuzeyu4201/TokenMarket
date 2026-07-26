@@ -39,7 +39,11 @@ from app.schemas.authentication import CreateSessionRequest, RequestChallengeReq
 from app.schemas.envelope import error_envelope, success_envelope
 from app.schemas.register import RegisterRequest
 from app.security.origin import origin_allowed
-from app.security.session import SESSION_COOKIE_NAME, clear_session_cookie, set_session_cookie
+from app.security.session import (
+    SESSION_COOKIE_NAME,
+    clear_session_cookie,
+    set_session_cookie,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 logger = logging.getLogger("api-service")
@@ -151,7 +155,9 @@ async def register_user(
             ),
         )
 
-    record_registration_attempt(result.code.lower() if result.code != "0" else "success")
+    record_registration_attempt(
+        result.code.lower() if result.code != "0" else "success"
+    )
     record_registration_duration(time.monotonic() - start)
 
     if result.kind == "success":
@@ -232,9 +238,7 @@ async def request_verification_challenge(
 
     duration = time.monotonic() - start
     metric_result = (
-        "accepted"
-        if result.code == "0"
-        else result.code.lower().replace(" ", "_")[:64]
+        "accepted" if result.code == "0" else result.code.lower().replace(" ", "_")[:64]
     )
     record_auth_challenge(metric_result, duration)
     if result.code == "0":

@@ -57,7 +57,9 @@ async def _deliver_all(database_url: str) -> None:
     await engine.dispose()
 
 
-def _wait_delivered(database_url: str, challenge_id: str, *, timeout: float = 10.0) -> None:
+def _wait_delivered(
+    database_url: str, challenge_id: str, *, timeout: float = 10.0
+) -> None:
     asyncio.run(_deliver_all(database_url))
     engine = create_engine(database_url, pool_pre_ping=True)
     try:

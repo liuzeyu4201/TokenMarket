@@ -55,7 +55,9 @@ class AuthDeliveryDispatcher:
         if self._task is not None and not self._task.done():
             return
         self._stop.clear()
-        self._task = asyncio.create_task(self._run_loop(), name="auth-delivery-dispatcher")
+        self._task = asyncio.create_task(
+            self._run_loop(), name="auth-delivery-dispatcher"
+        )
 
     async def stop(self, *, drain_seconds: float | None = None) -> None:
         self._stop.set()
@@ -89,7 +91,9 @@ class AuthDeliveryDispatcher:
         count = 0
         async with self._session_factory() as session:
             repo = AuthenticationRepository(session)
-            cutoff = utc_now() - timedelta(seconds=self._settings.dispatcher_lease_seconds)
+            cutoff = utc_now() - timedelta(
+                seconds=self._settings.dispatcher_lease_seconds
+            )
             stale = await repo.list_stale_dispatching(older_than=cutoff)
             await session.commit()
 

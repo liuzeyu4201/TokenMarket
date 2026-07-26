@@ -67,7 +67,9 @@ def test_redact_text_masks_phone_and_otp_like_spans() -> None:
     assert "012345" not in out
 
 
-def test_emit_auth_event_redacts_blocked_fields(caplog: logging.LogCaptureFixture) -> None:
+def test_emit_auth_event_redacts_blocked_fields(
+    caplog: logging.LogCaptureFixture,
+) -> None:
     logger = logging.getLogger("api-service-test-auth-obs")
     with caplog.at_level(logging.INFO, logger="api-service-test-auth-obs"):
         emit_auth_event(

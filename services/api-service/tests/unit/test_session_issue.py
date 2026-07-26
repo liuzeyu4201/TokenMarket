@@ -104,7 +104,12 @@ def test_lock_order_documented_user_then_challenge() -> None:
     from app.repositories import authentication as auth_repo
 
     source = inspect.getsource(auth_repo)
-    assert "user row" in source.lower() or "user → challenge" in source or "user then challenge" in source.lower() or "Lock order" in source
+    assert (
+        "user row" in source.lower()
+        or "user → challenge" in source
+        or "user then challenge" in source.lower()
+        or "Lock order" in source
+    )
 
 
 def test_session_conflict_maps_to_unavailable_shape() -> None:

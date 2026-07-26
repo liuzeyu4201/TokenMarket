@@ -95,17 +95,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.sms_adapter = sms_adapter
 
     database_url = os.environ.get("DATABASE_URL")
+    session_factory: async_sessionmaker[AsyncSession] | None = None
     app.state.session_factory = None
     if database_url is not None:
         try:
             engine = database.create_readiness_engine(database_url)
             session_engine = create_session_engine(database_url)
-            app.state.session_factory = async_sessionmaker(
+            session_factory = async_sessionmaker(
                 session_engine, class_=AsyncSession, expire_on_commit=False
             )
+            app.state.session_factory = session_factory
         except Exception:
             logger.warning("database readiness probe disabled: invalid config")
             engine = None
+            session_factory = None
             app.state.session_factory = None
 
     app.state.db_engine = engine
@@ -114,14 +117,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.auth_rate_limiter = auth_rate_limiter
 
     # Start delivery dispatcher when DB + keys are usable (local/test).
-    start_dispatcher = (
+    # Inline ``session_factory is not None`` so mypy narrows the factory type.
+    if (
         os.environ.get("AUTH_DISPATCHER_ENABLED", "1") != "0"
-        and app.state.session_factory is not None
+        and session_factory is not None
         and auth_settings.key_material("otp").current_usable()
-    )
-    if start_dispatcher:
+    ):
         dispatcher = AuthDeliveryDispatcher(
-            app.state.session_factory,
+            session_factory,
             auth_settings,
             sms_adapter,  # type: ignore[arg-type]
         )

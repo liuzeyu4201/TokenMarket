@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -101,7 +102,7 @@ class RegistrationIdempotencyRecord(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     result_code: Mapped[str] = mapped_column(String(64), nullable=False)
-    result_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    result_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

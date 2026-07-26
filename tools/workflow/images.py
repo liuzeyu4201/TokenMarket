@@ -7,9 +7,11 @@ Implements the contract from
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,10 @@ EXPOSED_PORTS = {
     "admin-service": 8002,
     "frontend": 3000,
 }
+
+_SMOKE_TOKEN_RE = re.compile(r"^[a-z0-9]{8,16}$")
+_SMOKE_NETWORK_RE = re.compile(r"^tm-smoke-[a-z0-9]{8,16}$")
+_SMOKE_CONTAINER_RE = re.compile(r"^tm-smoke-[a-z0-9]{8,16}-[a-z0-9_]+$")
 
 
 class ImageWorkflowError(Exception):
@@ -61,141 +67,286 @@ def _run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, check=False, **kwargs)
 
 
+def new_smoke_run_token() -> str:
+    """Return a short unique token for one runtime-smoke run."""
+    return uuid.uuid4().hex[:12]
+
+
+def smoke_network_name(run_token: str) -> str:
+    """Build a unique user-defined Docker network name for one smoke run."""
+    token = re.sub(r"[^a-z0-9]", "", (run_token or "").lower())
+    if not _SMOKE_TOKEN_RE.fullmatch(token):
+        raise ImageWorkflowError(
+            "STEP_FAILED",
+            "smoke run token must be 8–16 lowercase alphanumeric characters",
+        )
+    name = f"tm-smoke-{token}"
+    if not _SMOKE_NETWORK_RE.fullmatch(name):
+        raise ImageWorkflowError("STEP_FAILED", f"invalid smoke network name: {name!r}")
+    return name
+
+
+def smoke_container_name(run_token: str, component_id: str) -> str:
+    """Build a unique container name scoped to one smoke run and component."""
+    token = re.sub(r"[^a-z0-9]", "", (run_token or "").lower())
+    if not _SMOKE_TOKEN_RE.fullmatch(token):
+        raise ImageWorkflowError(
+            "STEP_FAILED",
+            "smoke run token must be 8–16 lowercase alphanumeric characters",
+        )
+    slug = re.sub(r"[^a-z0-9]+", "_", (component_id or "").lower()).strip("_")
+    if not slug:
+        raise ImageWorkflowError(
+            "STEP_FAILED",
+            f"component id {component_id!r} cannot form a container name",
+        )
+    name = f"tm-smoke-{token}-{slug}"
+    if not _SMOKE_CONTAINER_RE.fullmatch(name):
+        raise ImageWorkflowError("STEP_FAILED", f"invalid smoke container name: {name!r}")
+    return name
+
+
+def _event_fields(event: dict[str, Any]) -> dict[str, Any]:
+    """Normalize v2 envelope events (payload) and flat events for plain printing."""
+    payload = event.get("payload")
+    if isinstance(payload, dict):
+        return payload
+    return event
+
+
+def _emit_workflow_event(
+    event: dict[str, Any],
+    *,
+    events: list[dict[str, Any]],
+    plain: bool,
+) -> None:
+    events.append(event)
+    if plain:
+        fields = _event_fields(event)
+        print(
+            f"[{fields['status']}] {fields['component']} {fields['action']}: "
+            f"[{fields['code']}] {fields['message']}"
+        )
+    else:
+        print(json.dumps(event, sort_keys=True))
+
+
+def _cleanup_smoke_resources(
+    *,
+    container_names: list[str],
+    network_name: str | None,
+    network_created: bool,
+) -> None:
+    """Best-effort cleanup of this run's containers and network only."""
+    for name in container_names:
+        if not _SMOKE_CONTAINER_RE.fullmatch(name):
+            continue
+        _run(["docker", "stop", "--time", "5", name])
+        _run(["docker", "rm", "--force", name])
+    if network_created and network_name and _SMOKE_NETWORK_RE.fullmatch(network_name):
+        _run(["docker", "network", "rm", network_name])
+
+
 def runtime_smoke(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
-    """Start each built image, probe its health endpoint, and verify non-root."""
-    run_id = f"runtime-smoke-{int(time.time())}"
+    """Start built images on a shared ephemeral network and probe health.
+
+    All image components share one user-defined Docker network so service DNS
+    names (for example frontend → ``api-service``) resolve. Containers stay up
+    until every component has been checked; cleanup always runs in ``finally``.
+    """
+    run_token = new_smoke_run_token()
+    run_id = f"runtime-smoke-{run_token}"
     log = EventLog(run_id=run_id)
     events: list[dict[str, Any]] = []
+    network_name = smoke_network_name(run_token)
+    network_created = False
+    started_containers: list[str] = []
 
     def emit(event: dict[str, Any]) -> None:
-        events.append(event)
-        if plain:
-            print(
-                f"[{event['status']}] {event['component']} {event['action']}: "
-                f"[{event['code']}] {event['message']}"
-            )
-        else:
-            print(json.dumps(event, sort_keys=True))
+        _emit_workflow_event(event, events=events, plain=plain)
 
     failed = False
-    for component in _image_components(repo_root):
-        comp_id = component["id"]
-        image_tag = _default_image_tag(comp_id)
-        container_name = f"tm-smoke-{comp_id.replace('-', '_')}"
-        port = EXPOSED_PORTS[comp_id]
-        health_path = HEALTH_ENDPOINTS[comp_id]
+    try:
+        create_net = _run(["docker", "network", "create", network_name])
+        if create_net.returncode != 0:
+            detail = (create_net.stderr or create_net.stdout or "").strip()
+            raise ImageWorkflowError(
+                "STEP_FAILED",
+                f"failed to create smoke network {network_name}: {detail[:300]}",
+            )
+        network_created = True
 
-        log.start("runtime-smoke", comp_id, "execution")
-        try:
-            if failed:
-                log.skip(
+        for component in _image_components(repo_root):
+            comp_id = component["id"]
+            image_tag = _default_image_tag(comp_id)
+            container_name = smoke_container_name(run_token, comp_id)
+            port = EXPOSED_PORTS[comp_id]
+            health_path = HEALTH_ENDPOINTS[comp_id]
+
+            log.start("runtime-smoke", comp_id, "execution")
+            try:
+                if failed:
+                    log.skip(
+                        "runtime-smoke",
+                        comp_id,
+                        "execution",
+                        reason="previous smoke failed",
+                    )
+                    emit(log.events[-1])
+                    continue
+
+                # Ensure the image exists; build it if necessary.
+                inspect = _run(["docker", "inspect", "--format", "{{.Id}}", image_tag])
+                if inspect.returncode != 0:
+                    build = _run(
+                        ["make", "build", f"IMAGE_TAG={image_tag}"],
+                        cwd=repo_root / component["path"],
+                    )
+                    if build.returncode != 0:
+                        raise ImageWorkflowError(
+                            "STEP_FAILED",
+                            f"{comp_id}: image build failed before smoke",
+                        )
+
+                run_result = _run(
+                    [
+                        "docker",
+                        "run",
+                        "--rm",
+                        "-d",
+                        "--name",
+                        container_name,
+                        "--network",
+                        network_name,
+                        "--network-alias",
+                        comp_id,
+                        "-p",
+                        f"127.0.0.1:{port}:{port}",
+                        image_tag,
+                    ]
+                )
+                if run_result.returncode != 0:
+                    raise ImageWorkflowError(
+                        "STEP_FAILED",
+                        f"{comp_id}: docker run failed: {run_result.stderr.strip()}",
+                    )
+                started_containers.append(container_name)
+
+                deadline = time.time() + 30
+                last_error = ""
+                while time.time() < deadline:
+                    probe = _run(
+                        [
+                            "curl",
+                            "--noproxy",
+                            "*",
+                            "-fsS",
+                            f"http://127.0.0.1:{port}{health_path}",
+                        ]
+                    )
+                    if probe.returncode == 0:
+                        break
+                    last_error = probe.stderr.strip()
+                    time.sleep(0.5)
+                else:
+                    raise ImageWorkflowError(
+                        "STEP_FAILED",
+                        f"{comp_id}: health endpoint did not respond: {last_error}",
+                    )
+
+                inspect = _run(
+                    [
+                        "docker",
+                        "inspect",
+                        "--format",
+                        "{{.Config.User}}",
+                        container_name,
+                    ]
+                )
+                if inspect.returncode != 0:
+                    raise ImageWorkflowError(
+                        "STEP_FAILED",
+                        f"{comp_id}: docker inspect failed: {inspect.stderr.strip()}",
+                    )
+                user = inspect.stdout.strip()
+                if not user or user in ("root", "0"):
+                    raise ImageWorkflowError(
+                        "STEP_FAILED",
+                        f"{comp_id}: container runs as root user {user!r}",
+                    )
+
+                log.finish(
                     "runtime-smoke",
                     comp_id,
                     "execution",
-                    reason="previous smoke failed",
+                    status="PASSED",
+                    message=f"{comp_id} healthy at {image_tag}",
                 )
-                continue
-
-            # Ensure the image exists; build it if necessary.
-            inspect = _run(["docker", "inspect", "--format", "{{.Id}}", image_tag])
-            if inspect.returncode != 0:
-                build = _run(
-                    ["make", "build", f"IMAGE_TAG={image_tag}"],
-                    cwd=repo_root / component["path"],
+                emit(log.events[-1])
+            except ImageWorkflowError as exc:
+                failed = True
+                log.finish(
+                    "runtime-smoke",
+                    comp_id,
+                    "execution",
+                    status="FAILED",
+                    code=DiagnosticCode(exc.code),
+                    message=exc.message,
                 )
-                if build.returncode != 0:
-                    raise ImageWorkflowError(
-                        "STEP_FAILED",
-                        f"{comp_id}: image build failed before smoke",
-                    )
+                emit(log.events[-1])
 
-            run_result = _run(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "-d",
-                    "--name",
-                    container_name,
-                    "-p",
-                    f"127.0.0.1:{port}:{port}",
-                    image_tag,
-                ]
+        # Aggregate uses the full log (including STARTED); emit only terminal
+        # component events above, then the repository aggregate.
+        final = aggregate_status(log.events)
+        emit(
+            emit_event(
+                action="runtime-smoke",
+                component="repository",
+                phase="aggregate",
+                status=final["status"],
+                code=DiagnosticCode(final["code"]),
+                duration_ms=sum(
+                    int(_event_fields(e).get("duration_ms") or 0) for e in log.events
+                ),
+                message=f"runtime-smoke aggregate: {final}",
+                run_id=run_id,
             )
-            if run_result.returncode != 0:
-                raise ImageWorkflowError(
-                    "STEP_FAILED",
-                    f"{comp_id}: docker run failed: {run_result.stderr.strip()}",
-                )
-
-            deadline = time.time() + 30
-            last_error = ""
-            while time.time() < deadline:
-                probe = _run(["curl", "-fsS", f"http://127.0.0.1:{port}{health_path}"])
-                if probe.returncode == 0:
-                    break
-                last_error = probe.stderr.strip()
-                time.sleep(0.5)
-            else:
-                raise ImageWorkflowError(
-                    "STEP_FAILED",
-                    f"{comp_id}: health endpoint did not respond: {last_error}",
-                )
-
-            inspect = _run(
-                [
-                    "docker",
-                    "inspect",
-                    "--format",
-                    "{{.Config.User}}",
-                    container_name,
-                ]
-            )
-            if inspect.returncode != 0:
-                raise ImageWorkflowError(
-                    "STEP_FAILED",
-                    f"{comp_id}: docker inspect failed: {inspect.stderr.strip()}",
-                )
-            user = inspect.stdout.strip()
-            if not user or user in ("root", "0"):
-                raise ImageWorkflowError(
-                    "STEP_FAILED",
-                    f"{comp_id}: container runs as root user {user!r}",
-                )
-
-            log.finish(
-                "runtime-smoke",
-                comp_id,
-                "execution",
-                status="PASSED",
-                message=f"{comp_id} healthy at {image_tag}",
-            )
-        except ImageWorkflowError as exc:
-            failed = True
-            log.finish(
-                "runtime-smoke",
-                comp_id,
-                "execution",
-                status="FAILED",
-                code=DiagnosticCode(exc.code),
-                message=exc.message,
-            )
-        finally:
-            _run(["docker", "stop", "--time", "5", container_name])
-            _run(["docker", "rm", "--force", container_name])
-    final = aggregate_status(log.events)
-    emit(
-        emit_event(
-            action="runtime-smoke",
-            component="repository",
-            phase="aggregate",
-            status=final["status"],
-            code=DiagnosticCode(final["code"]),
-            duration_ms=sum(e.get("duration_ms", 0) for e in log.events),
-            message=f"runtime-smoke aggregate: {final}",
-            run_id=run_id,
         )
-    )
+    except ImageWorkflowError as exc:
+        # Network create (or other pre-loop) failure: emit a repository FAILED.
+        log.finish(
+            "runtime-smoke",
+            "repository",
+            "execution",
+            status="FAILED",
+            code=DiagnosticCode(exc.code),
+            message=exc.message,
+        )
+        emit(log.events[-1])
+        final = aggregate_status(log.events)
+        emit(
+            emit_event(
+                action="runtime-smoke",
+                component="repository",
+                phase="aggregate",
+                status=final["status"],
+                code=DiagnosticCode(final["code"]),
+                duration_ms=0,
+                message=f"runtime-smoke aggregate: {final}",
+                run_id=run_id,
+            )
+        )
+    finally:
+        # Never let cleanup errors mask the smoke outcome already recorded.
+        try:
+            _cleanup_smoke_resources(
+                container_names=list(started_containers),
+                network_name=network_name,
+                network_created=network_created,
+            )
+        except Exception:  # noqa: BLE001 — cleanup must not override smoke failure
+            pass
+
     return events
 
 
@@ -206,14 +357,7 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
 
     def emit(event: dict[str, Any]) -> None:
-        events.append(event)
-        if plain:
-            print(
-                f"[{event['status']}] {event['component']} {event['action']}: "
-                f"[{event['code']}] {event['message']}"
-            )
-        else:
-            print(json.dumps(event, sort_keys=True))
+        _emit_workflow_event(event, events=events, plain=plain)
 
     trivy = shutil.which("trivy")
     if trivy is None:
@@ -310,7 +454,9 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
             phase="aggregate",
             status=final["status"],
             code=DiagnosticCode(final["code"]),
-            duration_ms=sum(e.get("duration_ms", 0) for e in log.events),
+            duration_ms=sum(
+                int(_event_fields(e).get("duration_ms") or 0) for e in log.events
+            ),
             message=f"image-scan aggregate: {final}",
             run_id=run_id,
         )

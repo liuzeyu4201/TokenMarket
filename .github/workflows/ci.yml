@@ -15,6 +15,10 @@ permissions:
 jobs:
   quality-gate:
     runs-on: ubuntu-24.04
+    env:
+      # Explicit hosted toolchain profile (ADR 004). GITHUB_ACTIONS and
+      # RUNNER_OS are provided by the runner and must not be forged here.
+      TOKENMARKET_TOOLCHAIN_PROFILE: github-actions-ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

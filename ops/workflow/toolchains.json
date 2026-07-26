@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "tools": [
     {
       "tool": "go",
@@ -66,8 +66,19 @@
         "ops"
       ],
       "install_policy": "system-managed",
-      "integrity_reference": "Docker Engine 29.5.3"
+      "integrity_reference": "Docker Engine 29.5.3",
+      "execution_overrides": {
+        "github-actions-ubuntu-24.04": {
+          "allowed_versions": [
+            "28.0.4",
+            "29.5.3"
+          ],
+          "match": "exact-list",
+          "rationale": "GitHub-hosted ubuntu-24.04 Docker CLI versions explicitly approved for repository CI"
+        }
+      }
     },
+
     {
       "tool": "golangci-lint",
       "exact_version": "1.64.8",

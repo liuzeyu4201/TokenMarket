@@ -125,13 +125,23 @@ Represents a supported tool or scanner and its version source.
 | `affected_components` | component IDs | Non-empty |
 | `install_policy` | enum | `preinstalled-required`, `locked-package-manager`, `verified-download`, `pinned-container` |
 | `integrity_reference` | checksum/digest/SHA | Required for downloaded binaries, containers and Actions |
+| `execution_overrides` | optional object | Map of toolchain execution profile id → override object. Each override requires `match: exact-list` and a non-empty `allowed_versions` string list (exact membership only). Optional `rationale` is documentation-only |
+
+**Execution profile** (input to `toolchain-check`, not a Make `mode`):
+
+| Profile id | Selection | Version interpretation |
+|------------|-----------|------------------------|
+| `local` (default) | Explicit `--toolchain-profile`, else `TOKENMARKET_TOOLCHAIN_PROFILE`, else default | Use `exact_version` with existing matching rules |
+| `github-actions-ubuntu-24.04` | Must be explicit; never inferred from `CI`/`GITHUB_ACTIONS` | For tools with a matching override, use exact-list allowlist; require `GITHUB_ACTIONS=true` and `RUNNER_OS=Linux` |
 
 **Invariants**:
 
-- Local and CI checks read the same version source.
+- Local and CI checks read the same version source file (`ops/workflow/toolchains.json`); interpretation may differ only by explicit execution profile.
 - Missing or unsupported versions fail before component actions.
+- Unknown profiles, empty allowlists, unknown `match` values, and failed hosted authenticity checks fail closed.
 - Workflow commands never silently install or upgrade a toolchain.
 - Cache hits never replace version or integrity validation.
+- SF02 local dependency lifecycle Docker/Compose exact pins remain independent of this entity's hosted overrides.
 
 ## Entity: ConfigurationDefinition
 

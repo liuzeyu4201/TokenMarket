@@ -35,7 +35,7 @@ The workflow resolves paths from its own location. Repository paths containing s
 |--------|----------|
 | `bootstrap` | After `toolchain-check`, prepare only committed-lock-resolved project dependencies for workflow tooling and applicable components; never install system tools, rewrite locks or infer new versions; a second run is resolution-idempotent |
 | `type-check` | Run the complete independently callable Go/Python/TypeScript type-check set; `lint` also aggregates this same set rather than defining a second implementation |
-| `toolchain-check` | Validate tools, versions, lockfiles and integrity references before side effects |
+| `toolchain-check` | Validate tools, versions, lockfiles and integrity references before side effects. Profile resolution order: `--toolchain-profile`, then `TOKENMARKET_TOOLCHAIN_PROFILE`, then default `local`. Profile is never inferred from `CI`/`GITHUB_ACTIONS`/`GITHUB_RUN_ID`. Hosted profile `github-actions-ubuntu-24.04` requires `GITHUB_ACTIONS=true` and `RUNNER_OS=Linux`, and applies per-tool `execution_overrides` with `match: exact-list` only; tools without overrides keep their existing install policy and version rules. Missing tools, unknown profiles, and unapproved versions fail closed |
 | `fmt-check` | Non-modifying formatter check for daily use and CI preflight |
 | `structure-check` | Reconcile component manifest, paths, owners, tests, adapters and allowed dependencies |
 | `contracts-check` | Validate contract schemas, versions, ownership, links and generated drift |

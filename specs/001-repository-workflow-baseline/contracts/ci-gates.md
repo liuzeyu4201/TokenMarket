@@ -43,7 +43,7 @@ Core gates use no path filters. PR runs for the same branch may cancel stale run
 
 | Gate | Evidence |
 |------|----------|
-| Toolchains | Exact supported versions and all lockfiles verified |
+| Toolchains | Declared tool versions and lockfiles verified under an explicit toolchain execution profile (default `local`; GitHub Actions sets `TOKENMARKET_TOOLCHAIN_PROFILE=github-actions-ubuntu-24.04` with runner-provided `GITHUB_ACTIONS=true` and `RUNNER_OS=Linux`). Hosted Docker versions use an exact-list allowlist in `ops/workflow/toolchains.json`; unknown profiles and unapproved versions fail closed |
 | Bootstrap | Frozen workflow/Go/Python/npm dependency preparation succeeds twice without changing lockfiles or resolution |
 | Format | Non-modifying check passes; clean checkout remains format-idempotent |
 | Type/lint/boundary | Independent `type-check` and aggregated lint pass for every applicable component and repository boundary |

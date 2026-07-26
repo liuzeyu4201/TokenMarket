@@ -21,9 +21,9 @@
     "check:phone-auth-types": "npm run generate:phone-auth-types && git diff --exit-code -- src/api/generated/phoneAuth.ts"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.1"
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-router-dom": "npm:react-router@8.3.0"
   },
   "devDependencies": {
     "@emnapi/core": "^1.7.1",
@@ -33,8 +33,8 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^26.1.1",
-    "@types/react": "^18.3.20",
-    "@types/react-dom": "^18.3.6",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-basic-ssl": "2.3.0",
     "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^10.0.0",
@@ -48,5 +48,9 @@
     "typescript-eslint": "^8.63.0",
     "vite": "^8.1.4",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "js-yaml": "4.3.0",
+    "brace-expansion": "5.0.8"
   }
 }

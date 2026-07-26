@@ -1,4 +1,5 @@
-"""Authentication observability contract: stable names, redaction, no PII labels (004 T016)."""
+"""Authentication observability contract: stable names, redaction,
+no PII labels (004 T016)."""
 
 from __future__ import annotations
 

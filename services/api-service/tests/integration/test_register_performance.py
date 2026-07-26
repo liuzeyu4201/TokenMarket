@@ -6,7 +6,6 @@ Set TM_REGISTER_PERF=1 to enable. Default CI skips this module.
 from __future__ import annotations
 
 import os
-import statistics
 import time
 import uuid
 

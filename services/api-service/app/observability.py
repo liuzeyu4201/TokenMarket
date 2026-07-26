@@ -58,7 +58,8 @@ _REDACTED_HEADER_NAMES = frozenset(
 _PHONE_PATTERN = re.compile(r"(?<![*\d])1[3-9]\d{9}(?!\d)")
 # Labeled OTP only — avoid redacting arbitrary 6-digit numbers (ports, counts).
 _OTP_CONTEXT_PATTERN = re.compile(
-    r"(?i)\b(otp|verification[_-]?code|sms[_-]?code|auth[_-]?code)\b(\s*[:=]\s*)(\d{4,8})"
+    r"(?i)\b(otp|verification[_-]?code|sms[_-]?code|auth[_-]?code)\b"
+    r"(\s*[:=]\s*)(\d{4,8})"
 )
 _TOKEN_CONTEXT_PATTERN = re.compile(
     r"(?i)\b(session[_-]?token|csrf[_-]?token|idempotency[_-]?key)\b(\s*[:=]\s*)(\S+)"

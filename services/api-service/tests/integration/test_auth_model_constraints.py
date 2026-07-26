@@ -193,7 +193,9 @@ def factory(constraint_engine) -> AccountFactory:  # type: ignore[no-untyped-def
     return AccountFactory(constraint_engine)
 
 
-def test_idempotency_unique_operation_key_version_digest(constraint_engine) -> None:  # type: ignore[no-untyped-def]
+def test_idempotency_unique_operation_key_version_digest(
+    constraint_engine,
+) -> None:  # type: ignore[no-untyped-def]
     key = b"\x11" * 32
     phone = b"\x22" * 32
     with constraint_engine.begin() as conn:
@@ -203,7 +205,9 @@ def test_idempotency_unique_operation_key_version_digest(constraint_engine) -> N
                 _insert_idempotency(conn, key_digest=key, phone_ref=b"\x33" * 32)
 
 
-def test_idempotency_processing_terminal_check(constraint_engine) -> None:  # type: ignore[no-untyped-def]
+def test_idempotency_processing_terminal_check(
+    constraint_engine,
+) -> None:  # type: ignore[no-untyped-def]
     with constraint_engine.begin() as conn:
         with pytest.raises(IntegrityError):
             with conn.begin_nested():
@@ -289,7 +293,10 @@ def test_superseded_allows_new_current_challenge(
         )
 
 
-def test_send_started_state_check(constraint_engine, factory: AccountFactory) -> None:  # type: ignore[no-untyped-def]
+def test_send_started_state_check(
+    constraint_engine,
+    factory: AccountFactory,
+) -> None:  # type: ignore[no-untyped-def]
     user = factory.create_active()
     phone_ref = b"\x88" * 32
     with constraint_engine.begin() as conn:
@@ -307,7 +314,10 @@ def test_send_started_state_check(constraint_engine, factory: AccountFactory) ->
                 )
 
 
-def test_attempt_count_bounds(constraint_engine, factory: AccountFactory) -> None:  # type: ignore[no-untyped-def]
+def test_attempt_count_bounds(
+    constraint_engine,
+    factory: AccountFactory,
+) -> None:  # type: ignore[no-untyped-def]
     user = factory.create_active()
     phone_ref = b"\x99" * 32
     with constraint_engine.begin() as conn:
@@ -407,7 +417,8 @@ def test_audit_on_delete_set_null(
         )
         # payload for terminal - need result_payload; helper sets {} for non-processing
         # but our insert used processing fields path when state=succeeded with completed
-        # Re-check helper: for non-processing it sets payload to "{}". Good if JSON works.
+        # Re-check helper: for non-processing it sets payload to "{}".
+        # Good if JSON works.
         # Terminal consumed clears send_started (CHECK restricts it to dispatch states).
         challenge_id = _insert_challenge(
             conn,

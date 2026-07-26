@@ -105,7 +105,10 @@ def _login(
     phone: str,
     database_url: str,
 ) -> tuple[str, str]:
-    """Return (csrf_token, opaque cookie value). Forces jar for __Host- Secure cookies."""
+    """Return (csrf_token, opaque cookie value).
+
+    Forces jar for __Host- Secure cookies.
+    """
     ch = client.post(
         "/api/v1/auth/verification-challenges",
         json={"phone": phone},
@@ -148,8 +151,6 @@ def session_client(
     _auth_env(monkeypatch, auth_migrated_postgres)
     with TestClient(app) as client:
         client.app.state.rate_limiter = MemoryRateLimiter()
-        from app.auth_rate_limit import MemoryAuthRateLimiter
-
         client.app.state.auth_rate_limiter = MemoryAuthRateLimiter(
             phone_limit=10_000, ip_limit=10_000
         )

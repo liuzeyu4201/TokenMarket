@@ -299,7 +299,9 @@ class AuthenticationRepository:
         batch_size: int,
         now: datetime | None = None,
     ) -> list[VerificationChallenge]:
-        """Claim pending work with FOR UPDATE SKIP LOCKED; set lease and commit caller."""
+        """Claim pending work with FOR UPDATE SKIP LOCKED; set lease
+        and commit caller.
+        """
         ts = now or utc_now()
         lease_until = ts + timedelta(seconds=lease_seconds)
         # Reclaim expired pre-send leases as claimable.

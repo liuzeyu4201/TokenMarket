@@ -224,7 +224,12 @@ async def test_memory_limiter_and_metrics_hook() -> None:
 async def test_winner_member_single_count_semantics() -> None:
     """Same member id still only one ZADD per call; distinct winners accumulate."""
     fake = FakeAsyncRedis()
-    lim = RedisAuthRateLimiter(fake, env="t", phone_limit=5, ip_limit=20)  # type: ignore[arg-type]
+    lim = RedisAuthRateLimiter(
+        fake,  # type: ignore[arg-type]
+        env="t",
+        phone_limit=5,
+        ip_limit=20,
+    )
     p, i = b"\x11" * 32, b"\x22" * 32
     d1 = await lim.check_and_increment(phone_ref=p, ip_ref=i, member_id="winner-a")
     d2 = await lim.check_and_increment(phone_ref=p, ip_ref=i, member_id="winner-b")

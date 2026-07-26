@@ -1,4 +1,5 @@
-"""Fail-closed session paths: DB down, unknown key version, Redis independence (T075)."""
+"""Fail-closed session paths: DB down, unknown key version,
+Redis independence (T075)."""
 
 from __future__ import annotations
 

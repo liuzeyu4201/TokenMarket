@@ -1,22 +1,22 @@
-# Workflow Runbook
+# 工作流运行手册（runbook）
 
-## Long-lived branches
+## 长期分支
 
-| Branch | Role | Typical merge path |
+| 分支 | 角色 | 典型合入路径 |
 |--------|------|--------------------|
-| `master` | **Production branch** — always releasable; source for production deploys | Reviewed PR from `master-dev` or hotfix into `master` |
-| `master-dev` | **Test-environment deployment branch** — integration and pre-prod validation | Feature / fix PR into `master-dev` |
+| `master` | **生产分支** — 始终可发布；生产部署的代码源 | 经评审的 PR 从 `master-dev` 或 hotfix 合入 `master` |
+| `master-dev` | **测试环境部署分支** — 集成与预生产验证 | 功能 / 修复 PR 合入 `master-dev` |
 
-These two names are fixed. Do not rename them, and do not invent additional long-lived
-deploy lines without a reviewed contract change.
+这两个名称固定。不得重命名，也不得在未评审契约变更的情况下
+发明额外的长期部署线。
 
-## Branch naming standard
+## 分支命名标准
 
-All short-lived branches use **lowercase ASCII**, **kebab-case**, and **no spaces**.
-Branch names never encode environment (`local` / `test` / `prod`); environment is always
-selected with explicit `mode=` (see below).
+所有短期分支使用**小写 ASCII**、**kebab-case**，且**无空格**。
+分支名不得编码环境（`local` / `test` / `prod`）；环境始终通过显式
+`mode=` 选择（见下文）。
 
-### Grammar
+### 语法
 
 ```text
 long-lived   := master | master-dev
@@ -27,100 +27,101 @@ slug         := [a-z0-9]+(-[a-z0-9]+)*     # English words, hyphens only
 NNN          := [0-9]{3}                     # zero-padded Spec Kit feature id
 ```
 
-Recommended total length: **≤ 50 characters**. Avoid underscores, dots (except none),
-uppercase, Chinese or other non-ASCII, personal names, and raw ticket IDs without a slug
-(for example prefer `fix/gateway-request-id` over `fix/1234` alone).
+推荐总长：**≤ 50 字符**。避免下划线、点号（除规范不允许的以外）、
+大写、中文或其他非 ASCII、人名，以及无 slug 的裸工单号
+（例如优先 `fix/gateway-request-id`，而不是单独的 `fix/1234`）。
 
-### Feature branches (primary path)
+### 功能分支（主路径）
 
-When work has (or will have) a Spec Kit feature under `specs/`:
+当工作在（或将有）`specs/` 下的 Spec Kit 功能时：
 
-| Rule | Requirement |
+| 规则 | 要求 |
 |------|-------------|
-| Name form | `NNN-short-kebab-description` |
-| Identity | Branch basename **MUST equal** the feature directory under `specs/` |
-| Base branch | Create from current green `master-dev` |
-| PR target | `master-dev` |
-| Examples | `001-repository-workflow-baseline`, `002-local-dependency-lifecycle` |
+| 名称形式 | `NNN-short-kebab-description` |
+| 身份 | 分支基名**必须**与 `specs/` 下功能目录名一致 |
+| 基线分支 | 从当前健康的 `master-dev` 创建 |
+| PR 目标 | `master-dev` |
+| 示例 | `001-repository-workflow-baseline`、`002-local-dependency-lifecycle` |
 
-Allocate `NNN` in ascending order (next free three-digit id). Do not reuse an id for a
-different feature. Do not invent a parallel name that differs only by prefix
-(`feature/002-...` or `feat/002-...` is forbidden when a numbered Spec Kit feature exists).
-Do **not** invent `NNN-...` branch names when there is no matching `specs/NNN-.../` directory.
+按升序分配 `NNN`（下一个空闲的三位 id）。不得把同一 id 复用于不同功能。
+不得发明仅前缀不同的平行名称（已有编号 Spec Kit 功能时，禁止
+`feature/002-...` 或 `feat/002-...`）。
+在没有匹配的 `specs/NNN-.../` 目录时，**不得**发明 `NNN-...` 分支名。
 
-### Other short-lived branches
+### 其他短期分支
 
-Use when the change is **not** tracked as a Spec Kit feature under `specs/`, or is an urgent
-production fix:
+当变更**不是**作为 `specs/` 下 Spec Kit 功能跟踪，或为紧急生产修复时使用：
 
-| Prefix | Use when | Base from | PR into |
+| 前缀 | 使用场景 | 从何处拉出 | PR 合入 |
 |--------|----------|-----------|---------|
-| `feat/<slug>` | Product/behavior change **without** a Spec Kit `specs/NNN-...` feature | `master-dev` | `master-dev` |
-| `fix/<slug>` | Bug fix for test line | `master-dev` | `master-dev` |
-| `hotfix/<slug>` | Urgent production fix | `master` | `master`, then **back-merge** to `master-dev` |
-| `docs/<slug>` | Documentation-only | `master-dev` | `master-dev` |
-| `chore/<slug>` | Tooling, deps, CI plumbing with no product behavior | `master-dev` | `master-dev` |
-| `refactor/<slug>` | Internal restructure with no intended behavior change | `master-dev` | `master-dev` |
+| `feat/<slug>` | **无** Spec Kit `specs/NNN-...` 功能的产品/行为变更 | `master-dev` | `master-dev` |
+| `fix/<slug>` | 测试线缺陷修复 | `master-dev` | `master-dev` |
+| `hotfix/<slug>` | 紧急生产修复 | `master` | `master`，然后**回合并**到 `master-dev` |
+| `docs/<slug>` | 仅文档 | `master-dev` | `master-dev` |
+| `chore/<slug>` | 工具链、依赖、CI 管线，无产品行为 | `master-dev` | `master-dev` |
+| `refactor/<slug>` | 内部重构，无预期行为变化 | `master-dev` | `master-dev` |
 
-Examples: `feat/layered-compose-deploy`, `fix/api-readiness-timeout`,
-`hotfix/migrate-approval-bypass`, `docs/local-environment-runbook`,
-`chore/uv-lock-refresh`.
+示例：`feat/layered-compose-deploy`、`fix/api-readiness-timeout`、
+`hotfix/migrate-approval-bypass`、`docs/local-environment-runbook`、
+`chore/uv-lock-refresh`。
 
-### Forbidden
+### 禁止
 
-- Environment or deploy-line names: `test`, `prod`, `local`, `staging`, `dev` as the
-  whole branch name (or as a false long-lived line).
-- Alternate long-lived lines: `main`, `develop`, `release/*` (unless a future contract
-  replaces this standard).
-- Spec feature with a non-matching branch: work tracked as `specs/004-foo/` **must** use
-  branch `004-foo`, not `feat/foo`, `feature/foo`, or `004_foo`.
-- Numbered `NNN-...` branches that do not match an existing `specs/NNN-.../` directory.
-- Encoding secrets, hostnames, or customer data in the branch name.
+- 环境或部署线名称：把 `test`、`prod`、`local`、`staging`、`dev` 当作
+  完整分支名（或伪长期线）。
+- 替代长期线：`main`、`develop`、`release/*`（除非未来契约替换本标准）。
+- Spec 功能与分支名不匹配：跟踪为 `specs/004-foo/` 的工作**必须**使用
+  分支 `004-foo`，而不是 `feat/foo`、`feature/foo` 或 `004_foo`。
+- 与现有 `specs/NNN-.../` 目录不匹配的编号 `NNN-...` 分支。
+- 在分支名中编码密钥、主机名或客户数据。
 
-### Development flow
+### 开发流程
 
-1. Branch from `master-dev` (or from `master` only for `hotfix/*`).
-2. Open a PR into the table target above; `quality-gate` must pass.
-3. After test-environment validation, open a promotion PR from `master-dev` into `master`.
-4. Hotfixes that land on `master` MUST be back-merged into `master-dev`.
+1. 从 `master-dev` 拉出分支（仅 `hotfix/*` 从 `master` 拉出）。
+2. 按上表目标开 PR；`quality-gate` 必须通过。
+3. 测试环境验证后，从 `master-dev` 向 `master` 开晋升 PR。
+4. 合入 `master` 的 hotfix **必须**回合并到 `master-dev`。
 
-Environment selection for `make migrate` and `make deploy` / `make deploy-down` is **not**
-inferred from the branch. Use explicit `mode=local|test|prod` (and production approval for
-`prod`) per `shared/contracts/repository-workflow/v1/environment-mode.md`. Future CD jobs may
-be *scheduled* from `master-dev` / `master` while still passing explicit `mode=` on the
-command line.
+`make migrate` 与 `make deploy` / `make deploy-down` 的环境选择**不**
+从分支推断。按 `shared/contracts/repository-workflow/v1/environment-mode.md`
+使用显式 `mode=local|test|prod`（`prod` 需生产审批）。未来 CD 作业可
+从 `master-dev` / `master` *调度*，但仍须在命令行传入显式 `mode=`。
 
-### Layered Compose (ADR 003)
+### 分层 Compose（ADR 003）
 
-| Command | Environment | What runs |
+| 命令 | 环境 | 运行内容 |
 |---------|-------------|-----------|
-| `make dev` / `make dev-down` | local only | Middleware containers; apps stay host processes |
-| `make build` | any | Five service images + asset bundles |
-| `make deploy` / `make deploy-down` | test or prod only | Middleware + app containers on the shared host |
-| `make migrate` | local / test / prod | Reviewed Alembic only; never starts containers |
+| `make dev` / `make dev-down` | 仅 local | 中间件容器；应用保持主机进程 |
+| `make build` | 任意 | 五个服务镜像 + 资产包 |
+| `make deploy` / `make deploy-down` | 仅 test 或 prod | 共享主机上的中间件 + 应用容器 |
+| `make migrate` | local / test / prod | 仅已评审 Alembic；永不启动容器 |
 
-See [`deploy.md`](deploy.md) and `docs/decisions/003-layered-compose-deploy.md`.
+本地日常默认入口为 `make start` / `make stop`（中间件 + 五个主机应用进程）。
+中间件单独操作继续使用已激活的 `make dev` / `make dev-down`。
+`make deploy` / `make deploy-down` 在部署适配器落地前保持失败关闭（fail-closed）。
 
-## Local configuration
+见 [`deploy.md`](deploy.md) 与 `docs/decisions/003-layered-compose-deploy.md`。
 
-1. Copy `.env.example` to `.env.local`.
-2. Replace synthetic placeholders with local values.
-3. Never commit `.env.local` or any file containing real credentials.
+## 本地配置
 
-## Secret discovery
+1. 将 `.env.example` 复制为 `.env.local`。
+2. 用本地合成值替换占位符。
+3. 切勿提交 `.env.local` 或任何含真实凭据的文件。
 
-If a real secret is found in Git history or build output:
+## 密钥发现
 
-1. Revoke/rotate the credential immediately.
-2. Audit usage via provider logs.
-3. Open a tracked remediation issue with owner, approver and expiry.
-4. Only after audit, consider minimal approved history remediation.
+若在 Git 历史或构建输出中发现真实密钥：
 
-### Exception format
+1. 立即吊销/轮换该凭据。
+2. 通过提供商日志审计使用情况。
+3. 开可跟踪的修复工单，写明负责人、审批人与到期日。
+4. 仅在审计之后，才考虑经批准的最小化历史修复。
 
-Every security exception must be recorded with:
+### 例外记录格式
 
-| Field | Example |
+每条安全例外必须记录：
+
+| 字段 | 示例 |
 |-------|---------|
 | Owner | security-oncall@tokenmarket.local |
 | Approver | eng-lead@tokenmarket.local |
@@ -128,58 +129,57 @@ Every security exception must be recorded with:
 | Expiry | 2026-08-15 |
 | Reason | transient allow-list for integration test fixture |
 
-Exceptions are not substitutes for rotation; they must have a fixed expiry and
-be reviewed before renewal.
+例外不能替代轮换；必须有固定到期日，续期前须再评审。
 
-## CI recovery
+## CI 恢复
 
-- Keep the required job name `quality-gate` stable through rollbacks.
-- Suspected cache contamination: bump cache key or disable cache.
-- Failed `master` or `master-dev` merge: open a review-revert PR; never force-push.
+- 回滚期间保持必需作业名 `quality-gate` 稳定。
+- 怀疑缓存污染：提升 cache key 或禁用缓存。
+- `master` 或 `master-dev` 合并失败：开评审后的 revert PR；切勿 force-push。
 
-### Runner or scanner failure
+### Runner 或扫描器失败
 
-If `quality-gate` fails because a hosted tool or scanner is unavailable:
+若 `quality-gate` 因托管工具或扫描器不可用而失败：
 
-1. Check `ops/workflow/toolchains.json` for the pinned version/SHA.
-2. Confirm the failure reproduces locally with `make ci`.
-3. If the scanner is missing only on the runner, install it via the CI workflow
-   using the same pinned reference; do not downgrade or skip the step.
-4. Record the incident and the resolution in this runbook.
+1. 在 `ops/workflow/toolchains.json` 中核对固定版本/SHA。
+2. 用 `make ci` 确认本地可复现。
+3. 若仅 runner 缺少扫描器，通过 CI workflow 以相同固定引用安装；
+   不得降级或跳过该步骤。
+4. 在本运行手册中记录事件与处理结果。
 
-### Required check rollout order
+### 必需检查的上线顺序
 
-1. Merge the CI workflow and verify at least one successful PR `quality-gate` run.
-2. Enable the `quality-gate` required status check in branch protection/rulesets for
-   both `master` and `master-dev`.
-3. Enable "Do not allow bypassing the above settings" for each ruleset.
-4. Enable "Restrict pushes that create files" and "Require a pull request before merging".
+1. 合入 CI workflow，并验证至少一次成功的 PR `quality-gate` 运行。
+2. 在 `master` 与 `master-dev` 的分支保护/ruleset 中启用
+   `quality-gate` 必需状态检查。
+3. 对每个 ruleset 启用 “Do not allow bypassing the above settings”。
+4. 启用 “Restrict pushes that create files” 与 “Require a pull request before merging”。
 
-### GitHub ruleset configuration
+### GitHub ruleset 配置
 
-Configure repository rulesets for the long-lived branches:
+为长期分支配置仓库 ruleset：
 
-#### `master` (production)
+#### `master`（生产）
 
-- **Target branches**: `master`
-- **Bypass list**: empty (no role, team, or app may bypass)
-- **Restrictions**: disable direct push and force push
-- **Pull request**: required, at least 1 reviewer, dismiss stale approvals on new commits
-- **Required status checks**: `quality-gate`
-- **Commit message**: do not require signed commits unless a later ADR adopts them
-- **Promotion**: prefer PRs that merge `master-dev` → `master` after test validation
+- **Target branches**：`master`
+- **Bypass list**：空（任何角色、团队或应用均不可绕过）
+- **Restrictions**：禁止直接 push 与 force push
+- **Pull request**：必需，至少 1 名评审人，新提交时使过期审批失效
+- **Required status checks**：`quality-gate`
+- **Commit message**：除非后续 ADR 采纳，否则不要求签名提交
+- **Promotion**：优先在测试验证后合入 `master-dev` → `master` 的 PR
 
-#### `master-dev` (test deployment)
+#### `master-dev`（测试部署）
 
-- **Target branches**: `master-dev`
-- **Bypass list**: empty
-- **Restrictions**: disable direct push and force push
-- **Pull request**: required, at least 1 reviewer, dismiss stale approvals on new commits
-- **Required status checks**: `quality-gate`
+- **Target branches**：`master-dev`
+- **Bypass list**：空
+- **Restrictions**：禁止直接 push 与 force push
+- **Pull request**：必需，至少 1 名评审人，新提交时使过期审批失效
+- **Required status checks**：`quality-gate`
 
-### Linking PR and final long-lived-branch runs
+### 关联 PR 与最终长期分支运行
 
-Each PR must show a green `quality-gate` run before merge. After merge, the
-`push` trigger on `master` or `master-dev` produces the final run for that tip.
-Incident response and release evidence must reference both the PR run ID and the
-final long-lived-branch run ID (and for production, the promotion PR into `master`).
+每个 PR 在合入前必须有绿色 `quality-gate` 运行。合入后，`master` 或
+`master-dev` 上的 `push` 触发为该 tip 产生最终运行。
+事件响应与发布验收证据须同时引用 PR 运行 ID 与最终长期分支运行 ID
+（生产环境还须引用晋升到 `master` 的 PR）。

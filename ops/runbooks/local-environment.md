@@ -1,49 +1,46 @@
-# Local Environment Runbook (SF02)
+# 本地环境运行手册（runbook / SF02）
 
-Owner: repository workflow owner
+Owner：repository workflow owner
 
-Public entry points: `make dev`, `make dev-down` (middleware only) and
-`make start` / `make stop` (middleware + host application processes). SF02
-public activation completed at T074; see
-`specs/002-local-dependency-lifecycle/evidence/README.md`.
+公共入口：`make dev`、`make dev-down`（仅中间件）以及
+`make start` / `make stop`（中间件 + 主机应用进程）。SF02
+公共激活已在 T074 完成；见
+`specs/002-local-dependency-lifecycle/evidence/README.md`。
 
-## Safe inspection
+## 安全检查
 
-- Prefer root Make targets and workflow events; do not copy secrets into shell
-  history.
-- Inspect project containers with exact Compose project labels
-  (`com.docker.compose.project=tokenmarket-<hash>`). Never use a workspace path
-  filter.
-- Named volumes `*_postgres-data` and `*_redis-data` are retained across ordinary
-  `dev-down`. Grafana uses tmpfs only.
+- 优先使用根目录 Make 目标与工作流事件；不得把密钥复制进 shell 历史。
+- 用精确的 Compose 项目标签检查本项目容器
+  （`com.docker.compose.project=tokenmarket-<hash>`）。切勿用工作区路径过滤。
+- 命名卷 `*_postgres-data` 与 `*_redis-data` 在普通 `dev-down` 后仍保留。
+  Grafana 仅使用 tmpfs。
 
-## Common recovery
+## 常见恢复
 
-| Symptom | Action |
+| 症状 | 处理 |
 |---------|--------|
-| `INVALID_MODE` | Use omitted mode or `mode=local` on the command line only |
-| `INVALID_CONFIG` | Fix field **names** in ignored `.env.local` (never paste secrets into tickets) |
-| `PORT_CONFLICT` | Free the loopback port or change only the matching URL port |
-| `OPERATION_IN_PROGRESS` | Wait for the other lifecycle operation; retry the same command |
-| `DEPENDENCY_NOT_READY` / timeout | Inspect retained containers; fix auth/runtime; rerun `make dev` |
-| `RESOURCE_OWNERSHIP_CONFLICT` | Do not adopt foreign resources; use the owning workspace |
-| Moved workspace finding | Recover from the original path identity; report-only resources are never stopped by the new path |
-| Interrupted start/stop | Rerun the same target; state is retained for direct convergence |
-| Credential drift in PostgreSQL volume | Stop is still safe without config; start fails closed until credentials match the volume |
+| `INVALID_MODE` | 仅在命令行省略 mode 或使用 `mode=local` |
+| `INVALID_CONFIG` | 在被忽略的 `.env.local` 中修正字段**名**（切勿把密钥贴进工单） |
+| `PORT_CONFLICT` | 释放回环端口，或只修改对应 URL 中的端口 |
+| `OPERATION_IN_PROGRESS` | 等待另一生命周期操作结束；重试同一命令 |
+| `DEPENDENCY_NOT_READY` / 超时 | 检查仍保留的容器；修复认证/运行时后重跑 `make dev` |
+| `RESOURCE_OWNERSHIP_CONFLICT` | 不得接管他方资源；使用拥有该资源的工作区 |
+| 工作区路径已移动 | 从原路径身份恢复；仅报告的资源不会被新路径停止 |
+| 启动/停止被中断 | 重跑同一目标；状态保留以便直接收敛 |
+| PostgreSQL 卷凭据漂移 | 无配置时 stop 仍安全；凭据与卷匹配前 start 失败关闭（fail-closed） |
 
-## Non-destructive stop
+## 非破坏性停止
 
-`make dev-down` stops and removes only exact-project containers and networks,
-with `--remove-orphans`, and **never** passes `--volumes`, `--rmi`, or prune.
-Repeat stops are idempotent success when already stopped.
+`make dev-down` 仅停止并移除精确匹配项目的容器与网络，
+带 `--remove-orphans`，且**不得**传入 `--volumes`、`--rmi` 或 prune。
+已停止时重复 stop 为幂等成功。
 
-## Accessibility
+## 可访问性
 
-Workflow output is `NO_COLOR`-safe plain text or JSONL, without icons or
-interactive prompts. Exit status alone is sufficient for success/failure.
+工作流输出为兼容 `NO_COLOR` 的纯文本或 JSONL，无图标或交互提示。
+仅凭退出状态即可判断成功/失败。
 
-## Evidence ownership
+## 验收证据责任
 
-Cross-platform performance, persistence, recovery, and usability evidence is
-recorded under `specs/002-local-dependency-lifecycle/evidence/` by the workflow
-owner after the automated gates pass.
+跨平台性能、持久化、恢复与易用性验收证据，在自动化门禁通过后，
+由工作流负责人记录在 `specs/002-local-dependency-lifecycle/evidence/`。

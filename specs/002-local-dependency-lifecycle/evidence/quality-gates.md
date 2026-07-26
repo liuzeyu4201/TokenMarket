@@ -1,10 +1,10 @@
-# Quality Gates Evidence (SF02 / T068)
+# 质量门禁验收证据（SF02 / T068）
 
-**Status**: **PASS** on macOS arm64 (Darwin) with Node 24.18.0, Go 1.25.12, Docker available, Trivy 0.72.0.
+**状态**： **PASS**，于 macOS arm64（Darwin），Node 24.18.0、Go 1.25.12、Docker 可用、Trivy 0.72.0。
 
-## Environment (redacted)
+## 环境（已脱敏）
 
-| Item | Value |
+| 项 | 值 |
 |------|--------|
 | OS | Darwin arm64 |
 | Node | 24.18.0 |
@@ -14,9 +14,9 @@
 | Trivy | 0.72.0 |
 | Date | 2026-07-22 |
 
-## Gate results
+## 门禁结果
 
-| Gate | Result | Notes |
+| 门禁 | 结果 | 说明 |
 |------|--------|-------|
 | `make help` | **PASS** | |
 | `make toolchain-check` | **PASS** | |
@@ -29,39 +29,39 @@
 | `make bootstrap` | **PASS** | |
 | `make build` | **PASS** | 9 components; ~9–10 min |
 | `make image-scan` | **PASS** | 5/5 images, 0 HIGH/CRITICAL with fix available |
-| Public `dev` / `dev-down` | **PASS** (fail-closed) | Still `SF02_NOT_READY` until T074 |
+| Public `dev` / `dev-down` | **PASS**（fail-closed） | 在 T074 前仍为 `SF02_NOT_READY` |
 
-## Security / image hardening applied for the gate
+## 为本门禁应用的安全 / 镜像加固
 
-1. **Trivy** installed (`brew install trivy`).
-2. **`.gitleaks.toml`** allowlists synthetic test/doc credentials; `security.py` passes `--config`.
-3. **Python services**: FastAPI 0.139.2 + Starlette 1.3.1; Dockerfiles upgrade base `setuptools`/`wheel`/`jaraco.context`.
-4. **proxy-gateway**: Go deps `x/net`/`x/crypto` bumped; image rebuild clean under Trivy.
-5. **frontend**: `nginx:1.29-alpine` + `apk upgrade`.
-6. **image-scan**: emits per-component events; Trivy uses `--ignore-unfixed` so only fixable HIGH/CRITICAL block the gate.
+1. **Trivy** 已安装（`brew install trivy`）。
+2. **`.gitleaks.toml`** 允许合成本地测试/文档凭据；`security.py` 传入 `--config`。
+3. **Python services**: FastAPI 0.139.2 + Starlette 1.3.1；Dockerfile 升级基座 `setuptools`/`wheel`/`jaraco.context`。
+4. **proxy-gateway**: Go 依赖 `x/net`/`x/crypto` 提升；镜像在 Trivy 下重建干净。
+5. **frontend**: `nginx:1.29-alpine` + `apk upgrade`。
+6. **image-scan**: 发出每组件事件；Trivy 使用 `--ignore-unfixed`，因此仅可修复的 HIGH/CRITICAL 阻塞门禁。
 
-## Still out of this gate (later tasks)
+## 本门禁之外（后续任务）
 
-- Dual-platform performance harness → **T069 / T070**
-- 10-person usability → **T071**
-- Public activation → **T074** (do not run until T069–T071 pass)
+- 双平台性能测试框架 → **T069 / T070**
+- 十人易用性 → **T071**
+- 公共激活 → **T074**（在 T069–T071 通过前不要执行）
 
-## Toolchain drift note (T084)
+## 工具链漂移说明（T084）
 
-**Pinned contract** (do not relax): `ops/workflow/toolchains.json` and
-`.tool-versions` require **Node exact `24.18.0`** (npm bundled with that
-release). CI and evidence hosts must match.
+**固定契约**（不得放宽）：`ops/workflow/toolchains.json` 与
+`.tool-versions` 要求 **Node 精确 `24.18.0`**（npm 随该发行捆绑）。
+CI 与验收证据主机必须匹配。
 
-| Situation | Recovery |
+| 情况 | 恢复 |
 |-----------|----------|
-| Host default Node is `24.13.x` (or other non-exact) | `nvm install 24.18.0 && nvm use 24.18.0` (or equivalent asdf/mise), then re-run `make toolchain-check` |
-| Root `make build` fails with `TOOL_VERSION_UNSUPPORTED` for node | Same as above; component `make -C services/*/ build` still works via Docker-only paths but is **not** a substitute for the root gate |
-| Intentional pin change | Reviewed PR updating `.tool-versions` + `toolchains.json` integrity references together |
+| 主机默认 Node 为 `24.13.x`（或其他非精确版本） | `nvm install 24.18.0 && nvm use 24.18.0`（或等效 asdf/mise），然后重跑 `make toolchain-check` |
+| 根 `make build` 因 node 的 `TOOL_VERSION_UNSUPPORTED` 失败 | 同上；组件 `make -C services/*/ build` 仍可经仅 Docker 路径工作，但**不是**根门禁的替代 |
+| 有意变更固定版本 | 经评审 PR 一并更新 `.tool-versions` + `toolchains.json` 完整性引用 |
 
-**This session (2026-07-22, later)**: default shell Node was `24.13.0`; after
-`nvm use 24.18.0`, `make toolchain-check` returned 0. The pin remains
-`24.18.0` — host drift is operator recovery, not a contract downgrade.
+**本会话（2026-07-22, later）**: 默认 shell Node 为 `24.13.0`；在
+`nvm use 24.18.0` 之后，`make toolchain-check` 返回 0。固定版本仍为
+`24.18.0` — 主机漂移是操作者恢复问题，而非契约降级。
 
-## Conclusion
+## 结论
 
-T068 offline + Docker quality matrix required for SF02 is recorded **PASS**. Public lifecycle remains fail-closed.
+SF02 所需的 T068 离线 + Docker 质量矩阵记录为 **PASS**。公共生命周期在当时仍保持失败关闭。

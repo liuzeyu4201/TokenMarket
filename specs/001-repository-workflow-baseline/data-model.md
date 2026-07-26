@@ -4,11 +4,11 @@
 
 **Date**: 2026-07-13
 
-**Persistence model**: Version-controlled engineering metadata plus ephemeral run evidence; no business database tables
+**Persistence model**: 版本控制的工程元数据加临时运行证据；无业务数据库表
 
 ## Overview
 
-This feature models repository workflow facts rather than TokenMarket business data. Durable definitions live in version control and are validated against the schemas in [`contracts/`](./contracts/). Runtime command events and CI evidence are ephemeral outputs retained by the local terminal or CI platform.
+本功能对仓库工作流事实建模，而非 TokenMarket 业务数据。持久定义存放于版本控制，并对照 [`contracts/`](./contracts/) 中的 schema 校验。运行时命令事件与 CI 证据为临时输出，由本地终端或 CI 平台保留。
 
 ```text
 ComponentBoundary 1 ── * ComponentActionBinding * ── 1 WorkflowCommandDefinition
@@ -25,61 +25,61 @@ CIGate * ── 1 WorkflowCommandDefinition
 
 ## Entity: WorkflowCommandDefinition
 
-Represents one public or supporting root workflow action.
+表示一个公共或支持性的根工作流动作。
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `name` | string | Unique, lowercase kebab-case; public names are `help`, `dev`, `dev-down`, `fmt`, `lint`, `test`, `build`, `migrate`; stable supporting names include `bootstrap`, `type-check`, `migrate-integration-check` |
-| `visibility` | enum | `public` or `supporting` |
-| `purpose` | string | Non-empty, safe for help output |
-| `preconditions` | list | Ordered checks that run before side effects |
-| `ordered_steps` | list | References component actions or workflow checks |
-| `side_effect_class` | enum | `none`, `workspace-format`, `local-resource`, `persistent-data`, `artifact-build` |
-| `mode_policy` | enum | `not-applicable`, `optional-default-local`, `required` |
-| `success_semantics` | string | Must define observable evidence, never only “command returned” |
-| `failure_codes` | list | Values allowed by the workflow event contract |
-| `recovery` | string | Safe retry/backout instructions |
-| `output_contract_version` | string | Semantic version of workflow event schema |
+| `name` | string | 唯一，小写 kebab-case；公共名称为 `help`、`dev`、`dev-down`、`fmt`、`lint`、`test`、`build`、`migrate`；稳定支持名称包括 `bootstrap`、`type-check`、`migrate-integration-check` |
+| `visibility` | enum | `public` 或 `supporting` |
+| `purpose` | string | 非空，对 help 输出安全 |
+| `preconditions` | list | 副作用前按序运行的检查 |
+| `ordered_steps` | list | 引用组件动作或工作流检查 |
+| `side_effect_class` | enum | `none`、`workspace-format`、`local-resource`、`persistent-data`、`artifact-build` |
+| `mode_policy` | enum | `not-applicable`、`optional-default-local`、`required` |
+| `success_semantics` | string | 必须定义可观察证据，永不仅“命令已返回” |
+| `failure_codes` | list | 工作流事件契约允许的值 |
+| `recovery` | string | 安全重试/回退说明 |
+| `output_contract_version` | string | 工作流事件 schema 的语义版本 |
 
 **Invariants**:
 
-- Every public command appears exactly once; stable `bootstrap` and `type-check` support commands also appear exactly once.
-- `bootstrap` validates system tools first, uses committed locks, never installs system tools and never rewrites a lockfile.
-- A command with side effects lists preconditions before the first side-effecting step.
-- A required step cannot have an empty adapter or empty evidence rule.
-- `dev` and `dev-down` remain public while their capability is `blocked_on_sf02`.
-- Exact numeric non-zero exit codes are not part of the public contract.
+- 每个公共命令恰好出现一次；稳定的 `bootstrap` 与 `type-check` 支持命令也恰好出现一次。
+- `bootstrap` 先校验系统工具，使用已提交锁，永不安装系统工具且永不重写锁文件。
+- 有副作用的命令在第一个有副作用步骤前列出前置条件。
+- 必需步骤不能有空适配器或空证据规则。
+- `dev` 与 `dev-down` 在能力为 `blocked_on_sf02` 时仍保持公共。
+- 精确的非零退出码数值不属于公共契约。
 
-**Owner/source of truth**: Repository maintainers; root Make workflow and command contract.
+**Owner/source of truth**: 仓库维护者；根 Make 工作流与命令契约。
 
-**Classification/retention**: Public engineering metadata; retained in Git history.
+**Classification/retention**: 公共工程元数据；保留于 Git 历史。
 
-**Audit**: Semantic changes require spec/contract/CI updates in the same reviewed change.
+**Audit**: 语义变更要求在同一经评审变更中更新规格/契约/CI。
 
 ## Entity: ComponentBoundary
 
-Represents one required ownership boundary.
+表示一个必需的所有权边界。
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `id` | enum | `proxy-gateway`, `api-service`, `billing-service`, `admin-service`, `frontend`, `shared`, `infra`, `ops` |
-| `path` | repository-relative path | Unique; must resolve inside repository root |
-| `owner` | string | Non-empty team or maintainer role |
-| `responsibility` | string | Must not duplicate another component's domain ownership |
-| `component_type` | enum | `go-service`, `python-service`, `web-frontend`, `contract-assets`, `infrastructure-assets`, `operations-assets` |
-| `allowed_dependencies` | list of component IDs | Directional allowlist; self-reference forbidden |
-| `test_root` | path | Must exist inside component path and contain discoverable tests |
-| `deliverable_type` | enum/list | Binary, container image, static site image, deterministic asset archive |
-| `required` | boolean | Always `true` for SF01's eight boundaries |
-| `lifecycle_state` | enum | `declared`, `scaffolded`, `verified` |
+| `id` | enum | `proxy-gateway`、`api-service`、`billing-service`、`admin-service`、`frontend`、`shared`、`infra`、`ops` |
+| `path` | repository-relative path | 唯一；必须解析到仓库根内 |
+| `owner` | string | 非空团队或维护者角色 |
+| `responsibility` | string | 不得复制另一组件的领域所有权 |
+| `component_type` | enum | `go-service`、`python-service`、`web-frontend`、`contract-assets`、`infrastructure-assets`、`operations-assets` |
+| `allowed_dependencies` | list of component IDs | 有向白名单；禁止自引用 |
+| `test_root` | path | 必须存在于组件路径内且包含可发现测试 |
+| `deliverable_type` | enum/list | 二进制、容器镜像、静态站点镜像、确定性资产归档 |
+| `required` | boolean | 对 SF01 的八个边界始终为 `true` |
+| `lifecycle_state` | enum | `declared`、`scaffolded`、`verified` |
 
 **Invariants**:
 
-- Path uniqueness is case-sensitive and symlink resolution may not escape repository root.
-- A service cannot import another service's internal package or read its persistence store.
-- `shared` stores versioned contracts and generated metadata, not copied service business logic.
-- `admin-service` has no migration ownership in SF01 and cannot access API/billing storage.
-- `verified` requires all mandatory action bindings to produce evidence.
+- 路径唯一性区分大小写，符号链接解析不得逃出仓库根。
+- 服务不能导入另一服务的内部包或读取其持久化存储。
+- `shared` 存储版本化契约与生成元数据，而非复制的服务业务逻辑。
+- `admin-service` 在 SF01 中无迁移所有权，且不能访问 API/billing 存储。
+- `verified` 要求所有强制动作绑定产生证据。
 
 **State transition**:
 
@@ -89,93 +89,93 @@ declared ── structure created ──> scaffolded ── fmt/lint/test/build 
    └──── missing/invalid structure ───┴──── contract or action failure ───> failed run
 ```
 
-**Owner/source of truth**: Component manifest validated by `component-manifest.schema.json`.
+**Owner/source of truth**: 由 `component-manifest.schema.json` 校验的组件清单。
 
-**Classification/retention**: Public engineering metadata; Git retained.
+**Classification/retention**: 公共工程元数据；Git 保留。
 
-**Reconciliation**: `structure-check` compares manifest, repository paths, Make adapters and tests.
+**Reconciliation**: `structure-check` 比较清单、仓库路径、Make 适配器与测试。
 
 ## Entity: ComponentActionBinding
 
-Joins a component to a workflow action.
+将组件连接到工作流动作。
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `component_id` | ComponentBoundary ID | Required |
-| `action` | enum | `bootstrap`, `fmt`, `fmt-check`, `type-check`, `lint`, `test`, `build`, optionally `migrate` |
-| `adapter` | path/target reference | Must resolve inside component and be non-empty |
-| `required` | boolean | Mandatory bindings cannot be skipped |
-| `evidence_type` | enum | `formatted-files`, `static-report`, `test-count`, `coverage-report`, `image`, `asset-archive`, `migration-result` |
-| `minimum_evidence` | object | For test actions includes `executed_tests >= 1` |
-| `timeout_seconds` | positive integer | Bounded per action; exact values finalized in tasks/config |
+| `component_id` | ComponentBoundary ID | 必需 |
+| `action` | enum | `bootstrap`、`fmt`、`fmt-check`、`type-check`、`lint`、`test`、`build`，可选 `migrate` |
+| `adapter` | path/target reference | 必须解析到组件内且非空 |
+| `required` | boolean | 强制绑定不可跳过 |
+| `evidence_type` | enum | `formatted-files`、`static-report`、`test-count`、`coverage-report`、`image`、`asset-archive`、`migration-result` |
+| `minimum_evidence` | object | 对测试动作包含 `executed_tests >= 1` |
+| `timeout_seconds` | positive integer | 每动作有界；精确值在 tasks/config 中最终确定 |
 
-**Identity**: `(component_id, action)` is unique.
+**Identity**: `(component_id, action)` 唯一。
 
-**Failure rule**: Failure of a required binding fails the run; later required bindings become `SKIPPED` with safe reason, never `PASSED`.
+**Failure rule**: 必需绑定失败则运行失败；后续必需绑定变为带安全原因的 `SKIPPED`，永不 `PASSED`。
 
 ## Entity: ToolchainRequirement
 
-Represents a supported tool or scanner and its version source.
+表示受支持的工具或扫描器及其版本来源。
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `tool` | string | Unique within scope |
-| `exact_version` | string | Required for CI/scanners; language compatibility may also declare a range |
-| `version_source` | path | Repository file or lock file that owns the value |
-| `affected_components` | component IDs | Non-empty |
-| `install_policy` | enum | `preinstalled-required`, `locked-package-manager`, `verified-download`, `pinned-container` |
-| `integrity_reference` | checksum/digest/SHA | Required for downloaded binaries, containers and Actions |
-| `execution_overrides` | optional object | Map of toolchain execution profile id → override object. Each override requires `match: exact-list` and a non-empty `allowed_versions` string list (exact membership only). Optional `rationale` is documentation-only |
+| `tool` | string | 范围内唯一 |
+| `exact_version` | string | CI/扫描器必需；语言兼容性也可声明范围 |
+| `version_source` | path | 拥有该值的仓库文件或锁文件 |
+| `affected_components` | component IDs | 非空 |
+| `install_policy` | enum | `preinstalled-required`、`locked-package-manager`、`verified-download`、`pinned-container` |
+| `integrity_reference` | checksum/digest/SHA | 下载的二进制、容器与 Actions 必需 |
+| `execution_overrides` | 可选 object | 工具链执行配置文件（execution profile）id → override 对象的映射。每个 override 要求 `match: exact-list` 与非空 `allowed_versions` 字符串列表（仅精确成员匹配）。可选 `rationale` 仅作说明 |
 
-**Execution profile** (input to `toolchain-check`, not a Make `mode`):
+**执行配置文件（execution profile）**（`toolchain-check` 的输入，不是 Make 的 `mode`）：
 
-| Profile id | Selection | Version interpretation |
+| Profile id | 选择方式 | 版本解释 |
 |------------|-----------|------------------------|
-| `local` (default) | Explicit `--toolchain-profile`, else `TOKENMARKET_TOOLCHAIN_PROFILE`, else default | Use `exact_version` with existing matching rules |
-| `github-actions-ubuntu-24.04` | Must be explicit; never inferred from `CI`/`GITHUB_ACTIONS` | For tools with a matching override, use exact-list allowlist; require `GITHUB_ACTIONS=true` and `RUNNER_OS=Linux` |
+| `local`（默认） | 显式 `--toolchain-profile`，否则 `TOKENMARKET_TOOLCHAIN_PROFILE`，再否则默认 | 使用 `exact_version` 与既有匹配规则 |
+| `github-actions-ubuntu-24.04` | 必须显式；永不从 `CI`/`GITHUB_ACTIONS` 推断 | 对有对应 override 的工具使用 exact-list 批准列表；要求 `GITHUB_ACTIONS=true` 与 `RUNNER_OS=Linux` |
 
 **Invariants**:
 
-- Local and CI checks read the same version source file (`ops/workflow/toolchains.json`); interpretation may differ only by explicit execution profile.
-- Missing or unsupported versions fail before component actions.
-- Unknown profiles, empty allowlists, unknown `match` values, and failed hosted authenticity checks fail closed.
-- Workflow commands never silently install or upgrade a toolchain.
-- Cache hits never replace version or integrity validation.
-- SF02 local dependency lifecycle Docker/Compose exact pins remain independent of this entity's hosted overrides.
+- 本地与 CI 检查读取同一版本来源文件（`ops/workflow/toolchains.json`）；解释可仅因显式 execution profile 而不同。
+- 缺失或不支持的版本在组件动作前失败。
+- 未知 profile、空批准列表、未知 `match` 值与托管真实性检查失败均失败关闭。
+- 工作流命令永不静默安装或升级工具链。
+- 缓存命中永不替代版本或完整性校验。
+- SF02 本地依赖生命周期的 Docker/Compose 精确钉选独立于本实体的托管 overrides。
 
 ## Entity: ConfigurationDefinition
 
-Describes a configuration name without containing a real value.
+描述配置名称，不包含真实值。
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `name` | uppercase identifier | Unique |
-| `value_type` | enum | `string`, `integer`, `boolean`, `url`, `duration`, `enum` |
-| `required_modes` | set | Subset of `local`, `test`, `prod` |
-| `sensitivity` | enum | `public`, `internal`, `secret`, `personal`, `financial` |
-| `safe_placeholder` | string | Must be synthetic and unusable; secret placeholders cannot match provider credential formats |
-| `description` | string | Non-empty and safe for public docs |
-| `owner_component` | component ID | Required |
+| `name` | uppercase identifier | 唯一 |
+| `value_type` | enum | `string`、`integer`、`boolean`、`url`、`duration`、`enum` |
+| `required_modes` | set | `local`、`test`、`prod` 的子集 |
+| `sensitivity` | enum | `public`、`internal`、`secret`、`personal`、`financial` |
+| `safe_placeholder` | string | 必须为合成且不可用；密钥占位符不能匹配提供商凭据格式 |
+| `description` | string | 非空且对公共文档安全 |
+| `owner_component` | component ID | 必需 |
 
 **Invariants**:
 
-- No real value is stored in the definition or committed examples.
-- Logs and validation errors mention `name`, never the supplied value.
-- `.env`, `.env.*` are ignored except safe `*.example` files.
-- Production-required security/persistence values have no working default.
+- 定义或已提交示例中不存储真实值。
+- 日志与校验错误提及 `name`，永不提及所提供的值。
+- 除安全 `*.example` 文件外，`.env`、`.env.*` 被忽略。
+- 生产必需的安全/持久化值无可用默认值。
 
 ## Entity: EnvironmentSelection
 
-Represents environment selection for migration and future deployment commands.
+表示迁移与未来部署命令的环境选择。
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `mode` | enum | Exactly lowercase `local`, `test`, `prod` |
-| `input_origin` | enum | `make-command-line`, `omitted`, `shell-environment`, `file`, `legacy-variable` |
-| `effective_mode` | enum | Omitted becomes `local`; only command-line input can select `test` or `prod` |
-| `config_reference` | path/reference | Selected only after mode validation; real file remains ignored |
-| `approval_required` | boolean | `true` only for `prod` |
-| `preflight_state` | enum | `requested`, `validated`, `approved`, `connection_allowed`, `rejected` |
+| `mode` | enum | 精确小写 `local`、`test`、`prod` |
+| `input_origin` | enum | `make-command-line`、`omitted`、`shell-environment`、`file`、`legacy-variable` |
+| `effective_mode` | enum | 省略变为 `local`；仅命令行输入可选择 `test` 或 `prod` |
+| `config_reference` | path/reference | 仅在模式校验后选择；真实文件仍被忽略 |
+| `approval_required` | boolean | 仅对 `prod` 为 `true` |
+| `preflight_state` | enum | `requested`、`validated`、`approved`、`connection_allowed`、`rejected` |
 
 **State transitions**:
 
@@ -186,108 +186,108 @@ explicit prod      ──> validated(prod)  ──> approved ──> connection_
 invalid/source escalation/approval missing ─────────────> rejected
 ```
 
-**Critical invariant**: `rejected` occurs before reading target configuration, resolving target DNS, starting containers or opening a network connection.
+**Critical invariant**: `rejected` 发生在读取目标配置、解析目标 DNS、启动容器或打开网络连接之前。
 
 ## Entity: ProductionApproval
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `approval_type` | enum | `interactive-phrase`, `protected-environment` |
-| `action` | string | Must equal requested action |
-| `commit_sha` | string | Required for non-interactive approval |
-| `run_id` | string | Required for non-interactive approval |
-| `approval_reference` | string | Safe audit reference; never a token |
+| `approval_type` | enum | `interactive-phrase`、`protected-environment` |
+| `action` | string | 必须等于请求的动作 |
+| `commit_sha` | string | 非交互审批必需 |
+| `run_id` | string | 非交互审批必需 |
+| `approval_reference` | string | 安全审计引用；永不作为 token |
 | `approved_at` | timestamp | UTC |
 
-Approval is ephemeral and single-use for its bound action/commit/run. The approval token or reviewer credential is never logged or stored by the workflow model.
+审批为临时且对其绑定的动作/提交/运行一次性有效。审批 token 或评审者凭据永不由工作流模型记录或存储。
 
 ## Entity: MigrationOwner
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `component_id` | enum | `api-service` or `billing-service` in SF01 |
-| `order` | integer | Unique; API precedes billing |
-| `version_path` | repository-relative path | Must remain inside owner component |
-| `expected_heads` | positive integer | Exactly `1` after initialization |
-| `owns_database` | boolean | Must be true |
-| `backout_runbook` | path | Required and link-valid |
+| `component_id` | enum | SF01 中为 `api-service` 或 `billing-service` |
+| `order` | integer | 唯一；API 先于 billing |
+| `version_path` | repository-relative path | 必须保持在负责人组件内 |
+| `expected_heads` | positive integer | 初始化后恰好 `1` |
+| `owns_database` | boolean | 必须为 true |
+| `backout_runbook` | path | 必需且链接有效 |
 
-`admin-service` is explicitly not a migration owner. Cross-owner foreign keys and direct storage access are forbidden.
+`admin-service` 被明确不为迁移负责人。禁止跨负责人外键与直接存储访问。
 
 ## Entity: MigrationPlan
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `owner` | MigrationOwner | Required |
-| `mode` | EnvironmentSelection | Required for apply; not required for offline check |
-| `current_head` | revision ID or `base` | Derived |
-| `target_head` | revision ID or `base` | Derived |
-| `pending_count` | non-negative integer | Zero allowed only after initialized graph validation |
-| `forward_evidence` | reference | Required for changed migrations |
-| `backout_evidence` | reference | Required for changed migrations |
-| `retry_evidence` | reference | Required for changed migrations |
+| `owner` | MigrationOwner | 必需 |
+| `mode` | EnvironmentSelection | apply 必需；离线检查不需要 |
+| `current_head` | revision ID or `base` | 派生 |
+| `target_head` | revision ID or `base` | 派生 |
+| `pending_count` | non-negative integer | 仅在已初始化图校验后允许为零 |
+| `forward_evidence` | reference | 变更的迁移必需 |
+| `backout_evidence` | reference | 变更的迁移必需 |
+| `retry_evidence` | reference | 变更的迁移必需 |
 
-No business tables are created by SF01. CI migration evidence uses an isolated PostgreSQL 15 instance and synthetic credentials.
+SF01 不创建业务表。CI 迁移证据使用隔离 PostgreSQL 15 实例与合成凭据。
 
 ## Entity: WorkflowRun
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `run_id` | UUID/opaque unique ID | Unique per invocation |
-| `action` | command name | Required |
-| `mode` | effective mode or null | Null when not applicable |
+| `run_id` | UUID/opaque unique ID | 每次调用唯一 |
+| `action` | command name | 必需 |
+| `mode` | effective mode or null | 不适用时为 null |
 | `started_at` | timestamp | UTC |
-| `completed_at` | timestamp or null | Set on terminal state |
-| `status` | enum | `PENDING`, `RUNNING`, `PASSED`, `FAILED` |
-| `step_results` | ordered list | At least one for non-help actions |
+| `completed_at` | timestamp or null | 在终态时设置 |
+| `status` | enum | `PENDING`、`RUNNING`、`PASSED`、`FAILED` |
+| `step_results` | ordered list | 非 help 动作至少一个 |
 
-**State transition**: `PENDING → RUNNING → PASSED|FAILED`; terminal states are immutable.
+**State transition**: `PENDING → RUNNING → PASSED|FAILED`；终态不可变。
 
-**Retention/classification**: Ephemeral operational evidence, no secrets or personal data. Local output is not committed; CI logs/artifacts follow repository retention settings defined during implementation.
+**Retention/classification**: 临时运维证据，无密钥或个人数据。本地输出不提交；CI 日志/工件遵循实现期间定义的仓库保留设置。
 
 ## Entity: WorkflowStepResult
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `schema_version` | semantic version | Required |
-| `run_id` | WorkflowRun ID | Required |
-| `action` | string | Required |
-| `component` | component ID or `repository` | Required |
-| `phase` | string | Stable short identifier |
-| `status` | enum | `STARTED`, `PASSED`, `FAILED`, `SKIPPED` |
-| `code` | stable error/status code | Required for failed/skipped; safe success code otherwise |
-| `duration_ms` | non-negative integer | Required on terminal step event |
-| `message` | string | Human-readable, redacted safe summary |
+| `schema_version` | semantic version | 必需 |
+| `run_id` | WorkflowRun ID | 必需 |
+| `action` | string | 必需 |
+| `component` | component ID or `repository` | 必需 |
+| `phase` | string | 稳定短标识符 |
+| `status` | enum | `STARTED`、`PASSED`、`FAILED`、`SKIPPED` |
+| `code` | stable error/status code | 失败/跳过时必需；否则为安全成功码 |
+| `duration_ms` | non-negative integer | 终态步骤事件必需 |
+| `message` | string | 人类可读、脱敏的安全摘要 |
 
 ## Entity: CIGate
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `id` | string | Unique; required job is `quality-gate` |
-| `triggers` | set | PR/push to `master` and `master-dev`, manual; merge group when enabled |
+| `id` | string | 唯一；必需作业为 `quality-gate` |
+| `triggers` | set | 针对 `master` 与 `master-dev` 的 PR/push、手动；启用时含 merge group |
 | `root_target` | string | `ci` |
-| `blocking` | boolean | Always true for required gate |
-| `permissions` | map | `contents: read`; all unspecified permissions none |
-| `evidence` | list | Frozen bootstrap, format, independent type-check, lint/boundary, tests, contracts, offline plus isolated PostgreSQL migrations, secrets/dependencies/images, build/smoke |
-| `retention_policy` | reference | CI setting; must exclude secrets |
+| `blocking` | boolean | 对必需门禁始终为 true |
+| `permissions` | map | `contents: read`；所有未指定权限为 none |
+| `evidence` | list | 冻结 bootstrap、format、独立 type-check、lint/边界、测试、契约、离线加隔离 PostgreSQL 迁移、密钥/依赖/镜像、构建/冒烟 |
+| `retention_policy` | reference | CI 设置；必须排除密钥 |
 
 **Invariants**:
 
-- CI project logic invokes only root workflow targets.
-- No production deployment, publishing or secret-bearing action is allowed.
-- A failed required step cannot use `continue-on-error`.
-- Required job name remains stable through rollback.
+- CI 项目逻辑仅调用根工作流目标。
+- 不允许生产部署、发布或含密钥动作。
+- 失败的必需步骤不能使用 `continue-on-error`。
+- 必需作业名在回滚过程中保持稳定。
 
 ## Entity: SharedContractArtifact
 
-| Field | Type | Rules |
+| 字段 | 类型 | 规则 |
 |-------|------|-------|
-| `contract_id` | string | Unique |
-| `owner` | component/maintainer | Required |
-| `version` | semantic version | Required |
-| `format` | enum | JSON Schema, OpenAPI, event schema, Markdown developer contract |
-| `compatibility` | enum | `backward-compatible`, `breaking-new-version` |
-| `deprecated_at` | date or null | Required only when deprecated |
-| `replacement` | contract reference or null | Required when deprecated |
+| `contract_id` | string | 唯一 |
+| `owner` | component/maintainer | 必需 |
+| `version` | semantic version | 必需 |
+| `format` | enum | JSON Schema、OpenAPI、事件 schema、Markdown 开发者契约 |
+| `compatibility` | enum | `backward-compatible`、`breaking-new-version` |
+| `deprecated_at` | date or null | 仅在弃用时必需 |
+| `replacement` | contract reference or null | 弃用时必需 |
 
-Generated consumers are reproducible outputs of the contract source and are not independent facts. Contract drift fails CI.
+生成的消费者是契约源的可复现输出，而非独立事实。契约漂移使 CI 失败。

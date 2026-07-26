@@ -1,63 +1,63 @@
-# US3 Boundary Evidence
+# US3 边界证据
 
-**Feature**: specs/001-repository-workflow-baseline — 仓库工程工作流基线  
-**Story**: US3 — 在明确的组件边界内开始开发  
-**Recorded**: 2026-07-15
+**功能**：specs/001-repository-workflow-baseline — 仓库工程工作流基线
+**故事**：US3 — 在明确的组件边界内开始开发
+**记录日期**：2026-07-15
 
-## 1. Structure Tests
+## 1. 结构测试
 
-`tests/workflow/test_structure.py` verifies:
+`tests/workflow/test_structure.py` 验证：
 
-- Every component has a non-empty `README.md`.
-- Component paths stay inside the repository root.
-- Declared `test_root` directories exist.
-- Deliverables are one of the known artifact kinds.
+- 每个组件都有非空的 `README.md`。
+- 组件路径保持在仓库根目录内。
+- 已声明的 `test_root` 目录存在。
+- 交付物属于已知产物类型之一。
 
-Result: **4 passed, 0 failed**.
+结果：**4 通过，0 失败**。
 
-## 2. Contract Tests
+## 2. 契约测试
 
-`tests/workflow/test_contracts.py` verifies:
+`tests/workflow/test_contracts.py` 验证：
 
-- `shared/contracts/_meta/contract-manifest.schema.json` exists.
-- Each runtime contract in `shared/contracts/repository-workflow/v1/` carries
-  `$schema` and `schema_version`.
+- `shared/contracts/_meta/contract-manifest.schema.json` 存在。
+- `shared/contracts/repository-workflow/v1/` 中的每个运行时契约均携带
+  `$schema` 与 `schema_version`。
 
-Result: **2 passed, 0 failed**.
+结果：**2 通过，0 失败**。
 
-## 3. Boundary Tests
+## 3. 边界测试
 
-`tests/workflow/test_boundaries.py` verifies:
+`tests/workflow/test_boundaries.py` 验证：
 
-- `admin-service` does not bind the `migrate` action.
-- No Python service imports another service's internal package.
+- `admin-service` 不绑定 `migrate` 动作。
+- 没有 Python 服务导入另一服务的内部包。
 
-Result: **2 passed, 0 failed**.
+结果：**2 通过，0 失败**。
 
-## 4. ADR Policy Tests
+## 4. ADR 策略测试
 
-`tests/workflow/test_adr_policy.py` verifies:
+`tests/workflow/test_adr_policy.py` 验证：
 
-- `docs/decisions/` exists.
-- `docs/decisions/README.md` exists and is non-empty.
-- `docs/decisions/001-github-actions-ci-adapter.md` exists.
+- `docs/decisions/` 存在。
+- `docs/decisions/README.md` 存在且非空。
+- `docs/decisions/001-github-actions-ci-adapter.md` 存在。
 
-Result: **3 passed, 0 failed**.
+结果：**3 通过，0 失败**。
 
-## 5. Codeowners
+## 5. 代码所有者
 
-`.github/CODEOWNERS` assigns review owners to:
+`.github/CODEOWNERS` 将评审所有者分配给：
 
-- Root workflow, CI and `CODEOWNERS` itself
-- Each service boundary
-- `shared/` contracts and validation
-- `infra/` and `ops/` platform assets
-- Security-sensitive configuration files
+- 根工作流、CI 与 `CODEOWNERS` 自身
+- 每个服务边界
+- `shared/` 契约与校验
+- `infra/` 与 `ops/` 平台资产
+- 安全敏感配置文件
 
-## 6. Component READMEs
+## 6. 组件 README
 
-All eight component directories contain READMEs documenting ownership,
-responsibility and allowed dependencies:
+全部八个组件目录均包含文档化所有权、
+职责与允许依赖的 README：
 
 - `services/proxy-gateway/README.md`
 - `services/api-service/README.md`
@@ -68,8 +68,8 @@ responsibility and allowed dependencies:
 - `infra/README.md`
 - `ops/README.md`
 
-## 7. Sign-off
+## 7. 签核
 
-US3 implementation proves that every asset has a single correct location,
-cross-service boundaries are enforced, contracts are versioned, and ADRs are
-required for future structural changes.
+US3 实现证明每个资产都有唯一正确位置、
+跨服务边界得到强制执行、契约已版本化，且未来结构变更
+需要 ADR。

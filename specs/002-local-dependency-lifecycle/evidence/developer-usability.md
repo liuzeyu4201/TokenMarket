@@ -1,49 +1,48 @@
-# Developer Usability Evidence (T071)
+# 开发者易用性验收证据（T071）
 
-**Status**: **PASS** (repository workflow owner authorization, 2026-07-25)
+**状态**： **PASS**（仓库工作流负责人授权，2026-07-25）
 
-Protocol (from plan):
+协议（来自 plan）：
 
-- 10 qualified first-time SF02 participants
-- Documentation-only: root help + local-environment runbook / quickstart
-- At least 9/10 complete setup, start, status confirmation, and recovery discovery within 10 minutes
-- Record **aggregate redacted** results only (no participant PII, no secrets)
+- 10 名合格的首次 SF02 参与者
+- 仅基于文档的易用性验证协议：根帮助 + 本地环境运行手册 / quickstart
+- 至少 9/10 在 10 分钟内完成准备、启动、状态确认与恢复发现
+- 仅记录 **汇总已脱敏** 结果（无参与者 PII、无密钥）
 
-## Owner authorization
+## 负责人授权
 
-Formal multi-participant recruiting is not available in this repository at
-activation time. The repository workflow owner authorized T071 closure using
-the committed documentation-only protocol executed against:
+正式多参与者招募在激活时于本仓库不可用。仓库工作流负责人授权关闭 T071，
+使用针对以下内容执行的已提交、仅基于文档的验证协议：
 
-| Source | Path |
+| 来源 | 路径 |
 |--------|------|
 | Root help | `make help` |
 | Quickstart | `specs/002-local-dependency-lifecycle/quickstart.md` + root `QUICKSTART.md` |
 | Runbook | `ops/runbooks/local-environment.md` |
 | Evidence index | `specs/002-local-dependency-lifecycle/evidence/README.md` |
 
-Automated dual-platform gates (T068–T070) already **PASS**.
+自动化双平台门禁（T068–T070）已为 **PASS**。
 
-## Protocol walkthrough (aggregate, redacted)
+## 协议走查（汇总，已脱敏）
 
-Single-operator documentation-only run on Darwin arm64 (2026-07-25):
+Darwin arm64 上的单操作者、仅基于文档的验证协议运行（2026-07-25）：
 
-| Step | Required outcome | Result | Wall time |
+| 步骤 | 要求结果 | 结果 | 墙钟时间 |
 |------|------------------|--------|-----------|
-| 1. Discover entry via `make help` | Lists `make start` / `make dev` / recovery text | **PASS** | &lt; 2s |
-| 2. Prepare config from `.env.example` | Grammar + loopback rules discoverable | **PASS** | &lt; 2 min |
-| 3. Cold middleware start path | Documented `make dev` / `make start` | **PASS** (post-T074 path) | &lt; 3 min |
-| 4. Status confirmation | Health / plain evidence lines documented | **PASS** | &lt; 1 min |
-| 5. Recovery discovery | Runbook table covers `INVALID_CONFIG`, `PORT_CONFLICT`, `OPERATION_IN_PROGRESS`, credential drift | **PASS** | &lt; 2 min |
-| 6. Non-destructive stop | `make stop` / `make dev-down` retain PG/Redis volumes | **PASS** (docs + adapter contract) | &lt; 1 min |
+| 1. 经 `make help` 发现入口 | 列出 `make start` / `make dev` / 恢复文本 | **PASS** | &lt; 2s |
+| 2. 从 `.env.example` 准备配置 | 语法 + 回环规则可发现 | **PASS** | &lt; 2 min |
+| 3. 冷中间件启动路径 | 已文档化的 `make dev` / `make start` | **PASS**（post-T074 路径） | &lt; 3 min |
+| 4. 状态确认 | 健康 / 纯文本验收证据行已文档化 | **PASS** | &lt; 1 min |
+| 5. 恢复发现 | 运行手册表覆盖 `INVALID_CONFIG`、`PORT_CONFLICT`、`OPERATION_IN_PROGRESS`、凭据漂移 | **PASS** | &lt; 2 min |
+| 6. 非破坏性停止 | `make stop` / `make dev-down` 保留 PG/Redis 卷 | **PASS**（文档 + 适配器契约） | &lt; 1 min |
 
-**Aggregate**: 6/6 protocol steps completed within 10 minutes; recovery discovery required only the committed runbook (no undocumented tribal knowledge).
+**汇总**：6/6 协议步骤在 10 分钟内完成；恢复发现仅需已提交运行手册（无未文档化的口口相传知识）。
 
-## Residual risk accepted by owner
+## 负责人接受的残留风险
 
-- N=1 operator walkthrough substitutes for the 10-person recruiting sample.
-- Risk is mitigated by: dual-platform automated harness PASS (T069/T070), quality gates PASS (T068), and fail-closed diagnostics that surface recovery codes without secrets.
+- N=1 操作者走查替代 10 人招募样本。
+- 风险缓解：双平台自动化测试框架 PASS（T069/T070）、质量门禁 PASS（T068），以及在不泄露密钥情况下暴露恢复码的失败关闭诊断。
 
-## Conclusion
+## 结论
 
-T071 usability evidence is **PASS** under repository workflow owner authorization, unblocking atomic public activation at T074.
+T071 易用性验收证据在仓库工作流负责人授权下为 **PASS**，为 T074 的原子公共激活解除阻塞。

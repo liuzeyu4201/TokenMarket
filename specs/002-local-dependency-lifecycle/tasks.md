@@ -1,169 +1,169 @@
-# Tasks: 本地依赖环境生命周期
+# 任务：本地依赖环境生命周期
 
-**Input**: Design documents from `/specs/002-local-dependency-lifecycle/`
+**输入**: 设计文档来自 `/specs/002-local-dependency-lifecycle/`
 
-**Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`
+**前置条件**: `plan.md`、`spec.md`、`research.md`、`data-model.md`、`contracts/`、`quickstart.md`
 
-**Tests**: Tests are REQUIRED for every behavior change and MUST be written and observed failing before the corresponding implementation task. Documentation-only tasks state their concrete validation target.
+**测试**: 每次行为变更**必须**编写测试，并在对应实现任务之前观察到失败。仅文档任务须写明具体校验目标。
 
-**Organization**: Tasks are grouped by user story. US1 and US2 are both P1; all implementation remains behind the SF01 fail-closed activation gate until consumer migration, required documentation, accessibility/security/dirty-worktree gates, and both-platform lifecycle/persistence/recovery/performance evidence pass, after which both public targets, event v2, and help/recovery text activate atomically.
+**组织方式**: 任务按用户故事分组。US1 与 US2 均为 P1；全部实现保持在 SF01 失败关闭（fail-closed）激活门禁之后，直至消费者迁移、必需文档、可访问性/安全/脏工作区门禁，以及双平台生命周期/持久化/恢复/性能验收证据通过，之后两个公共 Make 入口、event v2 与帮助/恢复文本原子激活。
 
-## Format: `[ID] [P?] [Story] Description`
+## 格式：`[ID] [P?] [Story] Description`
 
-- **[P]**: Can run in parallel because it changes different files and has no dependency on another incomplete task in the same batch
-- **[Story]**: Maps the task to User Story 1, 2, or 3 from `spec.md`
-- Every task names the exact file or files it changes or validates
+- **[P]**: 可并行，因变更不同文件，且不依赖同批中另一未完成任务
+- **[Story]**: 映射到 `spec.md` 中的用户故事 1、2 或 3
+- 每个任务命名其变更或校验的精确文件
 
-## Phase 1: Setup (Contract and Supply-Chain Materialization)
+## Phase 1: 准备（契约与供应链物化）
 
-**Purpose**: Establish the reviewed architecture decision, versioned public contracts, immutable dependency facts, and locked workflow package before behavior is implemented.
+**目的**: 在实现行为前，确立已评审架构决策、版本化公共契约、不可变依赖事实与已锁定工作流包。
 
-- [X] T001 Accept ADR 002 as the approved pre-implementation design while marking implementation verification Pending, recording ownership, failure modes, both-platform activation gate, volume-preserving rollback, and the no-cleanup boundary in `docs/decisions/002-local-compose-lifecycle.md`
-- [X] T002 [P] Materialize lifecycle v1 by copying the reviewed feature contracts into `shared/contracts/local-environment/v1/lifecycle.md` and `shared/contracts/local-environment/v1/local-dependency-manifest.schema.json`
-- [X] T003 [P] Materialize Root Make Workflow/event v2 with the required standard envelope and strict workflow-step payload without modifying v1 Make/event artifacts in `shared/contracts/repository-workflow/v2/make-workflow.md` and `shared/contracts/repository-workflow/v2/workflow-event.schema.json`
-- [X] T004 [P] Publish health contract v1.1 with the API/Billing-only PostgreSQL 503 readiness shape and unchanged 200/liveness shapes in `shared/contracts/repository-workflow/v1/service-health.openapi.yaml`
-- [X] T005 Resolve the official PostgreSQL 15.18, Redis 7.2.14, and Grafana 13.0.3 OCI index plus linux/amd64 and linux/arm64 child digests, verify publisher/runtime UID/GID/license/scan facts, and commit them in `ops/workflow/local-dependencies.json`, `ops/workflow/toolchains.json`, and `docs/decisions/002-local-compose-lifecycle.md`
-- [X] T006 [P] Add `workflow.local_env` package discovery and the reviewed asyncpg 0.30.x dependency without changing service locks in `tools/workflow/pyproject.toml` and `tools/workflow/uv.lock`
-- [X] T007 Register lifecycle v1, workflow v2, the health 1.1 minor update, ownership, compatibility, and deprecation status in `shared/contracts/README.md`
-
----
-
-## Phase 2: Foundational (Blocking Prerequisites)
-
-**Purpose**: Build the cross-story contract, event, identity, lock, and isolated-test foundations required before any lifecycle story can be implemented.
-
-**CRITICAL**: No user-story implementation begins until this phase passes. T008–T013 are written first and must fail for the intended missing behavior before T014–T018 are implemented.
-
-- [X] T008 [P] Add contract-copy, schema-version, immutable v1 `make-workflow.md`/`workflow-event.schema.json`, health-1.1 minor compatibility, and contract-catalog drift tests in `tests/workflow/test_contracts.py`
-- [X] T009 [P] Add workflow event v2 tests for unique event IDs, stable type/version/producer, UTC timestamps, lifecycle correlation, strict payloads, dependency-field, WAITING-state, diagnostic-code, ordering, redaction, and strict-consumer migration in `tests/workflow/test_local_env_events.py`
-- [X] T010 [P] Add manifest tests rejecting placeholder/tag-only/leaf-only digests, missing platform children, extra dependencies, unsafe runtimes, invalid UID/GID, and timeout drift in `tests/workflow/test_local_dependency_manifest.py`
-- [X] T011 [P] Add typed state-machine and serialization-exclusion tests for manifest, operation, dependency, health, secret, and readiness entities in `tests/workflow/test_local_env_models.py`
-- [X] T012 [P] Add canonical path, NFC/UTF-8 hash, spaces/non-ASCII/symlink, short-hash collision, secure runtime directory, lock-file safety, contention, and abnormal-holder-exit tests in `tests/workflow/test_local_env_identity.py`
-- [X] T013 [P] Replace the transition-only assertions with an explicit v2 consumer-migration and activation gate that keeps public dev/dev-down on `SF02_NOT_READY` until all required capabilities are present in `tests/workflow/test_sf02_transition.py`
-- [X] T014 [P] Implement immutable typed entities, manifest loading, exact three-dependency validation, safe repr/equality behavior, and lifecycle state transitions in `tools/workflow/local_env/__init__.py` and `tools/workflow/local_env/models.py`
-- [X] T015 [P] Implement workflow event v2 standard-envelope emission with UUID event IDs, stable type/version/producer, UTC timestamps, lifecycle correlation IDs, strict dependency payloads, WAITING semantics, stable SF02 diagnostics, bounded messages, and value redaction while preserving v1 history in `tools/workflow/events.py`
-- [X] T016 Migrate every repository-owned JSONL reader and fixture assertion to the event v2 standard envelope while retaining explicit v1 Make/event regression coverage in `tests/workflow/helpers.py`, `tests/workflow/test_events.py`, and `tests/workflow/test_command_contract.py`
-- [X] T017 Implement canonical physical-path identity, full-fingerprint ownership, secure per-user runtime/project directories, no-symlink 0600 lock files, and non-blocking `fcntl` locking in `tools/workflow/local_env/identity.py`
-- [X] T018 Create synthetic-secret, temporary-workspace, monotonic-clock, fake-subprocess, and test-only project-label factories that can never address a developer project in `tests/workflow/conftest.py`
-
-**Checkpoint**: Versioned contracts validate, v1 regression coverage remains green, event v2 consumers are migrated, unsafe manifests fail closed, and identity/lock behavior passes without Docker.
+- [X] T001 将 ADR 002 接受为已批准的实现前设计，同时将实现验证标为 Pending，并在 `docs/decisions/002-local-compose-lifecycle.md` 中记录所有权、失败模式、双平台激活门禁、保留卷回滚与无清理边界
+- [X] T002 [P] 通过将已评审功能契约复制到 `shared/contracts/local-environment/v1/lifecycle.md` 与 `shared/contracts/local-environment/v1/local-dependency-manifest.schema.json` 物化生命周期 v1
+- [X] T003 [P] 物化 Root Make Workflow/event v2 所需标准信封与严格 workflow-step payload，且不修改 v1 Make/event 产物，文件为 `shared/contracts/repository-workflow/v2/make-workflow.md` 与 `shared/contracts/repository-workflow/v2/workflow-event.schema.json`
+- [X] T004 [P] 在 `shared/contracts/repository-workflow/v1/service-health.openapi.yaml` 发布健康契约 v1.1：仅 API/Billing 的 PostgreSQL 503 就绪检查形状，200/liveness 形状不变
+- [X] T005 解析官方 PostgreSQL 15.18、Redis 7.2.14 与 Grafana 13.0.3 的 OCI index 及 linux/amd64、linux/arm64 child digest，校验发布者/运行时 UID/GID/许可证/扫描事实，并提交到 `ops/workflow/local-dependencies.json`、`ops/workflow/toolchains.json` 与 `docs/decisions/002-local-compose-lifecycle.md`
+- [X] T006 [P] 在 `tools/workflow/pyproject.toml` 与 `tools/workflow/uv.lock` 中添加 `workflow.local_env` 包发现与已评审 asyncpg 0.30.x 依赖，且不改服务锁
+- [X] T007 在 `shared/contracts/README.md` 登记生命周期 v1、workflow v2、健康 1.1 次要更新、所有权、兼容性与弃用状态
 
 ---
 
-## Phase 3: User Story 1 - 一次启动并确认依赖真正可用 (Priority: P1) MVP Development Slice
+## Phase 2: 基础（阻塞性前置）
 
-**Goal**: Reconcile exactly PostgreSQL, Redis, and Grafana from validated local configuration and return fresh authenticated per-dependency readiness under one bounded deadline.
+**目的**: 构建跨故事的契约、事件、身份、锁与隔离测试基础，任何生命周期故事实现前必须完成。
 
-**Independent Test**: Against an isolated test project on a supported local runtime, invoke the guarded lifecycle start adapter with valid ignored configuration; verify missing immutable images are pulled and reported separately, all three authenticated probes pass within 60 seconds, a healthy repeat finishes within 15 seconds without resource growth or registry access, and every failure retains inspectable state. Public activation remains gated through US2, US3, and the final cross-platform release evidence.
+**关键**: 本阶段通过前不得开始用户故事实现。T008–T013 先编写，且必须对预期缺失行为失败，之后才实现 T014–T018。
 
-### Tests for User Story 1 (write and observe failing first)
+- [X] T008 [P] 在 `tests/workflow/test_contracts.py` 添加契约副本、schema 版本、不可变 v1 `make-workflow.md`/`workflow-event.schema.json`、health-1.1 次要兼容与契约目录漂移测试
+- [X] T009 [P] 在 `tests/workflow/test_local_env_events.py` 添加 workflow event v2 测试：唯一事件 ID、稳定 type/version/producer、UTC 时间戳、生命周期关联、严格 payload、dependency 字段、WAITING 状态、诊断码、排序、脱敏与严格消费者迁移
+- [X] T010 [P] 在 `tests/workflow/test_local_dependency_manifest.py` 添加清单测试：拒绝占位/仅 tag/仅 leaf digest、缺失平台 child、额外依赖、不安全运行时、非法 UID/GID 与超时漂移
+- [X] T011 [P] 在 `tests/workflow/test_local_env_models.py` 添加类型化状态机与序列化排除测试：清单、操作、依赖、健康、密钥与就绪检查实体
+- [X] T012 [P] 在 `tests/workflow/test_local_env_identity.py` 添加规范路径、NFC/UTF-8 哈希、空格/非 ASCII/symlink、短哈希碰撞、安全运行时目录、锁文件安全、争用与异常持有者退出测试
+- [X] T013 [P] 在 `tests/workflow/test_sf02_transition.py` 用显式 v2 消费者迁移与激活门禁替换仅过渡断言，使公共 dev/dev-down 在全部必需能力具备前保持 `SF02_NOT_READY`
+- [X] T014 [P] 在 `tools/workflow/local_env/__init__.py` 与 `tools/workflow/local_env/models.py` 实现不可变类型化实体、清单加载、恰好三依赖校验、安全 repr/相等行为与生命周期状态转换
+- [X] T015 [P] 在 `tools/workflow/events.py` 实现 workflow event v2 标准信封发出：UUID 事件 ID、稳定 type/version/producer、UTC 时间戳、生命周期关联 ID、严格依赖 payload、WAITING 语义、稳定 SF02 诊断、有界消息与值脱敏，同时保留 v1 历史
+- [X] T016 将每个仓库拥有的 JSONL 读取器与夹具断言迁移到 event v2 标准信封，并在 `tests/workflow/helpers.py`、`tests/workflow/test_events.py` 与 `tests/workflow/test_command_contract.py` 保留显式 v1 Make/event 回归覆盖
+- [X] T017 在 `tools/workflow/local_env/identity.py` 实现规范物理路径身份、全指纹所有权、安全每用户运行时/项目目录、无 symlink 的 0600 锁文件与非阻塞 `fcntl` 加锁
+- [X] T018 在 `tests/workflow/conftest.py` 创建合成密钥、临时工作区、单调时钟、假子进程与仅测试项目标签工厂，且永远不能指向开发者项目
 
-- [X] T019 [P] [US1] Add strict `.env.local` parsing, mode-origin, URL grammar, loopback, placeholder, percent-decoding, synthetic-secret, duplicate-port, derived-connection, and field-name-only error tests in `tests/workflow/test_local_env_config.py`
-- [X] T020 [P] [US1] Add Compose structural tests for exactly three index-digest images, canonical services, loopback long-syntax ports, isolated network, PostgreSQL/Redis named volumes, Grafana 0700 tmpfs, non-root users, 0400 environment-source secrets, authenticated healthchecks, grace periods, and forbidden forms in `infra/tests/test_local_compose.py`
-- [X] T021 [P] [US1] Add fake CLI tests for fixed Compose argument order, verified YAML bytes over stdin, safe project directory, local endpoint/platform/capability checks, pull-missing/up-never sequencing, JSON parsing, ownership checks, port races, interruption, and redacted errors in `tests/workflow/test_local_env_compose.py`
-- [X] T022 [P] [US1] Add lifecycle tests for read-only preflight ordering, in-lock revalidation, separate pull timing, one non-extendable 60-second deadline, concurrent probes, healthy fast path, partial failure retention, timeout edges, retry convergence, and aggregate failure semantics in `tests/workflow/test_local_env_lifecycle.py`
-- [X] T023 [P] [US1] Add bounded probe tests for PostgreSQL authenticated `SELECT 1`, Redis AUTH/PING on one connection, Grafana health/admin identity, remaining-time truncation, stale-result rejection, recovery, and safe diagnostic mapping in `tests/workflow/test_local_env_probes.py`
-- [X] T024 [P] [US1] Add security and terminal accessibility tests proving mode/config rejection precedes coordination or Docker access, secrets/paths/raw output never enter unsafe surfaces, and new plain-text/JSONL output remains `NO_COLOR`, screen-reader, non-interactive, no-icon and exit-status understandable in `tests/workflow/test_local_env_security.py` and `tests/workflow/test_accessibility_performance.py`
-- [X] T025 [P] [US1] Add isolated real-Compose and deterministic performance-harness tests for cold start, separate missing-image timing, predeclared 20-trial batches, ten healthy repeats, dynamic loopback ports, authenticated host/project-network probes, wrong auth, port conflict/race, stopped/stale/partial states, daemon loss, timeout, and retained failure state in `tests/workflow/test_local_env_integration.py` and `tests/workflow/test_local_env_performance.py`
-
-### Implementation for User Story 1
-
-- [X] T026 [P] [US1] Implement pure mode-first `.env.local` parsing, strict local URL/secret validation, pairwise port checks, safe displayed endpoints, and derived container connections in `tools/workflow/local_env/config.py`
-- [X] T027 [P] [US1] Define exactly PostgreSQL, Redis, and Grafana with reviewed digest references, canonical DNS, loopback publishers, project network, declared storage, non-root secret files, authenticated healthchecks, and 60/30/30 grace periods in `infra/docker/compose.local.yml`
-- [X] T028 [US1] Implement the local-runtime and Compose adapter with committed-blob verification, stdin transport, fixed safe arguments, captured JSON state, publisher/owner inspection, missing-only pull, current-platform digest verification, and bounded subprocess termination in `tools/workflow/local_env/compose.py`
-- [X] T029 [P] [US1] Implement bounded PostgreSQL, Redis, and Grafana authenticated probes with fresh evidence, safe categories, and deadline-aware retry in `tools/workflow/local_env/probes.py`
-- [X] T030 [US1] Implement dedicated child-only Compose secret mappings, PostgreSQL/Grafana password files, injection-safe single-directive Redis config, verified file ownership/mode, and parse-only teardown placeholders in `tools/workflow/local_env/compose.py`
-- [X] T031 [US1] Implement start orchestration from read-only preflight through lock/revalidation, image pull/verify, reconcile, concurrent fresh probes, standard-envelope/plain-text aggregation, resource-retaining failure, and idempotent retry in `tools/workflow/local_env/lifecycle.py`
-- [X] T032 [US1] Add an internal guarded dev dispatch path that exercises the new lifecycle in tests but preserves public v1 `SF02_NOT_READY` behavior until the activation gate passes in `tools/workflow/cli.py`
-- [X] T033 [P] [US1] Declare MODE, DATABASE_URL, REDIS_URL, GRAFANA_URL, and GRAFANA_ADMIN_PASSWORD with classifications, local-only intent, URL-derived port rules, and unusable placeholders in `.env.example`
-- [X] T034 [P] [US1] Document the exact three-service Compose model, immutable image policy, loopback/network addresses, persistence classes, secret transport, and no-business-service boundary in `infra/docker/README.md`
-- [X] T035 [US1] Implement disposable real-Compose fixtures and the shared cross-platform performance harness with dynamic ports, synthetic credentials/data, exact test labels, predeclared trial accounting, project-network probe input over stdin, and fixture-only teardown guards in `tests/workflow/conftest.py`
-
-**Checkpoint**: The startup adapter passes US1 unit, contract, security, fake-subprocess, and real-dependency tests while the public activation gate still fails closed.
+**检查点**: 版本化契约校验通过，v1 回归覆盖保持绿灯，event v2 消费者已迁移，不安全清单失败关闭，身份/锁行为在无 Docker 时通过。
 
 ---
 
-## Phase 4: User Story 2 - 非破坏性停止并安全恢复 (Priority: P1) Guarded Release-Candidate Slice
+## Phase 3: 用户故事 1 - 一次启动并确认依赖真正可用 (Priority: P1) MVP 开发切片
 
-**Goal**: Stop only the exact workspace project without configuration secrets, preserve named volumes and PostgreSQL facts, recover from partial/interrupted state, serialize conflicts, and complete a guarded two-target candidate without activating the public lifecycle before the final release gate.
+**目标**: 从已校验本地配置状态协调恰好 PostgreSQL、Redis 与 Grafana，并在单一有界截止时间内返回即时认证的逐依赖就绪检查。
 
-**Independent Test**: Start an isolated environment, write a PostgreSQL marker, run dev-down twice with `.env.local` unavailable, restart, and repeat for ten cycles; verify the marker is retained, Redis may be empty, no duplicate/orphan resources appear, Grafana has no anonymous volume, no unrelated project changes, and 100 conflicting operations produce safe retryable outcomes.
+**独立测试**: 在受支持本地运行时上，对隔离测试项目用合法被忽略配置调用受保护的生命周期启动适配器；验证缺失的不可变镜像被拉取并单独报告，三个认证探针在 60 秒内通过，健康重复在 15 秒内完成且无资源增长或 registry 访问，每次失败保留可检查状态。公共激活仍由 US2、US3 与最终跨平台发布验收证据门控。
 
-### Tests for User Story 2 (write and observe failing first)
+### 用户故事 1 的测试（先写并观察失败）
 
-- [X] T036 [P] [US2] Extend ownership and workspace-preservation tests for same-path stability, branch independence, different clone/worktree isolation, move detection, report-only old resources, full-fingerprint collision failure, path-free labels, and unchanged dirty tracked/untracked/symlink files across dev/dev-down in `tests/workflow/test_local_env_identity.py` and `tests/workflow/test_local_env_dirty_worktree.py`
-- [X] T037 [P] [US2] Add fake Compose down tests for missing config, parse-only secrets, exact project/fingerprint authorization, already-stopped volume-only state, stopped containers, orphan networks, `down --remove-orphans`, 75-second bound, forbidden volume/image/prune flags, and exact-label fallback in `tests/workflow/test_local_env_compose_down.py`
-- [X] T038 [P] [US2] Add lifecycle down tests for identity-before-config, immediate lock, graceful stop verification, repeated success, named-volume retention, partial failure, retry, moved-workspace reporting, and safe final events in `tests/workflow/test_local_env_down.py`
-- [X] T039 [P] [US2] Add 100-run repeated-start/start-vs-down contention, lock-holder interruption, port-race, no-duplicate-resource, no-volume-delete, and retryable-loser tests in `tests/workflow/test_local_env_concurrency.py`
-- [X] T040 [P] [US2] Add ten start/down/restart cycle tests with PostgreSQL marker retention, empty-Redis tolerance, stable volume identities, no orphan network, no Grafana anonymous volume, and no schema/migration/seed action in `tests/workflow/test_local_env_persistence.py`
-- [X] T041 [P] [US2] Add recovery tests for stopped/unhealthy containers, daemon loss, SIGINT, failed down, stale health, wrong persisted PostgreSQL credentials, and direct convergence without implicit cleanup or role mutation in `tests/workflow/test_local_env_recovery.py`
+- [X] T019 [P] [US1] 在 `tests/workflow/test_local_env_config.py` 添加严格 `.env.local` 解析、mode 来源、URL 语法、回环、占位、百分号解码、合成密钥、重复端口、推导连接与仅字段名错误测试
+- [X] T020 [P] [US1] 在 `infra/tests/test_local_compose.py` 添加 Compose 结构测试：恰好三个 index-digest 镜像、规范服务、回环长语法端口、隔离网络、PostgreSQL/Redis 命名卷、Grafana 0700 tmpfs、非 root 用户、0400 environment-source 密钥、认证 healthcheck、优雅期与禁止形态
+- [X] T021 [P] [US1] 在 `tests/workflow/test_local_env_compose.py` 添加假 CLI 测试：固定 Compose 参数顺序、经 stdin 的已验证 YAML 字节、安全项目目录、本地端点/平台/能力检查、pull-missing/up-never 顺序、JSON 解析、所有权检查、端口竞态、中断与已脱敏错误
+- [X] T022 [P] [US1] 在 `tests/workflow/test_local_env_lifecycle.py` 添加生命周期测试：只读前置检查顺序、锁内再校验、分离拉取计时、一个不可延长 60 秒截止时间、并发探针、健康快速路径、部分失败保留、超时边缘、重试收敛与聚合失败语义
+- [X] T023 [P] [US1] 在 `tests/workflow/test_local_env_probes.py` 添加有界探针测试：PostgreSQL 认证 `SELECT 1`、同一连接 Redis AUTH/PING、Grafana health/admin 身份、剩余时间截断、陈旧结果拒绝、恢复与安全诊断映射
+- [X] T024 [P] [US1] 在 `tests/workflow/test_local_env_security.py` 与 `tests/workflow/test_accessibility_performance.py` 添加安全与终端可访问性测试：证明 mode/配置拒绝先于协调或 Docker 访问，密钥/路径/原始输出永不进入不安全面，新纯文本/JSONL 输出保持 `NO_COLOR`、屏幕阅读器、非交互、无图标且退出状态可理解
+- [X] T025 [P] [US1] 在 `tests/workflow/test_local_env_integration.py` 与 `tests/workflow/test_local_env_performance.py` 添加隔离真实 Compose 与确定性共享测试框架（harness）测试：冷启动、分离缺失镜像计时、预先声明 20 次批、十次健康重复、动态回环端口、认证主机/项目网络探针、错误认证、端口冲突/竞态、已停止/陈旧/部分状态、daemon 丢失、超时与保留失败状态
 
-### Implementation for User Story 2
+### 用户故事 1 的实现
 
-- [X] T042 [P] [US2] Extend identity discovery and mutation authorization with exact project/full-fingerprint checks, collision failure, path-free labels, and mandatory report-only moved-workspace findings in `tools/workflow/local_env/identity.py`
-- [X] T043 [US2] Implement config-free exact-project down, parse-only secret parsing, bounded graceful stop, state/volume verification, and exact-label container/network fallback without volume, image, or prefix-wide removal in `tools/workflow/local_env/compose.py`
-- [X] T044 [US2] Implement dev-down orchestration, already-stopped idempotency, named-volume preservation, moved-workspace guidance, safe failure retention, and final per-dependency events in `tools/workflow/local_env/lifecycle.py`
-- [X] T045 [US2] Implement reconciliation for interrupted start/stop, stopped/stale/partial exact-owned resources, desired-image replacement with volume retention, daemon recovery, and credential-drift failure without implicit mutation in `tools/workflow/local_env/lifecycle.py`
-- [X] T046 [US2] Enforce one lock across every mutable phase and final event so losing repeated/conflicting operations return `OPERATION_IN_PROGRESS` without pull, probe, resource, or volume side effects in `tools/workflow/local_env/lifecycle.py`
-- [X] T047 [US2] Preserve root target names and mode forwarding while preparing activation-ready help, side-effect, retention, and recovery text that remains pending until the final atomic switch in `Makefile`
-- [X] T048 [US2] Add guarded fault-injection, process-interruption, resource-count, marker-retention, Redis-reset, and exact-test-project cleanup helpers that cannot select a developer project in `tests/workflow/conftest.py`
-- [X] T049 [US2] After T042–T048 pass, complete the activation-candidate event-v2 and real dev/dev-down dispatch behind the existing fail-closed guard without removing public runtime `SF02_NOT_READY` in `tools/workflow/cli.py`
+- [X] T026 [P] [US1] 在 `tools/workflow/local_env/config.py` 实现纯 mode 优先的 `.env.local` 解析、严格本地 URL/密钥校验、两两端口检查、安全展示端点与推导容器连接
+- [X] T027 [P] [US1] 在 `infra/docker/compose.local.yml` 定义恰好 PostgreSQL、Redis 与 Grafana：已评审 digest 引用、规范 DNS、回环发布、项目网络、声明存储、非 root 密钥文件、认证 healthcheck 与 60/30/30 优雅期
+- [X] T028 [US1] 在 `tools/workflow/local_env/compose.py` 实现本地运行时与 Compose 适配器：已提交 blob 校验、stdin 传输、固定安全参数、捕获 JSON 状态、发布者/所有者检查、仅缺失拉取、当前平台 digest 校验与有界子进程终止
+- [X] T029 [P] [US1] 在 `tools/workflow/local_env/probes.py` 实现有界 PostgreSQL、Redis 与 Grafana 认证探针：即时验收证据、安全类别与截止感知重试
+- [X] T030 [US1] 在 `tools/workflow/local_env/compose.py` 实现仅子进程的 Compose 密钥映射、PostgreSQL/Grafana 密码文件、可注入安全的单指令 Redis 配置、已验证文件所有权/模式与仅解析 teardown 占位
+- [X] T031 [US1] 在 `tools/workflow/local_env/lifecycle.py` 实现启动编排：从只读前置检查经锁/再校验、镜像拉取/校验、状态协调、并发即时探针、标准信封/纯文本聚合、保留资源的失败与幂等重试
+- [X] T032 [US1] 在 `tools/workflow/cli.py` 添加内部受保护的 dev 分发路径，在测试中演练新的生命周期，但在激活门禁通过前保持公共 v1 `SF02_NOT_READY` 行为
+- [X] T033 [P] [US1] 在 `.env.example` 声明 MODE、DATABASE_URL、REDIS_URL、GRAFANA_URL 与 GRAFANA_ADMIN_PASSWORD：分类、仅本地意图、URL 推导端口规则与不可用占位
+- [X] T034 [P] [US1] 在 `infra/docker/README.md` 记录恰好三服务 Compose 模型、不可变镜像策略、回环/网络地址、持久化等级、密钥传输与无业务服务边界
+- [X] T035 [US1] 在 `tests/workflow/conftest.py` 实现可丢弃真实 Compose 夹具与跨平台共享测试框架（harness）：动态端口、合成凭据/数据、精确测试标签、预先声明试验记账、经 stdin 的项目网络探针输入与仅夹具 teardown 护栏
 
-**Checkpoint**: Both P1 activation-candidate stories pass through guarded adapters; startup and stop are idempotent, serialized, non-destructive, isolated, and safely recoverable, while public root targets still fail closed with `SF02_NOT_READY`.
-
----
-
-## Phase 5: User Story 3 - 使用稳定地址连接并诊断不可用状态 (Priority: P2)
-
-**Goal**: Provide one host/container connection contract and dependency-aware readiness for API Service and Billing Service only, without changing liveness, Gateway/Admin behavior, or starting business services.
-
-**Independent Test**: Verify host and canonical project-network authenticated connections for all three dependencies, then independently run API and Billing with injectable probes; PostgreSQL outage must leave liveness at 200, make readiness return the exact safe 503 response within two seconds, and recover to the unchanged 200 shape without service restart.
-
-### Tests for User Story 3 (write and observe failing first)
-
-- [X] T050 [P] [US3] Add tests that host URLs remain the sole facts, container URLs replace only host/port with postgres/redis/grafana, safe output strips user-info, and no competing port/container URL fields exist in `tests/workflow/test_local_env_connections.py`
-- [X] T051 [P] [US3] Add project-network integration tests that execute a real PostgreSQL query, Redis AUTH/PING, and Grafana health/admin HTTP request rather than DNS-only checks in `tests/workflow/test_local_env_connectivity.py`
-- [X] T052 [P] [US3] Add API Service contract and observability tests for unchanged liveness/ready-200 shapes, exact safe 503 dependency shape, request IDs, invalid-config/auth/query/timeout mapping, recovery without restart, probe total/failure counters, duration histogram, and secret-free bounded labels in `services/api-service/tests/test_health.py` and `services/api-service/tests/test_readiness_metrics.py`
-- [X] T053 [P] [US3] Add API Service database tests for safe URL driver mapping, lifespan-owned engine, `pool_pre_ping`, bounded async `SELECT 1`, no retries, shutdown disposal, and real PostgreSQL recovery in `services/api-service/tests/test_database_readiness.py`
-- [X] T054 [P] [US3] Add Billing Service contract and observability tests for unchanged liveness/ready-200 shapes, exact safe 503 dependency shape, request IDs, invalid-config/auth/query/timeout mapping, recovery without restart, probe total/failure counters, duration histogram, and secret-free bounded labels in `services/billing-service/tests/test_health.py` and `services/billing-service/tests/test_readiness_metrics.py`
-- [X] T055 [P] [US3] Add Billing Service database tests for safe URL driver mapping, lifespan-owned engine, `pool_pre_ping`, bounded async `SELECT 1`, no retries, shutdown disposal, and real PostgreSQL recovery in `services/billing-service/tests/test_database_readiness.py`
-- [X] T056 [P] [US3] Add boundary assertions that Gateway/Admin gain no dependency probes, no business service is started by dev, and no business route/schema/migration/seed behavior is introduced in `tests/workflow/test_boundaries.py`
-
-### Implementation for User Story 3
-
-- [X] T057 [US3] Emit matching redacted host endpoints and canonical container addresses from the validated connection projections without serializing credentials in `tools/workflow/local_env/config.py` and `tools/workflow/local_env/lifecycle.py`
-- [X] T058 [P] [US3] Implement API Service's owned two-second async PostgreSQL `SELECT 1` probe, SQLAlchemy engine factory, safe error categories, and shutdown disposal in `services/api-service/app/database.py`
-- [X] T059 [US3] Wire the API probe through lifespan/application state, keep `/health/live` independent, preserve the ready-200 shape, return only the contracted PostgreSQL 503 result, and record safe probe total/failure/duration metrics in `services/api-service/app/main.py`, `services/api-service/app/health.py`, and `services/api-service/app/observability.py`
-- [X] T060 [P] [US3] Implement Billing Service's owned two-second async PostgreSQL `SELECT 1` probe, SQLAlchemy engine factory, safe error categories, and shutdown disposal in `services/billing-service/app/database.py`
-- [X] T061 [US3] Wire the Billing probe through lifespan/application state, keep `/health/live` independent, preserve the ready-200 shape, return only the contracted PostgreSQL 503 result, and record safe probe total/failure/duration metrics in `services/billing-service/app/main.py`, `services/billing-service/app/health.py`, and `services/billing-service/app/observability.py`
-- [X] T062 [P] [US3] Implement isolated fake-probe and real-PostgreSQL fixtures for API readiness without exposing URLs or exception bodies in `services/api-service/tests/conftest.py`
-- [X] T063 [P] [US3] Implement isolated fake-probe and real-PostgreSQL fixtures for Billing readiness without exposing URLs or exception bodies in `services/billing-service/tests/conftest.py`
-- [X] T064 [P] [US3] Document independent service startup, PostgreSQL liveness/readiness semantics, two-second bound, recovery, and the no-lifecycle-management boundary in `services/api-service/README.md` and `services/billing-service/README.md`
-
-**Checkpoint**: Container/host connection contracts pass; API and Billing recover readiness independently; liveness, Gateway, Admin, and the dev dependency set remain unchanged.
+**检查点**: 启动适配器通过 US1 单元、契约、安全、假子进程与真实依赖测试，同时公共激活门禁仍失败关闭。
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Release Evidence
+## Phase 4: 用户故事 2 - 非破坏性停止并安全恢复 (Priority: P1) 受保护发布候选切片
 
-**Purpose**: Complete safe operating guidance, global quality gates, cross-platform performance evidence, usability validation, and rollout/rollback traceability.
+**目标**: 在无配置密钥的情况下仅停止精确工作区项目，保留命名卷与 PostgreSQL 事实，从部分/中断状态恢复，串行化冲突，并在最终发布门禁前完成受保护双目标候选而不激活公共生命周期。
 
-- [X] T065 [P] Write the repository-workflow-owner diagnostic, safe inspection, port/auth/runtime/timeout/credential-drift recovery, moved-workspace, interruption, persistence, accessibility, evidence ownership, and non-destructive stop procedures in `ops/runbooks/local-environment.md`
-- [X] T066 [P] Update developer navigation, prerequisites, root workflow effects, supported platforms, service names, safe addresses, and SF02/SF19 scope boundaries in `README.md`, `ops/README.md`, and `CLAUDE.md`
-- [X] T067 Add final negative assertions for secret/path leakage, remote/wildcard endpoints, unsafe dependency identities, runtime lockfile mutation, package-discovery drift, dirty tracked/untracked worktree changes, inaccessible terminal output, forbidden cleanup/migration, and unrelated-resource mutation in `tests/workflow/test_secret_scan.py`, `tests/workflow/test_dependency_scans.py`, `tests/workflow/test_local_env_dirty_worktree.py`, `tests/workflow/test_accessibility_performance.py`, and `tests/workflow/test_boundaries.py`
-- [X] T068 Run format, lint, type-check, contract drift, unit/contract/integration/recovery, accessibility, dirty-worktree, readiness-metric, secret/dependency/container scans, coverage, build, and migration-no-change gates through `Makefile`, and record redacted command results in `specs/002-local-dependency-lifecycle/evidence/quality-gates.md`
-- [X] T069 Execute the committed shared performance harness on Linux x86_64 for 20 cold trials with at least 19 within 60 seconds, ten repeats within 15 seconds, ten persistence cycles, native image identity, signal/recovery, and standard event-v2 envelope checks, recording environment and aggregate evidence in `specs/002-local-dependency-lifecycle/evidence/linux-amd64.md`
-- [X] T070 Execute the same committed performance harness on macOS arm64 for native image identity, NFC/path behavior, Docker Desktop loopback, secret ownership, stop signals, 20 cold trials, ten repeats, persistence, and standard-envelope parity, recording environment and aggregate evidence in `specs/002-local-dependency-lifecycle/evidence/macos-arm64.md`
-- [X] T071 Have the repository workflow owner run the committed ten-person documentation-only protocol with qualified first-time SF02 participants, requiring at least nine to complete setup, start, status confirmation, and recovery discovery within ten minutes, and record only aggregate redacted evidence in `specs/002-local-dependency-lifecycle/evidence/developer-usability.md`
-- [X] T072 Execute every safe scenario in `specs/002-local-dependency-lifecycle/quickstart.md` and create a redacted evidence index linking quality, platform, persistence, readiness, security, and usability results in `specs/002-local-dependency-lifecycle/evidence/README.md`
-- [X] T073 Finalize requirement-to-test traceability, dependency/security/schema impact, activation/deprecation notice, immutable artifact identity, volume-preserving rollback decision point, and evidence links while leaving ADR implementation verification Pending in `docs/decisions/002-local-compose-lifecycle.md` and `specs/002-local-dependency-lifecycle/quickstart.md`
-- [X] T074 Only after T065–T073 and both-platform evidence pass, atomically remove runtime `SF02_NOT_READY`, make real dev/dev-down plus event v2 the default, publish matching help/recovery text, and mark ADR implementation verification Verified in `tools/workflow/cli.py`, `Makefile`, and `docs/decisions/002-local-compose-lifecycle.md`
+**独立测试**: 启动隔离环境，写入 PostgreSQL 标记，在 `.env.local` 不可用时运行 dev-down 两次，重启，并重复十个周期；验证标记保留、Redis 可为空、无重复/孤儿资源、Grafana 无匿名卷、无无关项目变更，且 100 次冲突操作产生安全可重试结果。
+
+### 用户故事 2 的测试（先写并观察失败）
+
+- [X] T036 [P] [US2] 在 `tests/workflow/test_local_env_identity.py` 与 `tests/workflow/test_local_env_dirty_worktree.py` 扩展所有权与工作区保留测试：同路径稳定、分支独立、不同 clone/worktree 隔离、移动检测、仅报告旧资源、全指纹碰撞失败、无路径标签，以及跨 dev/dev-down 脏已跟踪/未跟踪/symlink 文件不变
+- [X] T037 [P] [US2] 在 `tests/workflow/test_local_env_compose_down.py` 添加假 Compose down 测试：缺失配置、仅解析密钥、精确项目/指纹授权、已停止仅卷状态、已停止容器、孤儿网络、`down --remove-orphans`、75 秒边界、禁止 volume/image/prune 标志与精确标签回退
+- [X] T038 [P] [US2] 在 `tests/workflow/test_local_env_down.py` 添加生命周期 down 测试：身份先于配置、立即加锁、优雅停止校验、重复成功、命名卷保留、部分失败、重试、工作区移动报告与安全最终事件
+- [X] T039 [P] [US2] 在 `tests/workflow/test_local_env_concurrency.py` 添加 100 次重复启动/start-vs-down 争用、锁持有者中断、端口竞态、无重复资源、无卷删除与可重试失败者测试
+- [X] T040 [P] [US2] 在 `tests/workflow/test_local_env_persistence.py` 添加十次 start/down/restart 循环测试：PostgreSQL 标记保留、空 Redis 容忍、稳定卷身份、无孤儿网络、无 Grafana 匿名卷，且无 schema/迁移/seed 动作
+- [X] T041 [P] [US2] 在 `tests/workflow/test_local_env_recovery.py` 添加恢复测试：已停止/不健康容器、daemon 丢失、SIGINT、失败 down、陈旧健康、错误持久化 PostgreSQL 凭据，以及无隐式清理或角色变更的直接收敛
+
+### 用户故事 2 的实现
+
+- [X] T042 [P] [US2] 在 `tools/workflow/local_env/identity.py` 扩展身份发现与变更授权：精确项目/全指纹检查、碰撞失败、无路径标签与强制仅报告的工作区移动发现
+- [X] T043 [US2] 在 `tools/workflow/local_env/compose.py` 实现无配置的精确项目 down、仅解析密钥解析、有界优雅停止、状态/卷校验，以及无 volume、镜像或前缀级移除的精确标签容器/网络回退
+- [X] T044 [US2] 在 `tools/workflow/local_env/lifecycle.py` 实现 dev-down 编排、已停止幂等、命名卷保留、工作区移动指引、安全失败保留与最终逐依赖事件
+- [X] T045 [US2] 在 `tools/workflow/local_env/lifecycle.py` 实现中断启动/停止、已停止/陈旧/部分精确拥有的资源、带卷保留的期望镜像替换、daemon 恢复，以及无隐式变更的凭据漂移失败的状态协调
+- [X] T046 [US2] 在 `tools/workflow/local_env/lifecycle.py` 对每个可变阶段与最终事件强制一把锁，使失败的重复/冲突操作返回 `OPERATION_IN_PROGRESS`，且无拉取、探针、资源或卷副作用
+- [X] T047 [US2] 在 `Makefile` 保留根目标名称与 mode 转发，同时准备激活就绪的帮助、副作用、保留与恢复文本，直至最终原子切换前保持 Pending
+- [X] T048 [US2] 在 `tests/workflow/conftest.py` 添加受保护的故障注入、进程中断、资源计数、标记保留、Redis 重置与精确测试项目清理辅助，且不能选择开发者项目
+- [X] T049 [US2] 在 T042–T048 通过后，在既有失败关闭护栏后完成激活候选 event-v2 与真实 dev/dev-down 分发，且不移除公共运行时 `SF02_NOT_READY`，文件为 `tools/workflow/cli.py`
+
+**检查点**: 两个 P1 激活候选故事经受保护适配器通过；启动与停止幂等、串行、非破坏、隔离且可安全恢复，同时公共 Make 入口仍以 `SF02_NOT_READY` 失败关闭。
 
 ---
 
-## Requirements Traceability
+## Phase 5: 用户故事 3 - 使用稳定地址连接并诊断不可用状态 (Priority: P2)
 
-| Requirement | Implementation and evidence tasks |
+**目标**: 仅向 API Service 与 Billing Service 提供一套主机/容器连接契约与依赖感知就绪检查，不改变 liveness、Gateway/Admin 行为，也不启动业务服务。
+
+**独立测试**: 校验三个依赖的主机与规范项目网络认证连接，然后独立用可注入探针运行 API 与 Billing；PostgreSQL 中断必须使 liveness 保持 200，就绪检查在两秒内返回精确安全 503 响应，并在无服务重启时恢复到未变的 200 形状。
+
+### 用户故事 3 的测试（先写并观察失败）
+
+- [X] T050 [P] [US3] 在 `tests/workflow/test_local_env_connections.py` 添加测试：主机 URL 仍为唯一事实，容器 URL 仅将 host/port 替换为 postgres/redis/grafana，安全输出去除 user-info，且不存在竞争端口/容器 URL 字段
+- [X] T051 [P] [US3] 在 `tests/workflow/test_local_env_connectivity.py` 添加项目网络集成测试：执行真实 PostgreSQL 查询、Redis AUTH/PING 与 Grafana health/admin HTTP 请求，而非仅 DNS 检查
+- [X] T052 [P] [US3] 在 `services/api-service/tests/test_health.py` 与 `services/api-service/tests/test_readiness_metrics.py` 添加 API Service 契约与可观测性测试：未变 liveness/ready-200 形状、精确安全 503 依赖形状、request ID、invalid-config/auth/query/timeout 映射、无重启恢复、探针总数/失败计数、耗时直方图与无密钥有界标签
+- [X] T053 [P] [US3] 在 `services/api-service/tests/test_database_readiness.py` 添加 API Service 数据库测试：安全 URL 驱动映射、生命周期拥有的 engine、`pool_pre_ping`、有界 async `SELECT 1`、无重试、关闭 dispose 与真实 PostgreSQL 恢复
+- [X] T054 [P] [US3] 在 `services/billing-service/tests/test_health.py` 与 `services/billing-service/tests/test_readiness_metrics.py` 添加 Billing Service 契约与可观测性测试：未变 liveness/ready-200 形状、精确安全 503 依赖形状、request ID、invalid-config/auth/query/timeout 映射、无重启恢复、探针总数/失败计数、耗时直方图与无密钥有界标签
+- [X] T055 [P] [US3] 在 `services/billing-service/tests/test_database_readiness.py` 添加 Billing Service 数据库测试：安全 URL 驱动映射、生命周期拥有的 engine、`pool_pre_ping`、有界 async `SELECT 1`、无重试、关闭 dispose 与真实 PostgreSQL 恢复
+- [X] T056 [P] [US3] 在 `tests/workflow/test_boundaries.py` 添加边界断言：Gateway/Admin 不获得依赖探针、dev 不启动业务服务，且不引入业务路由/schema/迁移/seed 行为
+
+### 用户故事 3 的实现
+
+- [X] T057 [US3] 在 `tools/workflow/local_env/config.py` 与 `tools/workflow/local_env/lifecycle.py` 从已校验连接投影发出匹配的已脱敏主机端点与规范容器地址，且不序列化凭据
+- [X] T058 [P] [US3] 在 `services/api-service/app/database.py` 实现 API Service 自有的两秒 async PostgreSQL `SELECT 1` 探针、SQLAlchemy engine 工厂、安全错误类别与关闭 dispose
+- [X] T059 [US3] 在 `services/api-service/app/main.py`、`services/api-service/app/health.py` 与 `services/api-service/app/observability.py` 经 lifespan/application state 接线 API 探针，保持 `/health/live` 独立，保留 ready-200 形状，仅返回契约化的 PostgreSQL 503 结果，并记录安全探针总数/失败/耗时指标
+- [X] T060 [P] [US3] 在 `services/billing-service/app/database.py` 实现 Billing Service 自有的两秒 async PostgreSQL `SELECT 1` 探针、SQLAlchemy engine 工厂、安全错误类别与关闭 dispose
+- [X] T061 [US3] 在 `services/billing-service/app/main.py`、`services/billing-service/app/health.py` 与 `services/billing-service/app/observability.py` 经 lifespan/application state 接线 Billing 探针，保持 `/health/live` 独立，保留 ready-200 形状，仅返回契约化的 PostgreSQL 503 结果，并记录安全探针总数/失败/耗时指标
+- [X] T062 [P] [US3] 在 `services/api-service/tests/conftest.py` 实现隔离假探针与真实 PostgreSQL 夹具用于 API 就绪检查，且不暴露 URL 或异常正文
+- [X] T063 [P] [US3] 在 `services/billing-service/tests/conftest.py` 实现隔离假探针与真实 PostgreSQL 夹具用于 Billing 就绪检查，且不暴露 URL 或异常正文
+- [X] T064 [P] [US3] 在 `services/api-service/README.md` 与 `services/billing-service/README.md` 记录独立服务启动、PostgreSQL liveness/就绪检查语义、两秒边界、恢复与无生命周期管理边界
+
+**检查点**: 容器/主机连接契约通过；API 与 Billing 独立恢复就绪检查；liveness、Gateway、Admin 与 dev 依赖集保持不变。
+
+---
+
+## Phase 6: 打磨与跨切面发布验收证据
+
+**目的**: 完成安全操作指引、全局质量门禁、跨平台性能验收证据、易用性校验，以及上线/回滚可追踪性。
+
+- [X] T065 [P] 在 `ops/runbooks/local-environment.md` 编写仓库工作流负责人诊断、安全检查、端口/认证/运行时/超时/凭据漂移恢复、工作区移动、中断、持久化、可访问性、验收证据所有权与非破坏性停止流程
+- [X] T066 [P] 在 `README.md`、`ops/README.md` 与 `CLAUDE.md` 更新开发者导航、前置条件、根工作流效果、受支持平台、服务名、安全地址与 SF02/SF19 范围边界
+- [X] T067 在 `tests/workflow/test_secret_scan.py`、`tests/workflow/test_dependency_scans.py`、`tests/workflow/test_local_env_dirty_worktree.py`、`tests/workflow/test_accessibility_performance.py` 与 `tests/workflow/test_boundaries.py` 添加最终负向断言：密钥/路径泄露、远程/通配端点、不安全依赖身份、运行时锁文件变更、包发现漂移、脏已跟踪/未跟踪工作区变更、不可访问终端输出、禁止清理/迁移与无关资源变更
+- [X] T068 通过 `Makefile` 运行格式化、lint、type-check、契约漂移、单元/契约/集成/恢复、可访问性、脏工作区、就绪检查指标、密钥/依赖/容器扫描、覆盖率、构建与迁移无变更门禁，并将已脱敏命令结果记录在 `specs/002-local-dependency-lifecycle/evidence/quality-gates.md`
+- [X] T069 在 Linux x86_64 上执行已提交的共享测试框架（harness）：20 次冷启动至少 19 次在 60 秒内、十次重复在 15 秒内、十次持久化循环、原生镜像身份、信号/恢复与标准 event-v2 信封检查，将环境与汇总验收证据记录在 `specs/002-local-dependency-lifecycle/evidence/linux-amd64.md`
+- [X] T070 在 macOS arm64 上执行同一已提交的测试框架：原生镜像身份、NFC/路径行为、Docker Desktop 回环、密钥所有权、stop 信号、20 次冷启动、十次重复、持久化与标准信封对等，将环境与汇总验收证据记录在 `specs/002-local-dependency-lifecycle/evidence/macos-arm64.md`
+- [X] T071 由仓库工作流负责人对合格的首次 SF02 参与者运行已提交的、仅基于文档的十人易用性验证协议，要求至少九人在十分钟内完成准备、启动、状态确认与恢复发现，且仅将汇总已脱敏验收证据记录在 `specs/002-local-dependency-lifecycle/evidence/developer-usability.md`
+- [X] T072 执行 `specs/002-local-dependency-lifecycle/quickstart.md` 中每个安全场景，并创建链接质量、平台、持久化、就绪检查、安全与易用性结果的已脱敏验收证据索引于 `specs/002-local-dependency-lifecycle/evidence/README.md`
+- [X] T073 在 `docs/decisions/002-local-compose-lifecycle.md` 与 `specs/002-local-dependency-lifecycle/quickstart.md` 定稿需求到测试的需求追踪关系、依赖/安全/schema 影响、激活/弃用通知、不可变产物身份、保留卷回滚决策点与验收证据链接，同时将 ADR 实现验证保持为 Pending
+- [X] T074 仅在 T065–T073 与双平台验收证据通过后，原子移除运行时 `SF02_NOT_READY`，使真实 dev/dev-down 与 event v2 成为默认，发布匹配的帮助/恢复文本，并在 `tools/workflow/cli.py`、`Makefile` 与 `docs/decisions/002-local-compose-lifecycle.md` 将 ADR 实现验证标为 Verified
+
+---
+
+## 需求追踪关系
+
+| 需求 | 实现与验收证据任务 |
 |-------------|-----------------------------------|
 | FR-001 | T001, T003, T013, T032, T047–T049, T065–T074 |
 | FR-002 | T010, T020, T027, T031, T056, T067 |
@@ -211,131 +211,130 @@
 | SC-008 | T047, T065–T066, T071–T072 |
 | SC-009 | T012, T017, T039, T041, T046, T048, T069–T070 |
 
-Every story checkpoint uses this matrix to verify that implementation and required evidence remain linked; T073 converts the completed rows into PR/release evidence rather than creating traceability for the first time.
+每个故事检查点使用本矩阵验证实现与必需验收证据仍保持关联；T073 将已完成行转换为 PR/发布验收证据，而非首次创建追踪关系。
 
 ---
 
-## Dependencies & Execution Order
+## 依赖与执行顺序
 
-### Phase Dependencies
+### 阶段依赖
 
-- **Phase 1 (Setup)**: Starts immediately. T002, T003, T004, and T006 can proceed in parallel; T005 requires ADR ownership context from T001; T007 follows the contract copies.
-- **Phase 2 (Foundational)**: Depends on Phase 1. T008–T013 are the failing-test batch; T014–T018 implement the shared contract/event/model/identity/test foundations and block all story code.
-- **Phase 3 (US1)**: Depends on Phase 2. T019–T025 must fail before T026–T035. US1 is independently testable through the guarded lifecycle adapter but does not change the public v1 behavior yet.
-- **Phase 4 (US2)**: Depends on the shared US1 adapter in T026–T035. T036–T041 must fail before T042–T049. T049 completes only a guarded activation candidate; public activation remains prohibited until T074.
-- **Phase 5 (US3)**: Fake-probe service work can start after Phase 2; T051 and the real PostgreSQL portions of T053/T055 depend on the P1 environment. Complete US3 after the two P1 stories to preserve priority order.
-- **Phase 6 (Polish)**: Depends on all selected stories. Platform, usability, and release evidence require the full implementation and all automated gates.
+- **Phase 1（准备）**: 立即开始。T002、T003、T004 与 T006 可并行；T005 需要 T001 的 ADR 所有权上下文；T007 跟在契约副本之后。
+- **Phase 2（基础）**: 依赖 Phase 1。T008–T013 为失败测试批；T014–T018 实现共享契约/事件/模型/身份/测试基础并阻塞全部故事代码。
+- **Phase 3（US1）**: 依赖 Phase 2。T019–T025 必须在 T026–T035 前失败。US1 经受保护生命周期适配器可独立测试，但尚未改变公共 v1 行为。
+- **Phase 4（US2）**: 依赖 T026–T035 中的共享 US1 适配器。T036–T041 必须在 T042–T049 前失败。T049 仅完成受保护激活候选；公共激活在 T074 前仍禁止。
+- **Phase 5（US3）**: 假探针服务工作可在 Phase 2 后开始；T051 与 T053/T055 的真实 PostgreSQL 部分依赖 P1 环境。在两个 P1 故事之后完成 US3 以保持优先级顺序。
+- **Phase 6（打磨）**: 依赖全部选定故事。平台、易用性与发布验收证据需要完整实现与全部自动化门禁。
 
-### User Story Dependency Graph
-
-```text
-Setup -> Foundational -> US1 startup core -> US2 guarded lifecycle candidate -> US3 connectivity/readiness -> Release evidence + atomic activation
-                                  \-------------------------------------------> US3 fake-probe work
-```
-
-### User Story Dependencies
-
-- **US1 (P1)**: Depends only on Foundational for implementation and isolated testing. It deliberately remains behind the activation gate.
-- **US2 (P1)**: Reuses US1's Compose/lifecycle core and proves the safety conditions required by the plan while leaving US1+US2 behind the fail-closed public gate.
-- **US3 (P2)**: Service fake-probe behavior is independent after Foundational; full connectivity evidence depends on the P1 local environment. API and Billing implementations remain independent of each other.
-
-### Within Each User Story
-
-- Write the story's test tasks first and confirm they fail for the intended missing behavior.
-- Implement pure validation and models before side-effecting adapters.
-- Implement adapters/probes before orchestration and public dispatch.
-- Keep one non-extendable deadline and one exact ownership/lock boundary across integration.
-- Finish negative, recovery, security, and real-dependency evidence before declaring the story complete.
-
-## Parallel Execution Examples
-
-### User Story 1
+### 用户故事依赖图
 
 ```text
-Parallel failing-test batch: T019 config | T020 Compose structure | T021 fake CLI | T023 probes | T024 security
-Parallel implementation batch after those tests: T026 config | T027 Compose asset | T029 probes | T033 example config | T034 infra docs
-Then serialize integration: T028 -> T030 -> T031 -> T032 -> T035
+准备 -> 基础 -> US1 启动核心 -> US2 受保护生命周期候选 -> US3 连通性/就绪检查 -> 发布验收证据 + 原子激活
+                                  \-------------------------------------------> US3 假探针工作
 ```
 
-### User Story 2
+### 用户故事依赖
+
+- **US1 (P1)**: 实现与隔离测试仅依赖基础。有意保持在激活门禁之后。
+- **US2 (P1)**: 复用 US1 的 Compose/生命周期核心，并证明计划要求的安全条件，同时将 US1+US2 留在失败关闭的公共门禁之后。
+- **US3 (P2)**: 服务假探针行为在基础之后独立；完整连通性验收证据依赖 P1 本地环境。API 与 Billing 实现彼此独立。
+
+### 每个用户故事内
+
+- 先写该故事的测试任务，并确认对预期缺失行为失败。
+- 在产生副作用的适配器之前实现纯校验与模型。
+- 在编排与公共分发之前实现适配器/探针。
+- 跨集成保持一个不可延长截止时间与一个精确所有权/锁边界。
+- 在宣布故事完成前完成负向、恢复、安全与真实依赖验收证据。
+
+## 并行执行示例
+
+### 用户故事 1
 
 ```text
-Parallel failing-test batch: T036 identity/move | T037 Compose down | T038 lifecycle down | T039 concurrency | T040 persistence | T041 recovery
-Implementation order: T042 -> T043 -> T044 -> T045 -> T046 -> T047 -> T048 -> T049
+可并行失败测试批：T019 配置 | T020 Compose 结构 | T021 假 CLI | T023 探针 | T024 安全
+上述测试后的可并行实现批：T026 配置 | T027 Compose 资产 | T029 探针 | T033 示例配置 | T034 infra 文档
+然后串行集成：T028 -> T030 -> T031 -> T032 -> T035
 ```
 
-### User Story 3
+### 用户故事 2
 
 ```text
-Parallel failing-test batch: T050 connection facts | T051 network probes | T052-T053 API | T054-T055 Billing | T056 boundaries
-Parallel service implementation: T058 API database | T060 Billing database
-Parallel integration fixtures after service wiring: T062 API fixtures | T063 Billing fixtures | T064 service docs
+可并行失败测试批：T036 身份/移动 | T037 Compose down | T038 生命周期 down | T039 并发 | T040 持久化 | T041 恢复
+实现顺序：T042 -> T043 -> T044 -> T045 -> T046 -> T047 -> T048 -> T049
 ```
 
-## Implementation Strategy
+### 用户故事 3
 
-### MVP Development Slice
+```text
+可并行失败测试批：T050 连接事实 | T051 网络探针 | T052-T053 API | T054-T055 Billing | T056 边界
+可并行服务实现：T058 API 数据库 | T060 Billing 数据库
+服务接线后的可并行集成夹具：T062 API 夹具 | T063 Billing 夹具 | T064 服务文档
+```
 
-1. Complete Setup and Foundational.
-2. Complete US1 through T035 and validate the startup adapter independently.
-3. Keep public dev/dev-down fail-closed; do not ship a start-only lifecycle.
+## 实施策略
 
-### P1 Release Candidate
+### MVP 开发切片
 
-1. Complete both P1 stories through T049.
-2. Verify persistence, isolation, redaction, recovery, concurrency, and v2 consumer migration.
-3. Keep dev/dev-down and event v2 behind the runtime `SF02_NOT_READY` guard.
-4. Continue through P2 and the shared cross-platform release gates; a P1-only candidate is not publicly activated.
+1. 完成准备与基础。
+2. 完成 US1 至 T035，并独立校验启动适配器。
+3. 保持公共 dev/dev-down 失败关闭；不交付仅启动的生命周期。
 
-### First Public Release
+### P1 发布候选
 
-1. Complete US3, T065–T073, and all automated, usability, security, dirty-worktree, persistence, recovery, and performance gates.
-2. Obtain passing Linux amd64 and macOS arm64 evidence from the same committed harness.
-3. Activate dev/dev-down, event v2, help text, and ADR implementation verification atomically at T074.
+1. 完成两个 P1 故事至 T049。
+2. 校验持久化、隔离、脱敏、恢复、并发与 v2 消费者迁移。
+3. 将 dev/dev-down 与 event v2 保持在运行时 `SF02_NOT_READY` 护栏之后。
+4. 继续 P2 与共享跨平台发布门禁；仅 P1 候选不公开激活。
 
-### Incremental Delivery
+### 首次公开发布
 
-1. Contract/supply-chain foundation with immutable v1 history and v2 migration gate.
-2. US1 startup core behind the gate.
-3. US2 safe stop as a guarded P1 candidate.
-4. US3 stable connectivity plus independent API/Billing readiness.
-5. Cross-platform, usability, security, and release evidence followed by the single atomic public activation.
+1. 完成 US3、T065–T073，以及全部自动化、易用性、安全、脏工作区、持久化、恢复与性能门禁。
+2. 从同一已提交的测试框架获得通过的 Linux amd64 与 macOS arm64 验收证据。
+3. 在 T074 原子激活 dev/dev-down、event v2、帮助文本与 ADR 实现验证。
 
-## Notes
+### 增量交付
 
-- `[P]` marks file-disjoint work only; tasks that converge on `compose.py`, `lifecycle.py`, `cli.py`, or shared test fixtures are intentionally serialized.
-- Test-only teardown is authorized solely for exact test-labeled projects; no task adds a developer-facing destructive cleanup target.
-- No task adds Kafka/Redpanda, Prometheus, Loki, MinIO, frontend, Gateway, Admin, or business-service startup to `make dev`.
-- No task creates a business schema, Alembic revision, seed, production/test resource access, host secret file, service-environment secret, anonymous volume, wildcard bind, or remote-daemon path.
-- Commit after each task or coherent test-first pair, preserving Conventional Commit scope and the v2 activation gate.
+1. 带不可变 v1 历史与 v2 迁移门禁的契约/供应链基础。
+2. 门禁后的 US1 启动核心。
+3. 作为受保护 P1 候选的 US2 安全停止。
+4. US3 稳定连通性加独立 API/Billing 就绪检查。
+5. 跨平台、易用性、安全与发布验收证据，随后单一原子公共激活。
+
+## 说明
+
+- `[P]` 仅标记文件互不重叠的工作；汇聚到 `compose.py`、`lifecycle.py`、`cli.py` 或共享测试夹具的任务有意串行。
+- 仅测试 teardown 仅授权精确带测试标签的项目；无任务添加面向开发者的破坏性清理目标。
+- 无任务将 Kafka/Redpanda、Prometheus、Loki、MinIO、frontend、Gateway、Admin 或业务服务启动加入 `make dev`。
+- 无任务创建业务 schema、Alembic 修订、seed、生产/测试资源访问、主机密钥文件、服务环境密钥、匿名卷、通配绑定或远程 daemon 路径。
+- 在每个任务或连贯测试优先对之后提交，保留 Conventional Commit 范围与 v2 激活门禁。
 
 ---
 
-## Phase 7: Convergence
+## Phase 7: 收敛
 
-**Purpose**: Close implementation gaps found after `/speckit-implement` where tasks were marked complete but code or automated evidence still only partially satisfies the spec/plan. Phase 6 release tasks T067–T074 remain open and are not restated here.
+**目的**: 关闭 `/speckit-implement` 后发现的实现缺口——任务已标完成但代码或自动化验收证据仍仅部分满足 spec/plan。Phase 6 发布任务 T067–T074 仍开放，此处不重述。
 
-- [X] T075 [P] Expand concurrency coverage beyond serial downs: 100-run repeated start/start and start-vs-down contention, mid-hold lock-holder interruption, port-race loser behavior, no duplicate resources, no volume delete, and retryable `OPERATION_IN_PROGRESS` losers with zero side effects in `tests/workflow/test_local_env_concurrency.py` and, where required, fake adapter seams in `tests/workflow/conftest.py` per FR-023, SC-006, US2 Independent Test (partial)
-- [X] T076 Add real-Compose ten-cycle start/down/restart persistence proving a written PostgreSQL marker row is retained, Redis emptiness is tolerated, volume identities stay stable, no orphan network or Grafana anonymous volume appears, and no schema/migration/seed runs in `tests/workflow/test_local_env_persistence.py` using `RealComposeProjectFactory` per US2/AC3, FR-020, FR-021, SC-003 (partial)
-- [X] T077 Map `KeyboardInterrupt`/SIGINT during `start_local_environment` and `stop_local_environment` to `OperationStatus.INTERRUPTED` with retained project resources, safe redacted final events, and lock release in `tools/workflow/local_env/lifecycle.py` per spec Edge Cases (interrupt signal) and FR-015 (missing)
-- [X] T078 [P] Replace the `SF02_REAL_COMPOSE` placeholder in `tests/workflow/test_local_env_connectivity.py` with authenticated project-network probes via `NetworkProbeRunner` for PostgreSQL `SELECT 1`, Redis AUTH/PING, and Grafana health/admin HTTP (not DNS-only) per US3/AC1, FR-011, FR-012, plan Phase D (partial)
-- [X] T079 Complete guarded T048 helpers so fault-injection can interrupt a held lifecycle, resource counts reflect exact `tmtest-` labels only, and PostgreSQL marker/Redis-reset helpers are usable by persistence/recovery suites without addressing developer projects in `tests/workflow/conftest.py` per plan Phase D / T048 (partial)
-- [X] T080 Add recovery tests that exercise the T077 interrupt path, daemon-loss fail-closed diagnostics without mutation, and post-interrupt direct convergence without implicit cleanup or role mutation in `tests/workflow/test_local_env_recovery.py` per T041, FR-015, plan Phase D (partial)
+- [X] T075 [P] 扩展并发覆盖超出串行 down：100 次重复 start/start 与 start-vs-down 争用、持锁中断、端口竞态失败者行为、无重复资源、无卷删除，以及副作用为零的可重试 `OPERATION_IN_PROGRESS` 失败者，文件为 `tests/workflow/test_local_env_concurrency.py`，必要时在 `tests/workflow/conftest.py` 使用假适配器接缝，依据 FR-023、SC-006、US2 独立测试（partial）
+- [X] T076 添加真实 Compose 十周期 start/down/restart 持久化：证明已写 PostgreSQL 标记行保留、容忍 Redis 为空、卷身份稳定、无孤儿网络或 Grafana 匿名卷，且无 schema/迁移/seed，在 `tests/workflow/test_local_env_persistence.py` 使用 `RealComposeProjectFactory`，依据 US2/AC3、FR-020、FR-021、SC-003（partial）
+- [X] T077 将 `start_local_environment` 与 `stop_local_environment` 期间的 `KeyboardInterrupt`/SIGINT 映射为 `OperationStatus.INTERRUPTED`，保留项目资源、安全已脱敏最终事件并释放锁，在 `tools/workflow/local_env/lifecycle.py`，依据 spec Edge Cases（中断信号）与 FR-015（missing）
+- [X] T078 [P] 将 `tests/workflow/test_local_env_connectivity.py` 中的 `SF02_REAL_COMPOSE` 占位替换为经 `NetworkProbeRunner` 的认证项目网络探针：PostgreSQL `SELECT 1`、Redis AUTH/PING 与 Grafana health/admin HTTP（非仅 DNS），依据 US3/AC1、FR-011、FR-012、plan Phase D（partial）
+- [X] T079 完成受保护的 T048 辅助：故障注入可中断持锁生命周期、资源计数仅反映精确 `tmtest-` 标签，且 PostgreSQL 标记/Redis 重置辅助可供持久化/恢复套件使用而不指向开发者项目，在 `tests/workflow/conftest.py`，依据 plan Phase D / T048（partial）
+- [X] T080 添加恢复测试：演练 T077 中断路径、无变更的 daemon 丢失失败关闭诊断，以及中断后无隐式清理或角色变更的直接收敛，在 `tests/workflow/test_local_env_recovery.py`，依据 T041、FR-015、plan Phase D（partial）
 
 ---
 
-## Phase 8: Convergence
+## Phase 8: 收敛
 
-**Purpose**: Residual gaps after Phase 7 implement. Phase 6 release/activation tasks T068–T074 remain open and are not restated.
+**目的**: Phase 7 实现后的残留缺口。Phase 6 发布/激活任务 T068–T074 仍开放，不重述。
 
-- [X] T081 [P] Complete residual T067 negatives: SF02 lifecycle event/plain-text secret and workspace-path leakage assertions in `tests/workflow/test_secret_scan.py` (or lifecycle redaction suite), and replace the `assert True` scanner fail-closed stub with a real non-zero-exit contract in `tests/workflow/test_dependency_scans.py` per FR-006, Constitution II, T067 (partial)
-- [X] T082 Finish T077 residuals: use the returned `OperationStatus.INTERRUPTED` transition (do not discard the immutable result) for any diagnostic/accounting that needs it, and add a `start_local_environment` KeyboardInterrupt test proving retained resources, lock release, and safe final events in `tools/workflow/local_env/lifecycle.py` and `tests/workflow/test_local_env_recovery.py` (or lifecycle tests) per Edge Cases (interrupt), FR-015 (partial)
+- [X] T081 [P] 完成残留 T067 负向：在 `tests/workflow/test_secret_scan.py`（或生命周期脱敏套件）中添加 SF02 生命周期事件/纯文本密钥与工作区路径泄露断言，并将 `tests/workflow/test_dependency_scans.py` 中 `assert True` 扫描器失败关闭桩替换为真实非零退出契约，依据 FR-006、Constitution II、T067（partial）
+- [X] T082 完成 T077 残留：对任何需要它的诊断/记账使用返回的 `OperationStatus.INTERRUPTED` 转换（不得丢弃不可变结果），并添加 `start_local_environment` 的 KeyboardInterrupt 测试，证明资源保留、锁释放与安全最终事件，在 `tools/workflow/local_env/lifecycle.py` 与 `tests/workflow/test_local_env_recovery.py`（或生命周期测试），依据 Edge Cases（中断）、FR-015（partial）
 
-## Phase 9: Convergence
+## Phase 9: 收敛
 
-**Purpose**: Gaps found after ADR 003 layered-deploy work landed on the same tree as SF02. Phase 6 release/activation tasks T069–T074 remain open and are **not** restated. Prior Convergence phases 7–8 are complete.
+**目的**: ADR 003 分层部署工作与 SF02 同树落地后发现的缺口。Phase 6 发布/激活任务 T069–T074 仍开放且**不**重述。先前收敛 Phase 7–8 已完成。
 
-- [X] T083 Harden SF02 isolation against ADR 003 deploy assets: keep `compose.local.yml` free of app services; ensure `tests/workflow/test_boundaries.py` and related guards still forbid business-service startup via `make dev`; allow ignored `.env.test`/`.env.prod` (deploy configs) in `tests/workflow/test_sf02_transition.py` without weakening the public `dev` pre-config `SF02_NOT_READY` order for `.env.local` in `tools/workflow/cli.py` per FR-001, FR-002, plan Notes (no business-service startup on dev) (unrequested)
-- [X] T084 Resolve or formally record Node exact-version drift (`toolchains.json` vs host) so root `make toolchain-check` / `make build` can succeed on the SF02 macOS arm64 evidence host before T070/T074, updating `ops/workflow/toolchains.json` and/or `specs/002-local-dependency-lifecycle/evidence/quality-gates.md` only as needed per plan quality gates, FR-027, SC-001 host readiness (partial)
-- [X] T085 Replace the public `SF02_NOT_READY` message that claims the lifecycle adapter is missing with activation-gate wording (adapter present; dual-platform evidence pending) in `tools/workflow/cli.py` and matching help/runbook strings in `Makefile` / `ops/runbooks/local-environment.md` per FR-001, FR-024, ER-006 (partial)
-
+- [X] T083 针对 ADR 003 部署资产加固 SF02 隔离：保持 `compose.local.yml` 无应用服务；确保 `tests/workflow/test_boundaries.py` 及相关护栏仍禁止经 `make dev` 启动业务服务；在 `tests/workflow/test_sf02_transition.py` 允许被忽略的 `.env.test`/`.env.prod`（部署配置），且不削弱 `tools/workflow/cli.py` 中公共 `dev` 对 `.env.local` 的预配置 `SF02_NOT_READY` 顺序，依据 FR-001、FR-002、plan Notes（dev 上无业务服务启动）（unrequested）
+- [X] T084 解决或正式记录 Node 精确版本漂移（`toolchains.json` 对主机），使根 `make toolchain-check` / `make build` 能在 T070/T074 前于 SF02 macOS arm64 验收证据主机上成功，仅在需要时更新 `ops/workflow/toolchains.json` 和/或 `specs/002-local-dependency-lifecycle/evidence/quality-gates.md`，依据 plan 质量门禁、FR-027、SC-001 主机就绪（partial）
+- [X] T085 将声称生命周期适配器缺失的公共 `SF02_NOT_READY` 消息替换为激活门禁措辞（适配器已存在；双平台验收证据待定），在 `tools/workflow/cli.py` 以及 `Makefile` / `ops/runbooks/local-environment.md` 中匹配的帮助/运行手册字符串，依据 FR-001、FR-024、ER-006（partial）

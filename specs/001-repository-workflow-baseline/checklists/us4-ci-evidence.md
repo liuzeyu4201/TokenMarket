@@ -1,48 +1,48 @@
-# US4 Evidence: Local/CI Parity
+# US4 证据：本地/CI 一致性
 
-**Story**: User Story 4 — 在本地与持续集成中获得相同结论  
-**Feature**: `specs/001-repository-workflow-baseline/`  
-**Date**: 2026-07-14  
-**Commit**: repository state under implementation (design baseline unchanged)
+**故事**：User Story 4 — 在本地与持续集成中获得相同结论
+**功能**：`specs/001-repository-workflow-baseline/`
+**日期**：2026-07-14
+**提交**：实现中的仓库状态（设计基线未变）
 
-## Scope
+## 范围
 
-This evidence records that the repository root workflow produces the same step
-sequence locally and in the GitHub Actions thin adapter, that `mode` selection
-cannot be implicitly escalated, that dirty worktrees and special paths are
-handled safely, and that the CI gate fails closed on any required step.
+本证据记录：仓库根工作流在本地与 GitHub Actions 薄适配器中
+产生相同的步骤序列；`mode` 选择
+不得被隐式升级；脏工作树与特殊路径得到
+安全处理；且 CI 门禁在任一必需步骤上 fail-closed。
 
-## T083–T089: Contract Tests
+## T083–T089：契约测试
 
-| Test file | Result |
+| 测试文件 | 结果 |
 |-----------|--------|
-| `tests/workflow/test_paths.py` | 2/2 passed |
-| `tests/workflow/test_dirty_format.py` | 2/2 passed |
-| `tests/workflow/test_mode.py` | 7/7 passed |
-| `tests/workflow/test_retry_safety.py` | 1/1 passed |
-| `tests/workflow/test_accessibility_performance.py` | 3/3 passed |
-| `tests/workflow/test_ci_contract.py` | 4/4 passed |
-| `tests/workflow/test_reproducibility.py` | 2/2 passed |
+| `tests/workflow/test_paths.py` | 2/2 通过 |
+| `tests/workflow/test_dirty_format.py` | 2/2 通过 |
+| `tests/workflow/test_mode.py` | 7/7 通过 |
+| `tests/workflow/test_retry_safety.py` | 1/1 通过 |
+| `tests/workflow/test_accessibility_performance.py` | 3/3 通过 |
+| `tests/workflow/test_ci_contract.py` | 4/4 通过 |
+| `tests/workflow/test_reproducibility.py` | 2/2 通过 |
 
-Full `tests/workflow` regression: **185 passed**.
+完整 `tests/workflow` 回归：**185 通过**。
 
-## T090–T096: Implementation
+## T090–T096：实现
 
-### Mode enforcement (`tools/workflow/mode.py`)
+### 模式强制（`tools/workflow/mode.py`）
 
-- `validate_mode` accepts `command` and `command line` origins for `test`/`prod`.
-- `environment`, `file`, `shell`, `override` from unsafe origins are rejected.
-- `prod` requires explicit approval via interactive phrase or `approval_proof`.
+- `validate_mode` 对 `test`/`prod` 接受 `command` 与 `command line` 来源。
+- 来自不安全来源的 `environment`、`file`、`shell`、`override` 被拒绝。
+- `prod` 需要通过交互短语或 `approval_proof` 的显式批准。
 
-### Root workflow (`Makefile` / `tools/workflow/cli.py`)
+### 根工作流（`Makefile` / `tools/workflow/cli.py`）
 
-New public target:
+新的公共目标：
 
 ```text
 make ci
 ```
 
-Fixed ordering defined in root `Makefile`:
+根 `Makefile` 中定义的固定顺序：
 
 ```text
 toolchain-check → bootstrap → fmt-check → type-check → lint → test →
@@ -50,27 +50,27 @@ migrate-check → migrate-integration-check → security-check → build →
 runtime-smoke → image-scan
 ```
 
-`runtime-smoke` and `image-scan` are implemented in `tools/workflow/images.py`
-and exposed through `workflow.cli`.
+`runtime-smoke` 与 `image-scan` 在 `tools/workflow/images.py` 中实现，
+并通过 `workflow.cli` 暴露。
 
-### GitHub Actions thin adapter (`.github/workflows/ci.yml`)
+### GitHub Actions 薄适配器（`.github/workflows/ci.yml`）
 
-- Job name: `quality-gate`
-- Runner: `ubuntu-24.04`
-- Triggers: `push` to `master` / `master-dev`, `pull_request`, `merge_group`, `workflow_dispatch`
-- Permissions: `contents: read`
-- Checkout: pinned `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683` with
-  `fetch-depth: 0` and `persist-credentials: false`
-- Setup actions pinned by full SHA:
+- 作业名：`quality-gate`
+- 运行器：`ubuntu-24.04`
+- 触发：向 `master` / `master-dev` 的 `push`、`pull_request`、`merge_group`、`workflow_dispatch`
+- 权限：`contents: read`
+- 检出：固定 `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683`，带
+  `fetch-depth: 0` 与 `persist-credentials: false`
+- Setup actions 以完整 SHA 固定：
   - `actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34`
   - `actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e`
   - `astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86`
-- Only project command: `make ci`
-- No path filters, secrets, publishing, or write permissions.
+- 唯一项目命令：`make ci`
+- 无路径过滤、密钥、发布或写权限。
 
-### Component `fmt-check`
+### 组件 `fmt-check`
 
-All eight components expose a non-mutating `fmt-check` target:
+全部八个组件均暴露非变更的 `fmt-check` 目标：
 
 - `services/proxy-gateway/Makefile`
 - `services/api-service/Makefile`
@@ -81,17 +81,17 @@ All eight components expose a non-mutating `fmt-check` target:
 - `infra/Makefile`
 - `ops/Makefile`
 
-## Local `make ci` Run
+## 本地 `make ci` 运行
 
-Command executed:
+执行的命令：
 
 ```bash
 PATH="/Users/token/.local/go1.25.12/bin:/Users/token/.local/bin:/Users/token/go/bin:/Users/token/.nvm/versions/node/v24.18.0/bin:$PATH" make ci
 ```
 
-Results:
+结果：
 
-| Step | Result |
+| 步骤 | 结果 |
 |------|--------|
 | `toolchain-check` | PASSED |
 | `bootstrap` | PASSED |
@@ -101,57 +101,56 @@ Results:
 | `test` | PASSED (9/9) |
 | `migrate-check` | PASSED |
 | `migrate-integration-check` | PASSED (PG15 forward/backout/retry) |
-| `security-check` | **FAILED** — pip-audit reports known `starlette 0.45.3` vulnerabilities |
+| `security-check` | **FAILED** — pip-audit 报告已知 `starlette 0.45.3` 漏洞 |
 | `build` | PASSED (9/9) |
-| `runtime-smoke` | PASSED (5/5 images healthy, non-root) |
-| `image-scan` | **FAILED** — Trivy 0.61.0 not installed locally |
+| `runtime-smoke` | PASSED（5/5 镜像健康，非 root） |
+| `image-scan` | **FAILED** — 本地未安装 Trivy 0.61.0 |
 
-Exit code: `2` (security-check fail-closed)
+退出码：`2`（security-check fail-closed）
 
-The `security-check` failure is the expected fail-closed behavior for the
-already-known `starlette 0.45.3` findings recorded in `us2-security-evidence.md`.
-The `image-scan` failure is environmental (Trivy not present on the local
-workstation); the CLI returns `TOOL_MISSING` and fails closed rather than
-silently skipping the scan.
+`security-check` 失败是对已在 `us2-security-evidence.md` 中记录的
+已知 `starlette 0.45.3` 发现的预期 fail-closed 行为。
+`image-scan` 失败是环境性的（本地工作站未安装 Trivy）；
+CLI 返回 `TOOL_MISSING` 并 fail-closed，而非静默跳过扫描。
 
-## Mode Matrix
+## 模式矩阵
 
-| Command | Expected | Verified |
+| 命令 | 预期 | 已验证 |
 |---------|----------|----------|
-| `make migrate` | mode=local default | PASSED |
-| `mode=test make migrate` | accepted (command origin) | PASSED |
-| `mode=prod make migrate` | rejected before resource access (no approval) | PASSED |
-| `MODE=test make migrate` | rejected (environment origin) | PASSED |
+| `make migrate` | 默认 mode=local | PASSED |
+| `mode=test make migrate` | 接受（command 来源） | PASSED |
+| `mode=prod make migrate` | 在资源访问前拒绝（无批准） | PASSED |
+| `MODE=test make migrate` | 拒绝（environment 来源） | PASSED |
 
-## Dirty Worktree / Special Path Notes
+## 脏工作树 / 特殊路径说明
 
-- `make fmt` only touches declared source files; `.gitignore` preserves untracked files.
-- Root resolution uses the workflow script location, so the repository can be checked
-  out under paths containing spaces or non-ASCII characters.
-- Retry safety: non-`fmt` actions do not mutate the worktree; `fmt` idempotency is
-  verified by component formatters.
+- `make fmt` 仅触碰已声明的源文件；`.gitignore` 保留未跟踪文件。
+- 根解析使用工作流脚本位置，因此仓库可检出到
+  含空格或非 ASCII 字符的路径下。
+- 重试安全：非 `fmt` 动作不变更工作树；`fmt` 幂等性
+  由组件格式化器验证。
 
-## Known Blockers for a Green Hosted Gate
+## 托管门禁变绿的已知阻塞
 
-1. **Trivy installation** — `image-scan` requires Trivy 0.61.0 on the runner.
-2. **starlette vulnerability** — `security-check` requires a reviewed dependency
-   update or an explicit, expiring exception before the gate can pass.
+1. **Trivy 安装** — `image-scan` 需要运行器上的 Trivy 0.61.0。
+2. **starlette 漏洞** — `security-check` 需要经评审的依赖
+   更新或明确的、带过期时间的例外，门禁才能通过。
 
-Both are tracked as fail-closed outcomes, not CI adapter bugs.
+两者均作为 fail-closed 结果跟踪，而非 CI 适配器缺陷。
 
-## T097: Onboarding Path
+## T097：入门路径
 
-See `specs/001-repository-workflow-baseline/quickstart.md` and the updated
-`README.md` (Phase 7) for the checkout-to-first-`make ci` path.
+见 `specs/001-repository-workflow-baseline/quickstart.md` 与更新后的
+`README.md`（Phase 7），了解从检出到首次 `make ci` 的路径。
 
-## T098/T099: Runbook & Ruleset
+## T098/T099：运行手册与规则集
 
-Recorded in `ops/runbooks/workflow.md`:
+记录于 `ops/runbooks/workflow.md`：
 
-- CI cache contamination recovery.
-- Runner/scanner failure handling.
-- Failed `master` / `master-dev` review-revert process.
-- Required check rollout order.
-- GitHub ruleset configuration for `quality-gate`, `master` / `master-dev` protection, and bypass
-  prevention.
-- Linking PR and final `master` / `master-dev` `quality-gate` runs.
+- CI 缓存污染恢复。
+- 运行器/扫描器失败处理。
+- 失败的 `master` / `master-dev` 评审-回退流程。
+- 必需检查的上线顺序。
+- 针对 `quality-gate`、`master` / `master-dev` 保护与绕过防护的
+  GitHub 规则集配置。
+- 关联 PR 与最终 `master` / `master-dev` 的 `quality-gate` 运行。

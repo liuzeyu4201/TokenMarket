@@ -58,7 +58,7 @@ GRAFANA_ADMIN_PASSWORD=tm_local_<third-secret>
 - PostgreSQL、Redis、Grafana 端口只由这三个 URL 决定。
 - Shell 中的 `POSTGRES_HOST_PORT`、`REDIS_HOST_PORT`、
   `GRAFANA_HOST_PORT` 不会覆盖 `.env.local`。
-- 不要提交 `.env.local`，也不要把其中内容复制到日志、Issue 或 PR。
+- 不得提交 `.env.local`，也不得把其中内容复制到日志、Issue 或 PR。
 
 `make start` 不会自动生成或轮换这些密码。自动轮换会让已持久化的
 PostgreSQL/Redis 数据卷与新凭据失配；需要变更密钥时，应按恢复流程同时处理
@@ -95,7 +95,7 @@ make start
 
 | 命令                                        | 使用场景                                                   |
 | ------------------------------------------- | ---------------------------------------------------------- |
-| `make dev`                                | 只启动 PostgreSQL、Redis、Grafana；SF02 激活前 fail-closed |
+| `make dev`                                | 只启动 PostgreSQL、Redis、Grafana（T074 已激活的正式公共入口） |
 | `make dev-down`                           | 只停止中间件，保留 PostgreSQL/Redis 数据                   |
 | `make start scope=apps`                   | 中间件已就绪时，只启动或复用五个主机进程                   |
 | `make stop scope=apps`                    | 只停止由当前工作区管理的主机进程                           |
@@ -138,7 +138,7 @@ curl -fsS http://127.0.0.1:8000/health/ready
 - 注册页：`http://127.0.0.1:5173/register`
 - Grafana：`http://127.0.0.1:3000`
 
-`/health/live` 只表示进程存活；依赖数据库的功能还需要 readiness 和迁移成功。
+`/health/live` 只表示进程存活；依赖数据库的功能还需要就绪检查和迁移成功。
 
 ## 失败与恢复
 
@@ -150,7 +150,7 @@ curl -fsS http://127.0.0.1:8000/health/ready
 | `INVALID_CONFIG`       | `.env.local` 缺失、含占位符或 URL 不合法 | 对照模板修复后重试                               |
 | `TOOL_MISSING`         | 工具或 Docker daemon 不可用                | 启动/安装声明版本后重试                          |
 | `PORT_CONFLICT`        | 端口被其他进程占用                         | 释放端口；中间件端口只改 URL，应用端口用对应变量 |
-| `DEPENDENCY_NOT_READY` | 中间件健康探针超时                         | 查看安全诊断，修复后重试`make start`           |
+| `DEPENDENCY_NOT_READY` | 中间件就绪检查探针超时                     | 查看安全诊断，修复后重试`make start`           |
 | `APP_NOT_READY`        | 一个或多个应用进程未达到 liveness          | 查看输出给出的 runtime 日志位置                  |
 
 如果 `.env.local` 或应用端口发生变化，下一次 `make start` 会输出
@@ -158,13 +158,13 @@ curl -fsS http://127.0.0.1:8000/health/ready
 
 应用 stdout/stderr 位于按工作区哈希隔离的安全 runtime 目录，不写入仓库。
 
-## 不要这样启动
+## 禁止这样启动
 
-- 不要直接执行 `docker compose -f infra/docker/compose.local.yml up`。
-- 不要把业务服务加入 `compose.local.yml`。
-- 不要运行 `make deploy mode=local`；部署只允许 `mode=test|prod`。
-- 不要在 Shell 中覆盖中间件端口；修改 `.env.local` 中对应 URL。
-- 不要依赖组件目录里的直接启动命令作为日常入口；它们仅用于维护和诊断。
+- 不得直接执行 `docker compose -f infra/docker/compose.local.yml up`。
+- 不得把业务服务加入 `compose.local.yml`。
+- 不得运行 `make deploy mode=local`；部署只允许 `mode=test|prod`。
+- 不得在 Shell 中覆盖中间件端口；修改 `.env.local` 中对应 URL。
+- 不得依赖组件目录里的直接启动命令作为日常入口；它们仅用于维护和诊断。
 
 测试/生产整栈使用：
 

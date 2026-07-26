@@ -214,7 +214,7 @@ describe('api client same-origin auth', () => {
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError)
       if (!(err instanceof ApiError)) {
-        throw new Error('expected ApiError')
+        throw new Error('expected ApiError', { cause: err })
       }
       expect(err.code).toBe('RATE_LIMITED')
       expect(err.message).toBe('请求过于频繁，请稍后再试')

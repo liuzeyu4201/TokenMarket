@@ -97,8 +97,16 @@ export function Login() {
   const loginInFlightRef = useRef(false)
   const prevResendPositiveRef = useRef(false)
 
-  const resendSeconds = challenge ? secondsUntilDeadline(challenge.resend_available_at, nowMs) : 0
-  const canResend = !challenge || resendSeconds <= 0
+  // Expiry is derived during render (not synced via effect setState).
+  const challengeExpired =
+    challenge !== null && secondsUntilDeadline(challenge.expires_at, nowMs) <= 0
+  const activeChallenge = challengeExpired ? null : challenge
+  const resendSeconds = activeChallenge
+    ? secondsUntilDeadline(activeChallenge.resend_available_at, nowMs)
+    : 0
+  const canResend = !activeChallenge || resendSeconds <= 0
+  const displayErrorKind: ErrorKind = challengeExpired ? 'expired' : errorKind
+  const displayFormError = challengeExpired ? '验证码已过期，请重新获取' : formError
 
   const loginState = useMemo(
     () =>
@@ -106,23 +114,23 @@ export function Login() {
         requestingCode,
         loggingIn,
         success,
-        errorKind,
-        hasChallenge: Boolean(challenge),
+        errorKind: displayErrorKind,
+        hasChallenge: Boolean(activeChallenge),
         resendSeconds,
       }),
-    [requestingCode, loggingIn, success, errorKind, challenge, resendSeconds],
+    [requestingCode, loggingIn, success, displayErrorKind, activeChallenge, resendSeconds],
   )
 
-  // Tick countdown from absolute server deadlines only while needed.
+  // Tick from absolute server deadlines while a non-expired challenge is active.
   useEffect(() => {
-    if (!challenge || resendSeconds <= 0) return
+    if (!challenge || challengeExpired) return
     const id = window.setInterval(() => setNowMs(Date.now()), 1000)
     return () => window.clearInterval(id)
-  }, [challenge, resendSeconds])
+  }, [challenge, challengeExpired])
 
   // Low-noise status: announce countdown once on enter, not every second.
   useEffect(() => {
-    const active = Boolean(challenge) && resendSeconds > 0
+    const active = Boolean(activeChallenge) && resendSeconds > 0
     if (active && !prevResendPositiveRef.current) {
       // Wording avoids "请求已受理" so visible status remains the unique match for tests/AT.
       setCountdownAnnouncement('冷却计时已开始，请查收验证码后再试')
@@ -131,18 +139,14 @@ export function Login() {
       setCountdownAnnouncement('可以重新获取验证码')
     }
     prevResendPositiveRef.current = active
-  }, [challenge, resendSeconds])
+  }, [activeChallenge, resendSeconds])
 
-  // Drop restored challenge when absolute expiry passes.
+  // Persist expiry to storage only (external system); UI uses derived activeChallenge.
   useEffect(() => {
-    if (!challenge) return
-    if (secondsUntilDeadline(challenge.expires_at, nowMs) <= 0) {
+    if (challengeExpired) {
       clearChallenge()
-      setChallenge(null)
-      setErrorKind('expired')
-      setFormError('验证码已过期，请重新获取')
     }
-  }, [challenge, nowMs])
+  }, [challengeExpired])
 
   const focusOtp = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -242,7 +246,7 @@ export function Login() {
     resetErrors()
 
     const local: Partial<Record<FieldKey, string>> = {}
-    if (!challenge?.challenge_id) {
+    if (!activeChallenge?.challenge_id) {
       setFormError('请先获取验证码')
       setErrorKind('field-error')
       focusAlert()
@@ -263,11 +267,12 @@ export function Login() {
     loginInFlightRef.current = true
     setLoggingIn(true)
     const submittedCode = code
+    const challengeId = activeChallenge.challenge_id
     // Clear OTP from the form as soon as submit starts (terminal for raw OTP value).
     setCode('')
     try {
       const sessionData = await createSession({
-        challenge_id: challenge.challenge_id,
+        challenge_id: challengeId,
         code: submittedCode,
       })
       clearChallenge()
@@ -365,26 +370,26 @@ export function Login() {
         {statusMessage}
       </div>
 
-      {formError ? (
+      {displayFormError ? (
         <div
           id={alertId}
           ref={alertRef}
           className="form-error"
           role="alert"
           tabIndex={-1}
-          data-error-kind={errorKind ?? undefined}
+          data-error-kind={displayErrorKind ?? undefined}
         >
-          {formError}
+          {displayFormError}
           {requestId ? <div>请求标识：{requestId}</div> : null}
         </div>
       ) : null}
 
-      {challenge ? (
+      {activeChallenge ? (
         <div className="neutral-accept" data-testid="challenge-status">
           {/* Static accept copy only inside status — countdown stays outside to avoid SR spam. */}
           <div role="status" aria-live="polite" aria-atomic="true">
             <p>
-              请求已受理。请向 <strong>{challenge.phone_masked}</strong>{' '}
+              请求已受理。请向 <strong>{activeChallenge.phone_masked}</strong>{' '}
               对应终端查收验证码（若可接收），并在有效期内完成登录。
             </p>
             <p className="hint">受理结果不表示账户是否存在，也不保证短信一定送达。</p>

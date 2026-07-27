@@ -191,7 +191,7 @@
     },
     {
       "tool": "trivy",
-      "exact_version": "0.61.0",
+      "exact_version": "0.69.3",
       "version_source": "security-check contract",
       "affected_components": [
         "proxy-gateway",

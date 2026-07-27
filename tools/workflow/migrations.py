@@ -10,7 +10,9 @@ import json
 import os
 import re
 import subprocess
+import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlparse, urlunparse
@@ -27,6 +29,17 @@ _INTEGRATION_PG_IMAGE = "postgres:15.12"
 _DB_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 _RUN_TOKEN_RE = re.compile(r"^[a-z0-9]{8,16}$")
 _OWNER_SLUG_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
+
+# Official postgres image: temporary server handles init, then shuts down before
+# the final server starts. First pg_isready can hit the temporary server.
+_PG_INIT_COMPLETE_MARKER = "PostgreSQL init process complete; ready for start up."
+_INTEGRATION_PG_READY_TIMEOUT_SECONDS = 60.0
+_INTEGRATION_PG_STABLE_SUCCESSES = 3
+_INTEGRATION_PG_POLL_INTERVAL_SECONDS = 0.25
+_DOCKER_LOGS_DIAG_MAX_CHARS = 2500
+_URL_CREDENTIAL_RE = re.compile(
+    r"(?i)((?:postgres(?:ql)?(?:\+\w+)?|https?)://[^:\s/]+):([^@\s/]+)@"
+)
 
 
 class MigrationError(Exception):
@@ -96,7 +109,9 @@ def check_migrations(
     try:
         selection = validate_mode(mode, mode_origin)
         if selection.mode == "prod":
-            selection = require_production_approval(selection, approval_proof=approval_proof)
+            selection = require_production_approval(
+                selection, approval_proof=approval_proof
+            )
 
         validate_owner_graphs(repo_root)
 
@@ -191,7 +206,9 @@ def replace_database_name(url: str, database: str) -> str:
         )
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
-        raise MigrationError("MIGRATION_INVALID", "DATABASE_URL is missing scheme or host")
+        raise MigrationError(
+            "MIGRATION_INVALID", "DATABASE_URL is missing scheme or host"
+        )
     # Keep empty host edge cases out of integration fixture URLs.
     if not parsed.hostname and "@" not in parsed.netloc:
         raise MigrationError("MIGRATION_INVALID", "DATABASE_URL is missing host")
@@ -279,6 +296,155 @@ def _assert_integration_fixture_url(url: str) -> None:
         )
 
 
+def _redact_integration_diagnostics(text: str) -> str:
+    """Strip connection credentials from diagnostic snippets (never log secrets)."""
+    return _URL_CREDENTIAL_RE.sub(r"\1:***@", text)
+
+
+def _integration_container_running(container_name: str) -> bool:
+    """Return True when the named container still reports State.Running."""
+    result = subprocess.run(
+        ["docker", "inspect", "-f", "{{.State.Running}}", container_name],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0 and result.stdout.strip().lower() == "true"
+
+
+def _integration_docker_logs(
+    container_name: str, *, max_chars: int = _DOCKER_LOGS_DIAG_MAX_CHARS
+) -> str:
+    """Return truncated, credential-redacted docker logs for fail-closed diagnostics."""
+    result = subprocess.run(
+        ["docker", "logs", "--tail", "200", container_name],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # postgres image writes most startup lines to stderr; combine both streams.
+    combined = f"{result.stdout or ''}{result.stderr or ''}"
+    redacted = _redact_integration_diagnostics(combined)
+    if len(redacted) <= max_chars:
+        return redacted
+    return redacted[-max_chars:]
+
+
+def _integration_init_complete(logs: str) -> bool:
+    """True when official entrypoint finished the temporary init server phase."""
+    return _PG_INIT_COMPLETE_MARKER in logs
+
+
+def _integration_sql_probe(container_name: str) -> bool:
+    """Run a real authenticated SQL probe against the default postgres database.
+
+    ``pg_isready`` is intentionally not used: it can succeed against the temporary
+    init-time server before the final PostgreSQL process is up.
+    """
+    result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            container_name,
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-tAc",
+            "SELECT 1",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+    return result.stdout.strip() == "1"
+
+
+def wait_for_integration_postgres_ready(
+    container_name: str,
+    *,
+    timeout_seconds: float = _INTEGRATION_PG_READY_TIMEOUT_SECONDS,
+    stable_successes: int = _INTEGRATION_PG_STABLE_SUCCESSES,
+    poll_interval_seconds: float = _INTEGRATION_PG_POLL_INTERVAL_SECONDS,
+    now: Callable[[], float] | None = None,
+    sleep: Callable[[float], None] | None = None,
+) -> None:
+    """Wait until the *final* PostgreSQL server is stably accepting SQL.
+
+    Official ``postgres`` Docker entrypoint sequence:
+
+    1. start temporary server;
+    2. run initialization;
+    3. stop temporary server (clients see administrator command / closed connection);
+    4. start final server.
+
+    A first successful ``pg_isready`` may hit the temporary server and race with
+    step 3. Final readiness therefore requires:
+
+    - container still ``running``;
+    - docker logs contain the init-complete marker;
+    - real ``SELECT 1`` via ``psql`` succeeds;
+    - several consecutive successful probes (short stability window).
+
+    Fail closed on container exit, probe exhaustion, or timeout; errors include
+    truncated redacted docker logs and never embed passwords or connection URLs.
+    """
+    if stable_successes < 1:
+        raise ValueError("stable_successes must be >= 1")
+    if timeout_seconds < 0:
+        raise ValueError("timeout_seconds must be >= 0")
+
+    clock = now or time.monotonic
+    pause = sleep or time.sleep
+    deadline = clock() + timeout_seconds
+    consecutive = 0
+    init_seen = False
+
+    while clock() < deadline:
+        if not _integration_container_running(container_name):
+            logs = _redact_integration_diagnostics(
+                _integration_docker_logs(container_name)
+            )
+            raise MigrationError(
+                "STEP_FAILED",
+                (
+                    "PostgreSQL integration container exited before final ready; "
+                    f"docker logs (truncated): {logs}"
+                ),
+            )
+
+        if not init_seen:
+            # Use a larger slice while scanning for the marker; diagnostics stay capped.
+            logs = _integration_docker_logs(container_name, max_chars=8000)
+            init_seen = _integration_init_complete(logs)
+            if not init_seen:
+                pause(poll_interval_seconds)
+                continue
+
+        if _integration_sql_probe(container_name):
+            consecutive += 1
+            if consecutive >= stable_successes:
+                return
+        else:
+            consecutive = 0
+
+        pause(poll_interval_seconds)
+
+    logs = _redact_integration_diagnostics(_integration_docker_logs(container_name))
+    raise MigrationError(
+        "STEP_FAILED",
+        (
+            "PostgreSQL integration container did not become finally ready within "
+            f"{timeout_seconds:.0f}s; docker logs (truncated): {logs}"
+        ),
+    )
+
+
 def create_owner_database(
     *,
     container_name: str,
@@ -291,7 +457,9 @@ def create_owner_database(
     not need an extra driver. Identifier is validated before interpolation.
     """
     if not _RUN_TOKEN_RE.fullmatch(re.sub(r"[^a-z0-9]", "", run_token.lower())):
-        raise MigrationError("MIGRATION_INVALID", "invalid run token for CREATE DATABASE")
+        raise MigrationError(
+            "MIGRATION_INVALID", "invalid run token for CREATE DATABASE"
+        )
     if not _DB_NAME_RE.fullmatch(database):
         raise MigrationError(
             "MIGRATION_INVALID",
@@ -330,6 +498,7 @@ def create_owner_database(
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "create database failed").strip()
+        detail = _redact_integration_diagnostics(detail)
         # Never echo connection strings; psql errors here are structural.
         raise MigrationError(
             "STEP_FAILED",
@@ -411,8 +580,6 @@ def migrate_integration_check(repo_root: Path) -> EventLog:
     relies on stopping/removing the container (databases are discarded with it);
     no explicit DROP DATABASE is required.
     """
-    import time
-
     log = EventLog()
     container_name = _INTEGRATION_CONTAINER
     admin_url = _INTEGRATION_ADMIN_URL
@@ -460,19 +627,8 @@ def migrate_integration_check(repo_root: Path) -> EventLog:
                 f"failed to start PostgreSQL container: {run_result.stderr}",
             )
 
-        # Wait for the database to accept connections.
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            probe = subprocess.run(
-                ["docker", "exec", container_name, "pg_isready", "-U", "postgres"],
-                capture_output=True,
-                check=False,
-            )
-            if probe.returncode == 0:
-                break
-            time.sleep(0.5)
-        else:
-            raise MigrationError("STEP_FAILED", "PostgreSQL container did not become ready")
+        # Wait for the *final* server (not the temporary init-time instance).
+        wait_for_integration_postgres_ready(container_name)
 
         owners_doc = load_owners(repo_root)
         owners = list(owners_doc["owners"])
@@ -488,9 +644,7 @@ def migrate_integration_check(repo_root: Path) -> EventLog:
                 run_token=run_token,
             )
 
-        db_summary = ", ".join(
-            f"{e['component_id']}->{e['database']}" for e in planned
-        )
+        db_summary = ", ".join(f"{e['component_id']}->{e['database']}" for e in planned)
         log.finish(
             "migrate-integration-check",
             "repository",

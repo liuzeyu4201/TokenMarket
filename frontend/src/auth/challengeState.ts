@@ -10,12 +10,7 @@ import type { ChallengeAcceptedData } from '../types/auth'
 
 export const CHALLENGE_STORAGE_KEY = 'tokenmarket.auth.challenge.v1'
 
-const ALLOWED_KEYS = [
-  'challenge_id',
-  'phone_masked',
-  'expires_at',
-  'resend_available_at',
-] as const
+const ALLOWED_KEYS = ['challenge_id', 'phone_masked', 'expires_at', 'resend_available_at'] as const
 
 export type PersistedChallenge = Pick<
   ChallengeAcceptedData,

@@ -119,7 +119,9 @@ def _insert_challenge(
             "user_id": user_id,
             "idempotency_id": idempotency_id,
             "phone_ref": uuid.uuid4().bytes + uuid.uuid4().bytes[:16],
-            "code_digest": (uuid.uuid4().bytes + uuid.uuid4().bytes[:16]) if with_otp else None,
+            "code_digest": (
+                (uuid.uuid4().bytes + uuid.uuid4().bytes[:16]) if with_otp else None
+            ),
             "code_salt": uuid.uuid4().bytes if with_otp else None,
             "provider_ref": uuid.uuid4(),
             "created_at": created,

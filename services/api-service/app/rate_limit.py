@@ -113,7 +113,9 @@ class MemoryRateLimiter:
 
 
 def build_rate_limiter_from_env() -> RateLimiter | None:
-    """Return Redis limiter if REDIS_URL set; None means unconfigured (fail closed on use)."""
+    """Return Redis limiter if REDIS_URL set; None means unconfigured
+    (fail closed on use).
+    """
     url = os.environ.get("REDIS_URL")
     if not url:
         return None

@@ -123,10 +123,7 @@ def _delete_batch(conn: Connection, table: str, batch_size: int) -> int:
         LIMIT :limit
         """
     )
-    ids = [
-        row[0]
-        for row in conn.execute(select_sql, {"limit": batch_size}).fetchall()
-    ]
+    ids = [row[0] for row in conn.execute(select_sql, {"limit": batch_size}).fetchall()]
     if not ids:
         return 0
 
@@ -197,7 +194,9 @@ def run_cleanup(
     batches = 0
 
     own_engine = engine is None
-    eng = engine or create_engine(_normalize_database_url(database_url), pool_pre_ping=True)
+    eng = engine or create_engine(
+        _normalize_database_url(database_url), pool_pre_ping=True
+    )
 
     try:
         # Hold a single connection for the session-level advisory lock.
@@ -234,7 +233,9 @@ def run_cleanup(
                             deleted = _delete_batch(work, table, batch_size)
                             if deleted:
                                 label = _TABLE_LABELS[table]
-                                rows_by_entity[label] = rows_by_entity.get(label, 0) + deleted
+                                rows_by_entity[label] = (
+                                    rows_by_entity.get(label, 0) + deleted
+                                )
                                 record_auth_cleanup_rows(label, deleted)
                                 round_deleted += deleted
                                 batches += 1

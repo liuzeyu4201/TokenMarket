@@ -41,6 +41,59 @@ jobs:
         with:
           version: "0.11.3"
 
+      - name: Install Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="8.24.0"
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          checksums="gitleaks_${version}_checksums.txt"
+          base_url="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
+
+          curl -fsSLO "${base_url}/${archive}"
+          curl -fsSLO "${base_url}/${checksums}"
+
+          grep -E "[[:space:]]${archive}$" "${checksums}" \
+            | sha256sum --check -
+
+          tar -xzf "${archive}" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+
+          gitleaks version
+
+      - name: Install govulncheck
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          go install \
+            golang.org/x/vuln/cmd/govulncheck@v1.1.4
+
+          go_bin="$(go env GOPATH)/bin"
+          echo "${go_bin}" >> "${GITHUB_PATH}"
+
+          "${go_bin}/govulncheck" -version
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: "v0.69.3"
+          cache: true
+
+      - name: Verify security scanners
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          command -v gitleaks
+          command -v govulncheck
+          command -v trivy
+
+          gitleaks version
+          govulncheck -version
+          trivy --version
+
       - name: Integrity scan
         run: make toolchain-check
 

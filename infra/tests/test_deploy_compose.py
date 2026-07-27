@@ -51,9 +51,7 @@ CHILD_ENV = {
     "TOKENMARKET_DEPLOY_ADMIN_HOST_PORT": "18002",
     "TOKENMARKET_DEPLOY_FRONTEND_HOST_PORT": "13080",
     "TOKENMARKET_DEPLOY_APP_DATABASE_URL": (
-        "postgresql://deploy_user:tm_local_"
-        + "d" * 32
-        + "@postgres:5432/tokenmarket"
+        "postgresql://deploy_user:tm_local_" + "d" * 32 + "@postgres:5432/tokenmarket"
     ),
 }
 
@@ -109,9 +107,7 @@ def _manifest_image(dep_id: str) -> str:
     data = json.loads(MANIFEST_FILE.read_text(encoding="utf-8"))
     for item in data["dependencies"]:
         if item["id"] == dep_id:
-            return (
-                f"{item['repository']}:{item['version_tag']}@{item['index_digest']}"
-            )
+            return f"{item['repository']}:{item['version_tag']}@{item['index_digest']}"
     raise AssertionError(f"dependency {dep_id} missing from manifest")
 
 

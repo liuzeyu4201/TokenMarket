@@ -13,7 +13,9 @@ from tests.integration.conftest_register import unique_phone
 pytestmark = pytest.mark.integration
 
 
-def _client(url: str, monkeypatch: pytest.MonkeyPatch, limiter: MemoryRateLimiter) -> TestClient:
+def _client(
+    url: str, monkeypatch: pytest.MonkeyPatch, limiter: MemoryRateLimiter
+) -> TestClient:
     from app.main import app
 
     monkeypatch.setenv("DATABASE_URL", url)

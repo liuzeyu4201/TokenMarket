@@ -72,16 +72,20 @@ class BlockingSmsFake:
                 raise TypeError("provider_request_ref required in legacy mode")
             ref = provider_request_ref
             code_len = len(code or "")
-            dest_marker = destination_ref if destination_ref is not None else destination
+            dest_marker = (
+                destination_ref if destination_ref is not None else destination
+            )
 
         self.calls.append(
             {
                 "provider_request_ref": ref,
                 "code_len": code_len,
                 "destination_ref": dest_marker,
-                "timeout_seconds": timeout_seconds
-                if timeout_seconds is not None
-                else self.timeout_seconds,
+                "timeout_seconds": (
+                    timeout_seconds
+                    if timeout_seconds is not None
+                    else self.timeout_seconds
+                ),
             }
         )
         self.send_entered.set()

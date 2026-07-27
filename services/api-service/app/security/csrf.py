@@ -21,7 +21,9 @@ def _session_id_bytes(session_id: uuid.UUID | str | bytes) -> bytes:
     return uuid.UUID(str(session_id)).bytes
 
 
-def issue_csrf_token(key: bytes, key_version: int, session_id: uuid.UUID | str | bytes) -> str:
+def issue_csrf_token(
+    key: bytes, key_version: int, session_id: uuid.UUID | str | bytes
+) -> str:
     """Compute versioned HMAC bound to *session_id*; return wire form.
 
     Format: ``<key-version>.<urlsafe-base64-hmac>``.

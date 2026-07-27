@@ -13,10 +13,13 @@ describe('api client timeout', () => {
       'fetch',
       vi.fn(async () => {
         calls += 1
-        return new Response(JSON.stringify({ code: '0', message: 'ok', data: {}, request_id: 'r', timestamp: '' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        return new Response(
+          JSON.stringify({ code: '0', message: 'ok', data: {}, request_id: 'r', timestamp: '' }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
       }),
     )
     await apiFetch('/x', { method: 'POST', body: '{}' })

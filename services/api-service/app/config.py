@@ -42,7 +42,9 @@ _LOCAL_SMS_ADAPTERS = frozenset({"synthetic", "fake", "test"})
 
 def resolve_app_mode() -> ModeName:
     """Return effective mode from MODE or APP_ENV; default local."""
-    raw = (os.environ.get("MODE") or os.environ.get("APP_ENV") or "local").strip().lower()
+    raw = (
+        (os.environ.get("MODE") or os.environ.get("APP_ENV") or "local").strip().lower()
+    )
     if raw in ("local", "test", "prod"):
         return raw  # type: ignore[return-value]
     # Unknown values treated as non-local for fail-closed policy when TLS/keys matter.
@@ -149,7 +151,10 @@ class AuthSettings(BaseSettings):
             raise ValueError("CSRF HMAC key version must be >= 1")
         if self.reference_hmac_key_version < 1:
             raise ValueError("reference HMAC key version must be >= 1")
-        if self.sms_provider_timeout_seconds < 1 or self.sms_provider_timeout_seconds > 60:
+        if (
+            self.sms_provider_timeout_seconds < 1
+            or self.sms_provider_timeout_seconds > 60
+        ):
             raise ValueError("AUTH_SMS_PROVIDER_TIMEOUT_SECONDS must be 1..60")
         if self.dispatcher_lease_seconds < 1:
             raise ValueError("AUTH_DISPATCHER_LEASE_SECONDS must be >= 1")

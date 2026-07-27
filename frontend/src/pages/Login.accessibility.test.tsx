@@ -10,9 +10,7 @@ const createSession = vi.fn()
 const bootstrapSession = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
-  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>(
-    '../api/v1/phoneAuth',
-  )
+  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
   return {
     ...actual,
     requestChallenge: (...args: unknown[]) => requestChallenge(...args),
@@ -88,9 +86,11 @@ describe('Login accessibility (T110)', () => {
     })
     const phoneAfter = screen.getByLabelText('手机号')
     const descAfter = phoneAfter.getAttribute('aria-describedby') ?? ''
-    expect(descAfter.split(/\s+/).some((id) => document.getElementById(id)?.classList.contains('field-error'))).toBe(
-      true,
-    )
+    expect(
+      descAfter
+        .split(/\s+/)
+        .some((id) => document.getElementById(id)?.classList.contains('field-error')),
+    ).toBe(true)
   })
 
   it('marks form busy and exposes status / alert roles during flow', async () => {
@@ -110,10 +110,7 @@ describe('Login accessibility (T110)', () => {
       const form = screen.getByLabelText('手机号').closest('form')
       expect(form).toHaveAttribute('aria-busy', 'true')
     })
-    expect(screen.getByRole('button', { name: '提交中…' })).toHaveAttribute(
-      'aria-busy',
-      'true',
-    )
+    expect(screen.getByRole('button', { name: '提交中…' })).toHaveAttribute('aria-busy', 'true')
 
     resolveChallenge({
       challenge_id: '11111111-1111-1111-1111-111111111111',
@@ -222,10 +219,7 @@ describe('Login accessibility (T110)', () => {
   it('keeps register entry reachable for keyboard users', async () => {
     renderLogin()
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: '前往注册' })).toHaveAttribute(
-        'href',
-        '/register',
-      )
+      expect(screen.getByRole('link', { name: '前往注册' })).toHaveAttribute('href', '/register')
     })
     const page = screen.getByTestId('login-page')
     expect(within(page).getByRole('link', { name: '前往注册' })).toBeInTheDocument()

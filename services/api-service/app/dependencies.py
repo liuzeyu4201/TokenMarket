@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from fastapi import Request
 from sqlalchemy.engine import make_url
@@ -16,6 +17,9 @@ from sqlalchemy.ext.asyncio import (
 from app.auth_rate_limit import AuthRateLimiter, MemoryAuthRateLimiter
 from app.rate_limit import MemoryRateLimiter, RateLimiter
 from app.security.trusted_proxy import resolve_client_ip
+
+if TYPE_CHECKING:
+    from app.config import AuthSettings
 
 
 def _async_url(database_url: str) -> str:
@@ -60,7 +64,7 @@ def get_auth_rate_limiter(request: Request) -> AuthRateLimiter:
     return limiter  # type: ignore[no-any-return]
 
 
-def get_auth_settings(request: Request) -> "AuthSettings":
+def get_auth_settings(request: Request) -> AuthSettings:
     """Return process AuthSettings from app state (or load lazily)."""
     from app.config import AuthSettings, load_auth_settings
 

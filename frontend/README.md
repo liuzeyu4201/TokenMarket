@@ -20,11 +20,11 @@ make build
 
 ## Routes
 
-| Path | Purpose |
-|------|---------|
-| `/` | Home placeholder (not the register form) |
-| `/register` | User registration form |
-| `*` | Not found / not yet open |
+| Path        | Purpose                                  |
+| ----------- | ---------------------------------------- |
+| `/`         | Home placeholder (not the register form) |
+| `/register` | User registration form                   |
+| `*`         | Not found / not yet open                 |
 
 ## Local development
 

@@ -65,7 +65,9 @@ def test_loads_current_and_previous_key_versions() -> None:
 
 def test_exact_browser_origins_no_wildcard_split() -> None:
     settings = AuthSettings(
-        **_full_keys(browser_origins="https://a.example,https://b.example")  # type: ignore[arg-type]
+        **_full_keys(  # type: ignore[arg-type]
+            browser_origins="https://a.example,https://b.example",
+        )
     )
     assert settings.browser_origin_list == [
         "https://a.example",
@@ -82,7 +84,9 @@ def test_trusted_proxy_cidr_list_parsed() -> None:
 
 def test_invalid_trusted_proxy_cidr_rejected() -> None:
     with pytest.raises(ValidationError):
-        AuthSettings(**_full_keys(trusted_proxy_cidrs="not-a-cidr"))  # type: ignore[arg-type]
+        AuthSettings(
+            **_full_keys(trusted_proxy_cidrs="not-a-cidr")  # type: ignore[arg-type]
+        )
 
 
 def test_provider_timeout_and_dispatcher_cleanup_params() -> None:
@@ -106,9 +110,13 @@ def test_provider_timeout_and_dispatcher_cleanup_params() -> None:
 
 def test_provider_timeout_out_of_range() -> None:
     with pytest.raises(ValidationError):
-        AuthSettings(**_full_keys(sms_provider_timeout_seconds=0))  # type: ignore[arg-type]
+        AuthSettings(
+            **_full_keys(sms_provider_timeout_seconds=0)  # type: ignore[arg-type]
+        )
     with pytest.raises(ValidationError):
-        AuthSettings(**_full_keys(sms_provider_timeout_seconds=120))  # type: ignore[arg-type]
+        AuthSettings(
+            **_full_keys(sms_provider_timeout_seconds=120)  # type: ignore[arg-type]
+        )
 
 
 def test_local_mode_allows_synthetic_and_placeholder_keys() -> None:
@@ -174,7 +182,12 @@ def test_prod_ready_when_fully_configured() -> None:
 
 
 def test_test_mode_also_requires_tls_and_approved_adapter() -> None:
-    settings = AuthSettings(**_full_keys(sms_adapter="synthetic", tls_ready=False))  # type: ignore[arg-type]
+    settings = AuthSettings(
+        **_full_keys(  # type: ignore[arg-type]
+            sms_adapter="synthetic",
+            tls_ready=False,
+        )
+    )
     result = check_auth_readiness(settings, mode="test")
     assert result.ok is False
 

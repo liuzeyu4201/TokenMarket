@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import secrets
 import uuid
 from typing import Iterator
@@ -176,9 +175,7 @@ def test_concurrent_winners_single_challenge(
             # At most one challenge for this phone under single key
             assert int(n) >= 1
             idem = conn.execute(
-                text(
-                    "SELECT count(*) FROM verification_request_idempotency_records"
-                )
+                text("SELECT count(*) FROM verification_request_idempotency_records")
             ).scalar_one()
             assert int(idem) == 1
     finally:

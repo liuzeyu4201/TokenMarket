@@ -31,7 +31,11 @@
   --color-disabled-bg: #e8eaed;
   --space-page-x: 1rem;
   --min-touch: 2.75rem;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
   line-height: 1.5;
   color: var(--color-text);
   background: var(--color-bg);

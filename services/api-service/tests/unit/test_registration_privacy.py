@@ -46,7 +46,9 @@ def test_error_envelopes_do_not_echo_peer_phone() -> None:
         assert not _FULL_CN_MOBILE.search(blob)
 
 
-def test_logger_extra_should_use_masked_not_raw(caplog) -> None:  # type: ignore[no-untyped-def]
+def test_logger_extra_should_use_masked_not_raw(
+    caplog,
+) -> None:  # type: ignore[no-untyped-def]
     phone = "13800138000"
     with caplog.at_level(logging.INFO):
         logging.getLogger("api-service").info(

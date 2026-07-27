@@ -15,8 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import AuthSettings, clear_auth_settings_cache
 from app.dependencies import create_session_engine
 from app.dispatch.auth_delivery import AuthDeliveryDispatcher
-from app.domain.authentication.challenge_service import ChallengeService
-from app.domain.users.models import User, UserRole, UserStatus
 from app.repositories.authentication import AuthenticationRepository, utc_now
 from app.security.otp import derive_otp, generate_code_salt, otp_verification_digest
 from app.security.reference import phone_ref

@@ -100,7 +100,10 @@ def test_set_and_clear_session_cookie_attributes() -> None:
     assert "HttpOnly" in header or "httponly" in header.lower()
     assert "Secure" in header or "secure" in header.lower()
     assert "Path=/" in header or "path=/" in header.lower()
-    assert f"Max-Age={SESSION_MAX_AGE_SECONDS}" in header or "max-age=3600" in header.lower()
+    assert (
+        f"Max-Age={SESSION_MAX_AGE_SECONDS}" in header
+        or "max-age=3600" in header.lower()
+    )
     assert "SameSite=lax" in header or "samesite=lax" in header.lower()
     # Domain must be absent for __Host-
     assert "Domain=" not in header and "domain=" not in header
@@ -139,7 +142,11 @@ def test_otp_accepts_leading_zero_codes_in_verify_path(otp_key: bytes) -> None:
         digest = otp_verification_digest(otp_key, challenge_id, salt, code)
         assert verify_otp_digest(otp_key, challenge_id, salt, code, digest)
         assert not verify_otp_digest(
-            otp_key, challenge_id, salt, "000001" if code != "000001" else "000002", digest
+            otp_key,
+            challenge_id,
+            salt,
+            "000001" if code != "000001" else "000002",
+            digest,
         )
 
 

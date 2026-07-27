@@ -11,9 +11,7 @@ const createSession = vi.fn()
 const bootstrapSession = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
-  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>(
-    '../api/v1/phoneAuth',
-  )
+  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
   return {
     ...actual,
     requestChallenge: (...args: unknown[]) => requestChallenge(...args),
@@ -315,13 +313,14 @@ describe('Login page', () => {
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument())
     await user.type(screen.getByLabelText('验证码'), '654321')
     await user.click(screen.getByRole('button', { name: '登录' }))
+
     await waitFor(() => {
-      expect(screen.getByTestId('mirror')).toHaveTextContent(
-        'authenticated:user-ctx:唯一上下文',
-      )
+      expect(screen.getByTestId('mirror')).toHaveTextContent('authenticated:user-ctx:唯一上下文')
     })
-    const dash = screen.getByRole('heading', { name: '工作台' }).closest('.card')
-    expect(dash).toBeTruthy()
-    expect(within(dash as HTMLElement).getByText('唯一上下文')).toBeInTheDocument()
+
+    const dash = await screen.findByTestId('dashboard-protected')
+
+    expect(within(dash).getByRole('heading', { name: '工作台' })).toBeInTheDocument()
+    expect(within(dash).getByText('唯一上下文')).toBeInTheDocument()
   })
 })

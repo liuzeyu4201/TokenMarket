@@ -24,7 +24,10 @@ from app.errors import (
     MSG_SERVICE_UNAVAILABLE,
     MSG_VALIDATION,
 )
-from app.observability import record_auth_rate_limited, record_rate_limit_backend_unavailable
+from app.observability import (
+    record_auth_rate_limited,
+    record_rate_limit_backend_unavailable,
+)
 from app.rate_limit import RateLimitBackendUnavailable
 from app.repositories.authentication import (
     CHALLENGE_TTL,
@@ -184,9 +187,10 @@ class ChallengeService:
         if latest_list:
             latest = latest_list[0]
             created = _ensure_aware(latest.created_at)
-            if (
-                now - created < RESEND_COOLDOWN
-                and latest.state in ("pending_delivery", "dispatching", "delivered")
+            if now - created < RESEND_COOLDOWN and latest.state in (
+                "pending_delivery",
+                "dispatching",
+                "delivered",
             ):
                 payload = {
                     "challenge_id": str(latest.id),
@@ -240,9 +244,7 @@ class ChallengeService:
         # Derive OTP in memory; persist only verification digest + salt.
         code = derive_otp(otp_mat.current, challenge_id)
         salt = generate_code_salt()
-        digest = otp_verification_digest(
-            otp_mat.current, challenge_id, salt, code
-        )
+        digest = otp_verification_digest(otp_mat.current, challenge_id, salt, code)
         # Drop plaintext immediately from locals after digest (keep for clarity
         # that we never flush it — code is not assigned to any model field).
         del code
@@ -482,7 +484,11 @@ class ChallengeService:
             kind="replay",
             http_status=int(record.http_status or 202),
             code=str(record.result_code or "0"),
-            message=MSG_CHALLENGE_ACCEPTED if record.result_code == "0" else MSG_SERVICE_UNAVAILABLE,
+            message=(
+                MSG_CHALLENGE_ACCEPTED
+                if record.result_code == "0"
+                else MSG_SERVICE_UNAVAILABLE
+            ),
             data=data,
         )
 

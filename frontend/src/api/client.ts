@@ -155,9 +155,7 @@ export async function apiFetch<T>(
     const fields = envelopeFields(body)
     const rid =
       res.headers.get('X-Request-ID') ??
-      (typeof fields.request_id === 'string' && fields.request_id
-        ? fields.request_id
-        : requestId)
+      (typeof fields.request_id === 'string' && fields.request_id ? fields.request_id : requestId)
 
     if (!res.ok) {
       const message =

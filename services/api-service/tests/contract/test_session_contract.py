@@ -14,10 +14,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.config import clear_auth_settings_cache, load_auth_settings
 from app.dependencies import create_session_engine
 from app.dispatch.auth_delivery import AuthDeliveryDispatcher
-from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.main import app
 from app.rate_limit import MemoryRateLimiter
 from app.security.otp import derive_otp
@@ -57,7 +57,9 @@ async def _deliver_all(database_url: str) -> None:
     await engine.dispose()
 
 
-def _wait_delivered(database_url: str, challenge_id: str, *, timeout: float = 10.0) -> None:
+def _wait_delivered(
+    database_url: str, challenge_id: str, *, timeout: float = 10.0
+) -> None:
     asyncio.run(_deliver_all(database_url))
     engine = create_engine(database_url, pool_pre_ping=True)
     try:
@@ -103,7 +105,10 @@ def _login(
     phone: str,
     database_url: str,
 ) -> tuple[str, str]:
-    """Return (csrf_token, opaque cookie value). Forces jar for __Host- Secure cookies."""
+    """Return (csrf_token, opaque cookie value).
+
+    Forces jar for __Host- Secure cookies.
+    """
     ch = client.post(
         "/api/v1/auth/verification-challenges",
         json={"phone": phone},
@@ -146,8 +151,6 @@ def session_client(
     _auth_env(monkeypatch, auth_migrated_postgres)
     with TestClient(app) as client:
         client.app.state.rate_limiter = MemoryRateLimiter()
-        from app.auth_rate_limit import MemoryAuthRateLimiter
-
         client.app.state.auth_rate_limiter = MemoryAuthRateLimiter(
             phone_limit=10_000, ip_limit=10_000
         )

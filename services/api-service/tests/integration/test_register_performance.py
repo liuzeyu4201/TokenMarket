@@ -6,7 +6,6 @@ Set TM_REGISTER_PERF=1 to enable. Default CI skips this module.
 from __future__ import annotations
 
 import os
-import statistics
 import time
 import uuid
 
@@ -34,7 +33,9 @@ def test_register_p95_under_500ms(
     monkeypatch.delenv("REDIS_URL", raising=False)
     samples: list[float] = []
     with TestClient(app) as client:
-        client.app.state.rate_limiter = MemoryRateLimiter(ip_limit=10_000, phone_limit=10_000)
+        client.app.state.rate_limiter = MemoryRateLimiter(
+            ip_limit=10_000, phone_limit=10_000
+        )
         for _ in range(20):
             start = time.perf_counter()
             r = client.post(

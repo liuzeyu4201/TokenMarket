@@ -46,8 +46,7 @@ export function AppShell() {
 
   const isAuthed = auth.status === 'authenticated' && auth.session
   const isChecking = auth.status === 'checking'
-  const showAnonymousActions =
-    auth.status === 'anonymous' || auth.status === 'unavailable'
+  const showAnonymousActions = auth.status === 'anonymous' || auth.status === 'unavailable'
 
   return (
     <div className="app-shell">

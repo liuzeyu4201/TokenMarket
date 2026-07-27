@@ -90,9 +90,9 @@ class FakeAsyncRedis:
             return max(1, (remain_ms + 999) // 1000)
 
         if phone_count >= phone_limit:
-            return [0, "phone", retry_after(phone_key), phone_count, ip_count]
+            return [0, "phone", int(retry_after(phone_key)), phone_count, ip_count]
         if ip_count >= ip_limit:
-            return [0, "ip", retry_after(ip_key), phone_count, ip_count]
+            return [0, "ip", int(retry_after(ip_key)), phone_count, ip_count]
 
         self.zsets.setdefault(phone_key, {})[member] = float(now_ms)
         self.zsets.setdefault(ip_key, {})[member] = float(now_ms)
@@ -140,13 +140,9 @@ async def test_phone_limit_five_per_hour() -> None:
     phone = secrets.token_bytes(32)
     ip = secrets.token_bytes(32)
     for n in range(5):
-        d = await lim.check_and_increment(
-            phone_ref=phone, ip_ref=ip, member_id=f"m{n}"
-        )
+        d = await lim.check_and_increment(phone_ref=phone, ip_ref=ip, member_id=f"m{n}")
         assert d.allowed, n
-    denied = await lim.check_and_increment(
-        phone_ref=phone, ip_ref=ip, member_id="m6"
-    )
+    denied = await lim.check_and_increment(phone_ref=phone, ip_ref=ip, member_id="m6")
     assert not denied.allowed
     assert denied.dimension == "phone"
     assert denied.retry_after_seconds >= 1
@@ -228,10 +224,120 @@ async def test_memory_limiter_and_metrics_hook() -> None:
 async def test_winner_member_single_count_semantics() -> None:
     """Same member id still only one ZADD per call; distinct winners accumulate."""
     fake = FakeAsyncRedis()
-    lim = RedisAuthRateLimiter(fake, env="t", phone_limit=5, ip_limit=20)  # type: ignore[arg-type]
+    lim = RedisAuthRateLimiter(
+        fake,  # type: ignore[arg-type]
+        env="t",
+        phone_limit=5,
+        ip_limit=20,
+    )
     p, i = b"\x11" * 32, b"\x22" * 32
     d1 = await lim.check_and_increment(phone_ref=p, ip_ref=i, member_id="winner-a")
     d2 = await lim.check_and_increment(phone_ref=p, ip_ref=i, member_id="winner-b")
     assert d1.allowed and d2.allowed
     assert d2.phone_count == 2
+    await lim.close()
+
+
+@pytest.mark.asyncio
+async def test_noscript_reloads_script_once() -> None:
+    """First evalsha NOSCRIPT triggers one script_load, then retry succeeds."""
+
+    class NoscriptThenOkRedis(FakeAsyncRedis):
+        def __init__(self) -> None:
+            super().__init__()
+            self.eval_calls = 0
+            self.load_calls = 0
+
+        async def script_load(self, script: str) -> str:
+            self.load_calls += 1
+            return await super().script_load(script)
+
+        async def evalsha(
+            self, sha: str, numkeys: int, *keys_and_args: Any
+        ) -> list[Any]:
+            self.eval_calls += 1
+            if self.eval_calls == 1:
+                raise Exception("NOSCRIPT No matching script")
+            return await super().evalsha(sha, numkeys, *keys_and_args)
+
+    fake = NoscriptThenOkRedis()
+    lim = RedisAuthRateLimiter(fake, env="local")  # type: ignore[arg-type]
+    decision = await lim.check_and_increment(
+        phone_ref=b"\x01" * 32,
+        ip_ref=b"\x02" * 32,
+        member_id="after-noscript",
+    )
+    assert decision.allowed
+    assert fake.load_calls == 2  # initial load + reload after NOSCRIPT
+    assert fake.eval_calls == 2
+    await lim.close()
+
+
+@pytest.mark.asyncio
+async def test_lua_non_sequence_result_fail_closed() -> None:
+    class BadShapeRedis(FakeAsyncRedis):
+        async def evalsha(self, sha: str, numkeys: int, *keys_and_args: Any) -> Any:
+            return "not-a-list"
+
+    lim = RedisAuthRateLimiter(BadShapeRedis(), env="local")  # type: ignore[arg-type]
+    with pytest.raises(RateLimitBackendUnavailable):
+        await lim.check_and_increment(
+            phone_ref=b"\x01" * 32,
+            ip_ref=b"\x02" * 32,
+        )
+    await lim.close()
+
+
+@pytest.mark.asyncio
+async def test_lua_short_result_fail_closed() -> None:
+    class ShortRedis(FakeAsyncRedis):
+        async def evalsha(
+            self, sha: str, numkeys: int, *keys_and_args: Any
+        ) -> list[Any]:
+            return [1, "", 0]
+
+    lim = RedisAuthRateLimiter(ShortRedis(), env="local")  # type: ignore[arg-type]
+    with pytest.raises(RateLimitBackendUnavailable):
+        await lim.check_and_increment(
+            phone_ref=b"\x01" * 32,
+            ip_ref=b"\x02" * 32,
+        )
+    await lim.close()
+
+
+@pytest.mark.asyncio
+async def test_lua_non_integer_field_fail_closed() -> None:
+    class BadIntRedis(FakeAsyncRedis):
+        async def evalsha(
+            self, sha: str, numkeys: int, *keys_and_args: Any
+        ) -> list[Any]:
+            return [1, "", 0, "not-int", 1]
+
+    lim = RedisAuthRateLimiter(BadIntRedis(), env="local")  # type: ignore[arg-type]
+    with pytest.raises(RateLimitBackendUnavailable):
+        await lim.check_and_increment(
+            phone_ref=b"\x01" * 32,
+            ip_ref=b"\x02" * 32,
+        )
+    await lim.close()
+
+
+@pytest.mark.asyncio
+async def test_lua_string_integer_fields_accepted() -> None:
+    """Redis decode_responses may surface integer fields as strings."""
+
+    class StringIntRedis(FakeAsyncRedis):
+        async def evalsha(
+            self, sha: str, numkeys: int, *keys_and_args: Any
+        ) -> list[Any]:
+            return ["1", "", "0", "3", "4"]
+
+    lim = RedisAuthRateLimiter(StringIntRedis(), env="local")  # type: ignore[arg-type]
+    decision = await lim.check_and_increment(
+        phone_ref=b"\x01" * 32,
+        ip_ref=b"\x02" * 32,
+    )
+    assert decision.allowed
+    assert decision.phone_count == 3
+    assert decision.ip_count == 4
     await lim.close()

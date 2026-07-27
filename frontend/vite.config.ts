@@ -3,8 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 /** Loopback API target for the local same-origin `/api` proxy (host process). */
-const apiProxyTarget =
-  process.env.VITE_API_PROXY_TARGET?.trim() || 'http://127.0.0.1:8000'
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET?.trim() || 'http://127.0.0.1:8000'
 
 export default defineConfig({
   plugins: [react(), basicSsl()],

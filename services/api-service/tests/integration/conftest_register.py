@@ -38,9 +38,9 @@ def migrated_postgres(postgres_container: PostgresHandle) -> Iterator[str]:
     """Disposable PG with migrations applied to head; yields sync DATABASE_URL."""
     url = postgres_container.database_url()
     result = run_alembic(url, "upgrade", "head")
-    assert result.returncode == 0, (
-        f"alembic upgrade failed:\n{result.stdout}\n{result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"alembic upgrade failed:\n{result.stdout}\n{result.stderr}"
     yield url
 
 

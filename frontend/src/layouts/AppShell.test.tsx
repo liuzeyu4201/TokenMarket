@@ -11,9 +11,7 @@ const bootstrapSession = vi.fn()
 const logoutSession = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
-  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>(
-    '../api/v1/phoneAuth',
-  )
+  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
   return {
     ...actual,
     bootstrapSession: (...args: unknown[]) => bootstrapSession(...args),
@@ -69,10 +67,7 @@ describe('AppShell', () => {
       expect(screen.getByTestId('shell-identity')).toHaveTextContent('*******9999')
     })
     expect(screen.getByTestId('shell-identity')).toHaveTextContent('买家与卖家')
-    expect(screen.getByRole('link', { name: '工作台' })).toHaveAttribute(
-      'href',
-      '/dashboard',
-    )
+    expect(screen.getByRole('link', { name: '工作台' })).toHaveAttribute('href', '/dashboard')
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument()
   })

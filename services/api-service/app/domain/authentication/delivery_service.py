@@ -217,7 +217,8 @@ class DeliveryService:
         except Exception as exc:  # noqa: BLE001 — map to unknown; never log body
             logger.warning(
                 redact_message(
-                    f"sms adapter error request_id={request_id} err_type={type(exc).__name__}"
+                    f"sms adapter error request_id={request_id} "
+                    f"err_type={type(exc).__name__}"
                 )
             )
             result = SmsDeliveryResult.unknown_result()
@@ -254,9 +255,11 @@ class DeliveryService:
             await self._repo.rollback()
             return DeliveryOutcome(
                 challenge_id=challenge_id,
-                state="delivery_failed"
-                if locked.state == "delivery_failed"
-                else "delivered",
+                state=(
+                    "delivery_failed"
+                    if locked.state == "delivery_failed"
+                    else "delivered"
+                ),
                 provider_outcome="already_final",
                 sent=True,
             )

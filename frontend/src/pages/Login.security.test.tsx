@@ -14,9 +14,7 @@ const createSession = vi.fn()
 const bootstrapSession = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
-  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>(
-    '../api/v1/phoneAuth',
-  )
+  const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
   return {
     ...actual,
     requestChallenge: (...args: unknown[]) => requestChallenge(...args),
@@ -72,9 +70,7 @@ describe('Login security UX', () => {
 
     expect(requestChallenge).toHaveBeenCalledTimes(1)
     const key1 = requestChallenge.mock.calls[0][1] as string
-    expect(key1).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    )
+    expect(key1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
 
     resolveChallenge({
       challenge_id: '11111111-1111-1111-1111-111111111111',

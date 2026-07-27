@@ -17,13 +17,13 @@ from starlette.responses import Response
 
 from . import database
 from .api.v1.auth import router as auth_router
+from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
 from .errors import DependencyUnavailableError
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
-from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .rate_limit import MemoryRateLimiter, build_rate_limiter_from_env
 from .schemas.envelope import error_envelope
 from .sms.synthetic import build_sms_adapter
@@ -95,17 +95,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.sms_adapter = sms_adapter
 
     database_url = os.environ.get("DATABASE_URL")
+    session_factory: async_sessionmaker[AsyncSession] | None = None
     app.state.session_factory = None
     if database_url is not None:
         try:
             engine = database.create_readiness_engine(database_url)
             session_engine = create_session_engine(database_url)
-            app.state.session_factory = async_sessionmaker(
+            session_factory = async_sessionmaker(
                 session_engine, class_=AsyncSession, expire_on_commit=False
             )
+            app.state.session_factory = session_factory
         except Exception:
             logger.warning("database readiness probe disabled: invalid config")
             engine = None
+            session_factory = None
             app.state.session_factory = None
 
     app.state.db_engine = engine
@@ -114,14 +117,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.auth_rate_limiter = auth_rate_limiter
 
     # Start delivery dispatcher when DB + keys are usable (local/test).
-    start_dispatcher = (
+    # Inline ``session_factory is not None`` so mypy narrows the factory type.
+    if (
         os.environ.get("AUTH_DISPATCHER_ENABLED", "1") != "0"
-        and app.state.session_factory is not None
+        and session_factory is not None
         and auth_settings.key_material("otp").current_usable()
-    )
-    if start_dispatcher:
+    ):
         dispatcher = AuthDeliveryDispatcher(
-            app.state.session_factory,
+            session_factory,
             auth_settings,
             sms_adapter,  # type: ignore[arg-type]
         )
@@ -140,6 +143,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await session_engine.dispose()
     if engine is not None:
         await engine.dispose()
+
 
 app = FastAPI(title="TokenMarket API Service", version=VERSION, lifespan=lifespan)
 app.state.version = VERSION

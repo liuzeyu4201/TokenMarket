@@ -258,7 +258,9 @@ class AuthenticationRepository:
         await self._session.flush()
         return challenge
 
-    async def get_challenge(self, challenge_id: uuid.UUID) -> VerificationChallenge | None:
+    async def get_challenge(
+        self, challenge_id: uuid.UUID
+    ) -> VerificationChallenge | None:
         return await self._session.get(VerificationChallenge, challenge_id)
 
     async def lock_challenge(
@@ -297,7 +299,9 @@ class AuthenticationRepository:
         batch_size: int,
         now: datetime | None = None,
     ) -> list[VerificationChallenge]:
-        """Claim pending work with FOR UPDATE SKIP LOCKED; set lease and commit caller."""
+        """Claim pending work with FOR UPDATE SKIP LOCKED; set lease
+        and commit caller.
+        """
         ts = now or utc_now()
         lease_until = ts + timedelta(seconds=lease_seconds)
         # Reclaim expired pre-send leases as claimable.

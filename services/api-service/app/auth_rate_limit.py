@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import os
 import uuid
+from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from redis.asyncio import Redis
 
@@ -22,7 +23,9 @@ AUTH_IP_LIMIT = 20
 AUTH_WINDOW_SECONDS = 3600  # rolling 1 hour
 AUTH_TTL_SECONDS = 3700  # slightly > window
 
-_LUA_PATH = Path(__file__).resolve().parent / "domain" / "authentication" / "rate_limit.lua"
+_LUA_PATH = (
+    Path(__file__).resolve().parent / "domain" / "authentication" / "rate_limit.lua"
+)
 _LUA_SCRIPT: str | None = None
 
 
@@ -44,6 +47,52 @@ def auth_rate_limit_key(env: str, dimension: str, ref_hex: str) -> str:
 
 def ref_to_hex(ref: bytes) -> str:
     return ref.hex()
+
+
+def _lua_args_as_strings(args: Sequence[str | int]) -> list[str]:
+    """Normalize Lua ARGV to string scalars (Redis / typed client expectation)."""
+    return [str(item) for item in args]
+
+
+async def _await_redis_str(value: Awaitable[str] | str) -> str:
+    """Resolve redis-py stubs that type some async methods as Awaitable[T] | T."""
+    if isinstance(value, str):
+        return value
+    return await value
+
+
+def _coerce_lua_int(value: object, *, field: str) -> int:
+    """Convert a Lua scalar field to int; fail closed on unsupported types."""
+    if isinstance(value, bool):
+        # bool is a subclass of int; treat as 0/1 explicitly.
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, (str, bytes, bytearray)):
+        try:
+            return int(value)
+        except ValueError as exc:
+            raise RateLimitBackendUnavailable(
+                f"auth rate-limit Lua field {field!r} is not an integer"
+            ) from exc
+    raise RateLimitBackendUnavailable(
+        f"auth rate-limit Lua field {field!r} has unsupported type "
+        f"{type(value).__name__}"
+    )
+
+
+def _parse_lua_result(raw: object) -> list[object]:
+    """Require a sequence of at least five Lua return values."""
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes, bytearray)):
+        raise RateLimitBackendUnavailable(
+            "auth rate-limit Lua returned a non-sequence result"
+        )
+    items = list(raw)
+    if len(items) < 5:
+        raise RateLimitBackendUnavailable(
+            "auth rate-limit Lua returned fewer than 5 fields"
+        )
+    return items
 
 
 @dataclass(frozen=True)
@@ -87,23 +136,36 @@ class RedisAuthRateLimiter:
         self._ip_limit = ip_limit
         self._window_ms = window_seconds * 1000
         self._ttl = ttl_seconds
-        self._script = lua_script if lua_script is not None else load_auth_rate_limit_lua()
+        self._script = (
+            lua_script if lua_script is not None else load_auth_rate_limit_lua()
+        )
         self._sha: str | None = None
 
-    async def _eval(
-        self, keys: list[str], args: list[str | int]
-    ) -> list[object]:
+    async def _script_load(self) -> str:
+        loaded = self._redis.script_load(self._script)
+        return await _await_redis_str(loaded)
+
+    async def _evalsha(self, sha: str, keys: list[str], args: list[str]) -> object:
+        # redis-py stubs type evalsha loosely (Awaitable[str] | str); runtime returns
+        # the Lua multi-bulk list. Cast only the awaitable edge, not the Redis client.
+        pending = self._redis.evalsha(sha, len(keys), *keys, *args)
+        if isinstance(pending, str):
+            return pending
+        return await cast(Awaitable[object], pending)
+
+    async def _eval(self, keys: list[str], args: list[str | int]) -> list[object]:
+        str_args = _lua_args_as_strings(args)
         try:
             if self._sha is None:
-                self._sha = await self._redis.script_load(self._script)
+                self._sha = await self._script_load()
             try:
-                result = await self._redis.evalsha(self._sha, len(keys), *keys, *args)
+                result = await self._evalsha(self._sha, keys, str_args)
             except Exception as exc:  # NOSCRIPT or similar — reload once
                 if "NOSCRIPT" not in str(exc).upper():
                     raise
-                self._sha = await self._redis.script_load(self._script)
-                result = await self._redis.evalsha(self._sha, len(keys), *keys, *args)
-            return list(result)  # type: ignore[arg-type]
+                self._sha = await self._script_load()
+                result = await self._evalsha(self._sha, keys, str_args)
+            return _parse_lua_result(result)
         except RateLimitBackendUnavailable:
             raise
         except Exception as exc:
@@ -132,11 +194,14 @@ class RedisAuthRateLimiter:
                 self._ttl,
             ],
         )
-        allowed = int(raw[0]) == 1
-        dimension = str(raw[1]) if raw[1] else None
-        retry_after = max(1, int(raw[2])) if not allowed else 0
-        phone_count = int(raw[3])
-        ip_count = int(raw[4])
+        allowed = _coerce_lua_int(raw[0], field="allowed") == 1
+        dimension_raw = raw[1]
+        dimension = str(dimension_raw) if dimension_raw else None
+        retry_after = (
+            max(1, _coerce_lua_int(raw[2], field="retry_after")) if not allowed else 0
+        )
+        phone_count = _coerce_lua_int(raw[3], field="phone_count")
+        ip_count = _coerce_lua_int(raw[4], field="ip_count")
         return AuthRateLimitDecision(
             allowed=allowed,
             dimension=dimension if not allowed else None,
@@ -215,9 +280,7 @@ def build_auth_rate_limiter_from_env() -> AuthRateLimiter | None:
     if not url:
         return None
     env = (
-        os.environ.get("MODE")
-        or os.environ.get("APP_ENV")
-        or "local"
+        os.environ.get("MODE") or os.environ.get("APP_ENV") or "local"
     ).strip().lower() or "local"
     client = Redis.from_url(url, decode_responses=True)
     return RedisAuthRateLimiter(client, env=env)

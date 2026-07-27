@@ -61,9 +61,9 @@ def test_auth_redis_version_and_lifecycle(
         assert client.ping() is True
         info = client.info("server")
         redis_version = str(info.get("redis_version", ""))
-        assert redis_version.startswith("7.2"), (
-            f"expected Redis 7.2.x, got {redis_version!r}"
-        )
+        assert redis_version.startswith(
+            "7.2"
+        ), f"expected Redis 7.2.x, got {redis_version!r}"
         client.set("tm:smoke:key", "1", ex=10)
         assert client.get("tm:smoke:key") == "1"
     finally:

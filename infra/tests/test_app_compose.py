@@ -43,6 +43,16 @@ CHILD_ENV = {
         "postgresql://app:tm_local_placeholder_not_a_real_secret_xxxx"
         "@postgres:5432/tokenmarket"
     ),
+    # Explicit auth hooks (strict Compose interpolation; empty = generator-written empty).
+    "TOKENMARKET_DEPLOY_AUTH_BROWSER_ORIGINS": "",
+    "TOKENMARKET_DEPLOY_AUTH_TRUSTED_PROXY_CIDRS": "",
+    "TOKENMARKET_DEPLOY_AUTH_SMS_ADAPTER": "",
+    "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_LEASE_SECONDS": "30",
+    "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_DRAIN_SECONDS": "15",
+    "TOKENMARKET_DEPLOY_AUTH_DISPATCHER_ENABLED": "1",
+    "TOKENMARKET_DEPLOY_AUTH_CLEANUP_BATCH_SIZE": "500",
+    "TOKENMARKET_DEPLOY_AUTH_CLEANUP_MAX_RUNTIME_SECONDS": "900",
+    "TOKENMARKET_DEPLOY_AUTH_TLS_READY": "false",
 }
 
 FORBIDDEN_RAW_FORMS = {
@@ -112,7 +122,9 @@ def test_compose_app_file_exists() -> None:
     assert not COMPOSE_FILE.is_symlink()
 
 
-@pytest.mark.parametrize("label,pattern", list(FORBIDDEN_RAW_FORMS.items()), ids=list(FORBIDDEN_RAW_FORMS))
+@pytest.mark.parametrize(
+    "label,pattern", list(FORBIDDEN_RAW_FORMS.items()), ids=list(FORBIDDEN_RAW_FORMS)
+)
 def test_app_forbidden_raw_forms(
     raw_compose_text: str, label: str, pattern: re.Pattern[str]
 ) -> None:

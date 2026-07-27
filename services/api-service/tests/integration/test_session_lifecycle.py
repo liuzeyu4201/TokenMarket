@@ -13,10 +13,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.config import clear_auth_settings_cache, load_auth_settings
 from app.dependencies import create_session_engine
 from app.dispatch.auth_delivery import AuthDeliveryDispatcher
-from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.main import app
 from app.rate_limit import MemoryRateLimiter
 from app.security.otp import derive_otp
@@ -135,9 +135,7 @@ def test_refresh_bootstrap_restores_session(
     auth_migrated_postgres: str,
 ) -> None:
     user = account_factory.create_active(nickname="刷新用户")
-    csrf = _login_client(
-        life_client, user.phone_normalized, auth_migrated_postgres
-    )
+    csrf = _login_client(life_client, user.phone_normalized, auth_migrated_postgres)
     assert csrf
     boot = life_client.get("/api/v1/auth/session")
     assert boot.status_code == 200
@@ -153,9 +151,7 @@ def test_new_login_replaces_old_device_within_one_second(
 ) -> None:
     user = account_factory.create_active()
     # Device A
-    csrf_a = _login_client(
-        life_client, user.phone_normalized, auth_migrated_postgres
-    )
+    csrf_a = _login_client(life_client, user.phone_normalized, auth_migrated_postgres)
     cookie_a = life_client.cookies.get(SESSION_COOKIE_NAME)
     assert cookie_a
 
@@ -166,9 +162,7 @@ def test_new_login_replaces_old_device_within_one_second(
             phone_limit=10_000, ip_limit=10_000
         )
         device_b.app.state.sms_adapter = SyntheticSmsAdapter()
-        csrf_b = _login_client(
-            device_b, user.phone_normalized, auth_migrated_postgres
-        )
+        csrf_b = _login_client(device_b, user.phone_normalized, auth_migrated_postgres)
         assert csrf_b
         assert device_b.get("/api/v1/auth/session").status_code == 200
 
@@ -231,9 +225,7 @@ def test_logout_retry_after_response_loss(
     auth_migrated_postgres: str,
 ) -> None:
     user = account_factory.create_active()
-    csrf = _login_client(
-        life_client, user.phone_normalized, auth_migrated_postgres
-    )
+    csrf = _login_client(life_client, user.phone_normalized, auth_migrated_postgres)
     first = life_client.delete(
         "/api/v1/auth/session",
         headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
@@ -242,9 +234,11 @@ def test_logout_retry_after_response_loss(
     # Simulate client retry with same CSRF after response loss
     life_client.cookies.set(
         SESSION_COOKIE_NAME,
-        first.headers.get("set-cookie", "").split(";")[0].split("=", 1)[-1]
-        if False
-        else "",
+        (
+            first.headers.get("set-cookie", "").split(";")[0].split("=", 1)[-1]
+            if False
+            else ""
+        ),
     )
     # Cookie cleared; retry still success
     second = life_client.delete(

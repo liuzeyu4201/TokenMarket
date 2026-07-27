@@ -257,7 +257,9 @@ class BlockingSmsFake:
 class DispatcherStub:
     """Minimal dispatcher claim/finalize stub for integration scaffolding."""
 
-    owner: str = field(default_factory=lambda: f"test-dispatcher-{secrets.token_hex(4)}")
+    owner: str = field(
+        default_factory=lambda: f"test-dispatcher-{secrets.token_hex(4)}"
+    )
     claimed: list[uuid.UUID] = field(default_factory=list)
     finalized: list[tuple[uuid.UUID, str]] = field(default_factory=list)
     lease_seconds: int = 30
@@ -338,9 +340,9 @@ def auth_migrated_postgres(
     """PostgreSQL with Alembic migrations applied to head; yields DATABASE_URL."""
     url = auth_postgres_container.database_url()
     result = run_alembic(url, "upgrade", "head")
-    assert result.returncode == 0, (
-        f"alembic upgrade failed:\n{result.stdout}\n{result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"alembic upgrade failed:\n{result.stdout}\n{result.stderr}"
     yield url
 
 

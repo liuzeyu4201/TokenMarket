@@ -136,11 +136,7 @@ export function mapPhoneAuthError(err: unknown): PhoneAuthClientError {
       verificationAction,
     )
   }
-  return new PhoneAuthClientError(
-    '网络错误，请稍后重试',
-    'INTERNAL_ERROR',
-    'retry_later',
-  )
+  return new PhoneAuthClientError('网络错误，请稍后重试', 'INTERNAL_ERROR', 'retry_later')
 }
 
 function assertSuccessData<T>(
@@ -228,13 +224,14 @@ export async function logoutSession(csrfToken: string | null): Promise<void> {
     if (csrfToken) {
       headers['X-CSRF-Token'] = csrfToken
     }
-    const { data, requestId } = await apiFetch<
-      components['schemas']['LogoutEnvelope']
-    >(SESSION_PATH, {
-      method: 'DELETE',
-      sameOriginAuth: true,
-      headers,
-    })
+    const { data, requestId } = await apiFetch<components['schemas']['LogoutEnvelope']>(
+      SESSION_PATH,
+      {
+        method: 'DELETE',
+        sameOriginAuth: true,
+        headers,
+      },
+    )
     const code = data.code ?? ''
     if (code !== '0') {
       throw mapPhoneAuthError(

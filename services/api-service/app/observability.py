@@ -58,7 +58,8 @@ _REDACTED_HEADER_NAMES = frozenset(
 _PHONE_PATTERN = re.compile(r"(?<![*\d])1[3-9]\d{9}(?!\d)")
 # Labeled OTP only — avoid redacting arbitrary 6-digit numbers (ports, counts).
 _OTP_CONTEXT_PATTERN = re.compile(
-    r"(?i)\b(otp|verification[_-]?code|sms[_-]?code|auth[_-]?code)\b(\s*[:=]\s*)(\d{4,8})"
+    r"(?i)\b(otp|verification[_-]?code|sms[_-]?code|auth[_-]?code)\b"
+    r"(\s*[:=]\s*)(\d{4,8})"
 )
 _TOKEN_CONTEXT_PATTERN = re.compile(
     r"(?i)\b(session[_-]?token|csrf[_-]?token|idempotency[_-]?key)\b(\s*[:=]\s*)(\S+)"
@@ -267,7 +268,9 @@ def record_auth_session_revocation_visibility(seconds: float) -> None:
     AUTH_SESSION_REVOCATION_VISIBILITY_SECONDS.observe(max(seconds, 0.0))
 
 
-def record_auth_dispatcher_claim(result: str, queue_age_seconds: float | None = None) -> None:
+def record_auth_dispatcher_claim(
+    result: str, queue_age_seconds: float | None = None
+) -> None:
     AUTH_DISPATCHER_CLAIMS_TOTAL.labels(result=result.replace(" ", "_")[:64]).inc()
     if queue_age_seconds is not None:
         AUTH_DISPATCHER_QUEUE_AGE_SECONDS.observe(max(queue_age_seconds, 0.0))

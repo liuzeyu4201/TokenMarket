@@ -1,0 +1,92 @@
+"""Route exclude action role gate."""
+
+from __future__ import annotations
+
+import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from app.domain.authorization.matrix import Action
+from app.domain.authorization.route_exclude import RouteCandidate
+from app.domain.authorization.service import AuthorizationService
+from app.domain.users.models import UserRole, UserStatus
+
+
+@pytest.mark.asyncio
+async def test_seller_cannot_route_exclude() -> None:
+    user = SimpleNamespace(
+        id=uuid.uuid4(),
+        role=UserRole.seller,
+        status=UserStatus.active,
+        is_deleted=False,
+    )
+    repo = MagicMock()
+    repo.get_user = AsyncMock(return_value=user)
+    repo.commit = AsyncMock()
+    repo.insert_security_event = AsyncMock()
+    svc = AuthorizationService(repo)
+    d = await svc.authorize(
+        user_id=user.id,
+        session_id=None,
+        action=Action.route_candidate_exclude_self,
+        request_id="r",
+        candidates=[
+            RouteCandidate(uuid.uuid4(), uuid.uuid4(), "active"),
+        ],
+    )
+    assert d.code == "FORBIDDEN_ROLE"
+
+
+@pytest.mark.asyncio
+async def test_buyer_filters_self() -> None:
+    user = SimpleNamespace(
+        id=uuid.uuid4(),
+        role=UserRole.buyer,
+        status=UserStatus.active,
+        is_deleted=False,
+    )
+    other = uuid.uuid4()
+    repo = MagicMock()
+    repo.get_user = AsyncMock(return_value=user)
+    repo.commit = AsyncMock()
+    repo.insert_security_event = AsyncMock()
+    svc = AuthorizationService(repo)
+    d = await svc.authorize(
+        user_id=user.id,
+        session_id=None,
+        action=Action.route_candidate_exclude_self,
+        request_id="r",
+        candidates=[
+            RouteCandidate(uuid.uuid4(), user.id, "active"),
+            RouteCandidate(uuid.uuid4(), other, "active"),
+        ],
+    )
+    assert d.allowed is True
+    assert len(d.filtered_candidates) == 1
+    assert d.filtered_candidates[0].owner_user_id == other
+
+
+@pytest.mark.asyncio
+async def test_only_self_no_candidate() -> None:
+    user = SimpleNamespace(
+        id=uuid.uuid4(),
+        role=UserRole.both,
+        status=UserStatus.active,
+        is_deleted=False,
+    )
+    repo = MagicMock()
+    repo.get_user = AsyncMock(return_value=user)
+    repo.commit = AsyncMock()
+    repo.insert_security_event = AsyncMock()
+    svc = AuthorizationService(repo)
+    d = await svc.authorize(
+        user_id=user.id,
+        session_id=None,
+        action=Action.route_candidate_exclude_self,
+        request_id="r",
+        candidates=[RouteCandidate(uuid.uuid4(), user.id, "active")],
+    )
+    assert d.code == "NO_ROUTE_CANDIDATE"
+    assert d.http_status == 404

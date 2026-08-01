@@ -1,9 +1,11 @@
-"""FastAPI dependencies: DB session, rate limiter, client IP."""
+"""FastAPI dependencies: DB session, rate limiter, client IP, auth identity."""
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import Request
 from sqlalchemy.engine import make_url
@@ -20,6 +22,26 @@ from app.security.trusted_proxy import resolve_client_ip
 
 if TYPE_CHECKING:
     from app.config import AuthSettings
+
+
+@dataclass(frozen=True)
+class AuthIdentity:
+    """Authenticated caller identity for authorization (not a permission grant).
+
+    Role/status must be re-read from the user fact store; never use session
+    role_snapshot for RBAC decisions (FR-005a).
+    """
+
+    user_id: uuid.UUID
+    session_id: uuid.UUID | None
+
+
+@dataclass(frozen=True)
+class AuthIdentityError:
+    kind: Literal["unauthenticated", "service_unavailable"]
+    http_status: int
+    code: str
+    message: str
 
 
 def _async_url(database_url: str) -> str:
@@ -92,3 +114,62 @@ def client_ip(request: Request) -> str:
         "X-Forwarded-For"
     )
     return resolve_client_ip(peer, xff, trusted)
+
+
+async def resolve_authenticated_identity(
+    request: Request,
+    session: AsyncSession,
+    *,
+    request_id: str,
+) -> AuthIdentity | AuthIdentityError:
+    """Validate SF04 session cookie and return user_id + session_id.
+
+    Does **not** return role for authorization — callers must load current
+    role/status from the users fact source.
+    """
+    from app.domain.authentication.session_service import SessionService
+    from app.errors import MSG_SERVICE_UNAVAILABLE, MSG_UNAUTHENTICATED
+    from app.repositories.authentication import AuthenticationRepository
+    from app.security.session import (
+        SESSION_COOKIE_NAME,
+        parse_session_cookie,
+        token_digest,
+    )
+
+    settings = get_auth_settings(request)
+    cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    service = SessionService(session, settings)
+    result = await service.bootstrap_session(
+        cookie_value=cookie, request_id=request_id
+    )
+    if result.kind == "service_unavailable":
+        return AuthIdentityError(
+            kind="service_unavailable",
+            http_status=result.http_status,
+            code=result.code,
+            message=result.message or MSG_SERVICE_UNAVAILABLE,
+        )
+    if result.kind != "success" or not result.data:
+        return AuthIdentityError(
+            kind="unauthenticated",
+            http_status=401,
+            code="UNAUTHENTICATED",
+            message=MSG_UNAUTHENTICATED,
+        )
+
+    user_id = uuid.UUID(str(result.data["user_id"]))
+    session_id: uuid.UUID | None = None
+    parsed = parse_session_cookie(cookie)
+    if parsed is not None:
+        key_version, opaque = parsed
+        session_mat = settings.key_material("session")
+        key = session_mat.resolve(key_version)
+        if key is not None:
+            digest = token_digest(key, opaque)
+            repo = AuthenticationRepository(session)
+            row = await repo.get_session_by_token_digest(
+                token_key_version=key_version, token_digest=digest
+            )
+            if row is not None:
+                session_id = row.id
+    return AuthIdentity(user_id=user_id, session_id=session_id)

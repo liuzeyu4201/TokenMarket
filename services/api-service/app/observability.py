@@ -312,3 +312,42 @@ def emit_auth_event(logger: logging.Logger, event_name: str, **fields: Any) -> N
         k: ("[REDACTED]" if k.lower() in blocked else v) for k, v in fields.items()
     }
     logger.info(event_name, extra=safe_fields)
+
+
+# ---------------------------------------------------------------------------
+# Authorization metrics (005) — low-cardinality labels only
+# ---------------------------------------------------------------------------
+
+AUTHZ_DECISIONS_TOTAL = Counter(
+    "tokenmarket_authz_decisions_total",
+    "Authorization decisions by action, result, and reason.",
+    ["action", "result", "reason"],
+)
+AUTHZ_DECISION_DURATION_SECONDS = Histogram(
+    "tokenmarket_authz_decision_duration_seconds",
+    "Authorization decision duration in seconds.",
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
+)
+AUTHZ_AUDIT_FAILURES_TOTAL = Counter(
+    "tokenmarket_authz_audit_failures_total",
+    "Authorization audit persist failures.",
+)
+
+
+def record_authz_decision(
+    *,
+    action: str,
+    result: str,
+    reason: str,
+    duration_seconds: float,
+) -> None:
+    AUTHZ_DECISIONS_TOTAL.labels(
+        action=action.replace(" ", "_")[:64],
+        result=result.replace(" ", "_")[:32],
+        reason=reason.replace(" ", "_")[:64],
+    ).inc()
+    AUTHZ_DECISION_DURATION_SECONDS.observe(max(duration_seconds, 0.0))
+
+
+def record_authz_audit_failure() -> None:
+    AUTHZ_AUDIT_FAILURES_TOTAL.inc()

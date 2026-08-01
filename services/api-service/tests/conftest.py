@@ -37,6 +37,7 @@ from app.main import app
 pytest_plugins = [
     "tests.integration.conftest_register",
     "tests.integration.conftest_authentication",
+    "tests.integration.conftest_authorization",
 ]
 
 POSTGRES_IMAGE = "postgres:15.18-bookworm"

@@ -1,0 +1,396 @@
+openapi: 3.1.0
+info:
+  title: TokenMarket Role Access Isolation API
+  version: 1.0.0
+  description: |
+    V0.1 authorization evaluation and non-production fixtures for SF05.
+    Production must not enable fixture routes. Full seller/proxy key product APIs
+    are out of scope; ownership rows are lightweight facts for authz tests and
+    future key features.
+servers:
+  - url: /api/v1
+    description: API Service
+tags:
+  - name: Authorization
+  - name: AuthorizationFixtures
+paths:
+  /authorization/evaluate:
+    post:
+      tags: [Authorization]
+      operationId: evaluateAuthorization
+      summary: Evaluate a single authorization decision for the current session
+      description: |
+        Requires valid session cookie. Identity always from session; body subject
+        fields are ignored for authz. Intended for contract tests and future
+        internal consumers; not a public end-user product surface.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluateRequest'
+      responses:
+        '200':
+          description: Allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeDecision'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /authorization/route-candidates/exclude-self:
+    post:
+      tags: [Authorization]
+      operationId: excludeSelfRouteCandidates
+      summary: Filter route candidates by self-ownership exclusion
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteExcludeRequest'
+      responses:
+        '200':
+          description: Filter applied (possibly empty list with code 0)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeRouteExclude'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No candidates remain after exclusion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /authorization/fixtures/resources:
+    post:
+      tags: [AuthorizationFixtures]
+      operationId: fixtureCreateResource
+      summary: Create ownership fact (fixtures only)
+      description: Enabled only when AUTHORIZATION_FIXTURES_ENABLED and non-production.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixtureCreateResourceRequest'
+      responses:
+        '200':
+          description: Created ownership row for current user after authorize
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeResource'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '404':
+          description: Fixtures disabled (hide as not found in production)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeError'
+
+  /authorization/fixtures/resources/{resource_type}/{resource_id}:
+    get:
+      tags: [AuthorizationFixtures]
+      operationId: fixtureReadResource
+      summary: Read ownership fact if authorized
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/ResourceType'
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Owner read success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeResource'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [AuthorizationFixtures]
+      operationId: fixtureUpdateResource
+      summary: Update or disable ownership fact if authorized
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/ResourceType'
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixturePatchResourceRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeResource'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 128
+    ResourceType:
+      name: resource_type
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ResourceType'
+    ResourceId:
+      name: resource_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ResourceType:
+      type: string
+      enum: [proxy_key, seller_key]
+    Action:
+      type: string
+      enum:
+        - proxy_key.create
+        - proxy_key.revoke
+        - proxy_key.use
+        - seller_key.register
+        - seller_key.read
+        - seller_key.update
+        - seller_key.disable
+        - route_candidate_exclude_self
+    LifecycleStatus:
+      type: string
+      enum: [active, disabled, soft_deleted]
+    EnvelopeBase:
+      type: object
+      required: [code, message, data, request_id, timestamp]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        data: {}
+        request_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    EvaluateRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          $ref: '#/components/schemas/Action'
+        resource_type:
+          $ref: '#/components/schemas/ResourceType'
+        resource_id:
+          type: string
+          format: uuid
+        # Ignored for authorization identity — accepted only to prove ignore behavior in tests
+        user_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+    DecisionData:
+      type: object
+      required: [allowed, action, policy_version]
+      properties:
+        allowed:
+          type: boolean
+        action:
+          $ref: '#/components/schemas/Action'
+        policy_version:
+          type: string
+          examples: [authz-matrix-v1]
+        resource_type:
+          $ref: '#/components/schemas/ResourceType'
+        resource_id:
+          type: string
+          format: uuid
+    EnvelopeDecision:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          properties:
+            code:
+              const: '0'
+            data:
+              $ref: '#/components/schemas/DecisionData'
+    RouteCandidate:
+      type: object
+      required: [resource_id, owner_user_id, lifecycle_status]
+      properties:
+        resource_id:
+          type: string
+          format: uuid
+        owner_user_id:
+          type: string
+          format: uuid
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+    RouteExcludeRequest:
+      type: object
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteCandidate'
+    RouteExcludeData:
+      type: object
+      required: [candidates, excluded_count, policy_version]
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteCandidate'
+        excluded_count:
+          type: integer
+          minimum: 0
+        policy_version:
+          type: string
+    EnvelopeRouteExclude:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          properties:
+            code:
+              const: '0'
+            data:
+              $ref: '#/components/schemas/RouteExcludeData'
+    FixtureCreateResourceRequest:
+      type: object
+      required: [resource_type, action]
+      properties:
+        resource_type:
+          $ref: '#/components/schemas/ResourceType'
+        action:
+          type: string
+          enum: [proxy_key.create, seller_key.register]
+        resource_id:
+          type: string
+          format: uuid
+          description: Optional; server may generate if omitted
+    FixturePatchResourceRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum:
+            - proxy_key.revoke
+            - seller_key.update
+            - seller_key.disable
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+    ResourceData:
+      type: object
+      required: [resource_type, resource_id, owner_user_id, lifecycle_status]
+      properties:
+        resource_type:
+          $ref: '#/components/schemas/ResourceType'
+        resource_id:
+          type: string
+          format: uuid
+        owner_user_id:
+          type: string
+          format: uuid
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+        version:
+          type: integer
+    EnvelopeResource:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          properties:
+            code:
+              const: '0'
+            data:
+              $ref: '#/components/schemas/ResourceData'
+    EnvelopeError:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          properties:
+            data:
+              nullable: true
+
+  responses:
+    Unauthenticated:
+      description: Not authenticated
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EnvelopeError'
+    Forbidden:
+      description: Role or account unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EnvelopeError'
+    NotFound:
+      description: Resource missing, soft-deleted, or not owned (indistinguishable)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EnvelopeError'
+    ValidationError:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EnvelopeError'
+    ServiceUnavailable:
+      description: Fail-closed dependency or audit persistence failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EnvelopeError'

@@ -1,0 +1,27 @@
+# Prometheus alert sketch — authorization domain (SF05)
+# Wire to existing Prometheus rule loader; metric names match api-service observability.
+
+groups:
+  - name: tokenmarket-authorization
+    rules:
+      - alert: AuthzServiceUnavailableHigh
+        expr: |
+          sum(rate(tokenmarket_authz_decisions_total{result="deny",reason="FACT_STORE_UNAVAILABLE"}[5m]))
+          + sum(rate(tokenmarket_authz_decisions_total{result="deny",reason="AUDIT_PERSIST_FAILED"}[5m]))
+          > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          owner: api-service
+        annotations:
+          summary: Elevated authorization fail-closed (DB/audit) rate
+          description: Investigate PostgreSQL and authz audit persist path.
+
+      - alert: AuthzAuditFailures
+        expr: sum(rate(tokenmarket_authz_audit_failures_total[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          owner: api-service
+        annotations:
+          summary: Authorization audit persist failures

@@ -24,6 +24,8 @@ workflow definitions.
 | `user-registration/v1/` | API Service (user domain) | 1.0.0 | OpenAPI / Markdown |
 | `phone-auth-session/v1/` | API Service (authentication domain) | 1.0.0 | OpenAPI / Markdown |
 
+| `role-access-isolation/v1/` | API Service (authorization domain) | 1.0.0 | OpenAPI / Markdown |
+
 ## Compatibility and deprecation status
 
 - `repository-workflow/v1/service-health.openapi.yaml` 1.1.0 is a backward-compatible

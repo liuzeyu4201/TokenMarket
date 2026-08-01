@@ -22,6 +22,22 @@ make build
 make migrate
 ```
 
+## Authorization (SF05)
+
+- Contract: `shared/contracts/role-access-isolation/v1/`
+- Routes: `POST /api/v1/authorization/evaluate`,
+  `POST /api/v1/authorization/route-candidates/exclude-self`,
+  optional fixtures under `/api/v1/authorization/fixtures/*`
+- Migration: `alembic/versions/0004_role_access_isolation.py` (tables
+  `resource_ownerships`, `authorization_security_events`,
+  `authorization_audit_outbox`). Startup never auto-migrates.
+- Identity from SF04 session cookie only; role/status re-read from `users` each
+  request. Deny paths persist audit before returning 403/404; audit failure → 503.
+- Fixtures: `AUTHORIZATION_FIXTURES_ENABLED=true` **and** `MODE`/`APP_ENV` in
+  `local|test` only; production must leave fixtures off.
+- Runbook / alerts: `ops/runbooks/authorization.md`, `ops/alerts/authorization.yml`.
+- Rollback: disable routes / roll back image; keep audit tables.
+
 ## Registration (SF03)
 
 - Contract: `shared/contracts/user-registration/v1/`

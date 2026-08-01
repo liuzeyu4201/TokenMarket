@@ -17,6 +17,7 @@ from starlette.responses import Response
 
 from . import database
 from .api.v1.auth import router as auth_router
+from .api.v1.authorization import router as authorization_router
 from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
@@ -149,6 +150,7 @@ app = FastAPI(title="TokenMarket API Service", version=VERSION, lifespan=lifespa
 app.state.version = VERSION
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(authorization_router)
 
 app.add_middleware(
     CORSMiddleware,

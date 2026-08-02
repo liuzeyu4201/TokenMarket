@@ -1,6 +1,5 @@
 // Package httpserver provides the SF01 operational HTTP surface for the proxy
-// gateway. It exposes liveness, readiness and metrics endpoints and no business
-// routes.
+// gateway (liveness/readiness/metrics) plus optional internal credential validation.
 package httpserver
 
 import (
@@ -20,15 +19,20 @@ type Config struct {
 	Service string
 	Version string
 	Logger  *slog.Logger
+	// Validate 可选：内部凭证验证（默认 nil = 不挂载）
+	Validate *ValidateDeps
+	// MountValidate 为 true 时才在本 Server 上挂载 validate 路由（C1：公网 listener 可关掉）
+	MountValidate bool
 }
 
 // Server wraps the Gin engine and configuration.
 type Server struct {
-	config Config
-	engine *gin.Engine
+	config       Config
+	engine       *gin.Engine
+	validateDeps *ValidateDeps
 }
 
-// NewServer creates an operational scaffold server.
+// NewServer creates an operational scaffold server (health/metrics + optional validate).
 func NewServer(cfg Config) (*Server, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
@@ -42,8 +46,36 @@ func NewServer(cfg Config) (*Server, error) {
 	r.GET("/health/live", s.liveness)
 	r.GET("/health/ready", s.readiness)
 	r.GET("/metrics", s.metrics)
+	if cfg.MountValidate && cfg.Validate != nil && cfg.Validate.Enabled {
+		s.registerInternalValidate(*cfg.Validate)
+	}
 	r.NoRoute(s.notFound)
 	return s, nil
+}
+
+// NewInternalValidateServer 仅挂载内部验证路由（+ liveness），用于回环隔离 listener（C1）。
+func NewInternalValidateServer(cfg Config) (*Server, error) {
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+	if cfg.Validate == nil || !cfg.Validate.Enabled {
+		return nil, fmt.Errorf("internal validate server requires enabled Validate deps")
+	}
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(requestIDMiddleware(cfg.Logger))
+	r.Use(gin.Recovery())
+
+	s := &Server{config: cfg, engine: r}
+	r.GET("/health/live", s.liveness)
+	s.registerInternalValidate(*cfg.Validate)
+	r.NoRoute(s.notFound)
+	return s, nil
+}
+
+// HasValidateRoute 是否已挂载内部验证（测试/断言用）。
+func (s *Server) HasValidateRoute() bool {
+	return s != nil && s.validateDeps != nil && s.validateDeps.Enabled
 }
 
 // Handler returns the HTTP handler for tests.

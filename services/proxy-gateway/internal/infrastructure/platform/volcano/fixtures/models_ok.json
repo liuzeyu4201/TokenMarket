@@ -1,0 +1,8 @@
+{
+  "object": "list",
+  "data": [
+    {"id": "doubao-pro-32k", "object": "model"},
+    {"id": "doubao-lite-32k", "object": "model"},
+    {"id": "other-model-not-in-v01", "object": "model"}
+  ]
+}

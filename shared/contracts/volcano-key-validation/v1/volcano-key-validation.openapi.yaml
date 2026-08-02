@@ -1,0 +1,170 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket Internal Provider Credential Validation (SF06)
+  version: 1.0.0
+  description: |
+    Internal-only API for validating Volcano Ark (火山方舟) credentials.
+    Owned by proxy-gateway. Not a public seller-facing API.
+    Default V0.1 quota path returns quota_unavailable until an official
+    key-scoped quota API is wired (see feature research.md).
+
+    Deployment (constitution II): X-Internal-Token is a development/isolated-network
+    control, not sufficient sole authentication on a public network. The route MUST
+    be disabled by default; when enabled outside local/dev it MUST be reachable only
+    via loopback or private network path (mesh/mTLS or equivalent service identity
+    preferred for non-isolated environments). See plan.md Security & Privacy.
+servers:
+  - url: http://127.0.0.1:{gatewayPort}
+    description: Local gateway (loopback only — preferred)
+    variables:
+      gatewayPort:
+        default: "8080"
+paths:
+  /internal/v1/provider-credentials/validate:
+    post:
+      operationId: validateProviderCredential
+      summary: Validate provider credential (V0.1 supports volcano; others return unsupported_platform)
+      parameters:
+        - name: X-Internal-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: |
+            Shared internal secret for isolated local/private networks only.
+            Never a user session cookie. Not sufficient as sole auth on the public Internet
+            (constitution II).
+        - name: X-Request-Id
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CredentialValidationRequest"
+            examples:
+              volcano:
+                value:
+                  platform: volcano
+                  api_key: "sk-synthetic-test-key-not-real"
+              unsupported_platform:
+                value:
+                  platform: openai
+                  api_key: "sk-synthetic-test-key-not-real"
+      responses:
+        "200":
+          description: |
+            Validation finished within deadline. Business outcome is always in body
+            error_category (including invalid keys and unsupported_platform).
+            Does not use HTTP 401 for bad provider keys or unknown platforms.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialValidationResult"
+              examples:
+                unsupported_platform:
+                  value:
+                    platform: openai
+                    validity: invalid
+                    availability: unavailable
+                    remaining_quota: null
+                    quota_unit: null
+                    supported_models: []
+                    checked_at: "2026-08-01T00:00:00Z"
+                    error_category: unsupported_platform
+                    suggested_action: unsupported
+        "401":
+          description: Missing/invalid X-Internal-Token
+        "404":
+          description: Internal route disabled
+        "503":
+          description: Gateway overload beyond validation gate semantics (rare)
+components:
+  schemas:
+    CredentialValidationRequest:
+      type: object
+      required:
+        - platform
+        - api_key
+      properties:
+        platform:
+          type: string
+          minLength: 1
+          description: |
+            Provider platform id. Schema accepts any non-empty string so callers always
+            receive a machine-readable body. V0.1 only volcano proceeds to upstream
+            validation; any other value MUST yield HTTP 200 with
+            error_category=unsupported_platform (not HTTP 422).
+        api_key:
+          type: string
+          minLength: 1
+          description: Full provider key; never logged
+        request_id:
+          type: string
+          description: Optional; gateway may generate if absent
+    CredentialValidationResult:
+      type: object
+      required:
+        - platform
+        - validity
+        - availability
+        - supported_models
+        - checked_at
+        - error_category
+      properties:
+        platform:
+          type: string
+        validity:
+          type: string
+          enum: [valid, invalid, unknown]
+        availability:
+          type: string
+          enum: [available, unavailable]
+        remaining_quota:
+          type: string
+          nullable: true
+          description: Exact decimal/integer string; null when quota unavailable
+        quota_unit:
+          type: string
+          nullable: true
+        supported_models:
+          type: array
+          items:
+            type: string
+        checked_at:
+          type: string
+          format: date-time
+        error_category:
+          type: string
+          enum:
+            - success
+            - invalid
+            - forbidden
+            - zero_quota
+            - quota_unavailable
+            - no_supported_models
+            - rate_limited
+            - temporary_unavailable
+            - timeout
+            - invalid_response
+            - unsupported_platform
+        retry_after_seconds:
+          type: integer
+          minimum: 1
+          maximum: 300
+          description: Required when error_category=rate_limited
+        credential_ref:
+          type: string
+          description: Irreversible short ref for telemetry only
+        suggested_action:
+          type: string
+          enum:
+            - fix_credential
+            - add_quota
+            - enable_models
+            - retry_later
+            - unsupported
+            - none

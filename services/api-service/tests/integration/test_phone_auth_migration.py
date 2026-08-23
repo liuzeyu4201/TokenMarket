@@ -288,7 +288,7 @@ def test_phone_auth_migration_upgrade_downgrade_retry_head(
     up_retry = run_alembic(url, "upgrade", "0003_phone_login_session")
     assert up_retry.returncode == 0, up_retry.stdout + up_retry.stderr
 
-    # head restoration
+    # head restoration (current repo head includes SF05 0004 after phone-auth 0003)
     up_head = run_alembic(url, "upgrade", "head")
     assert up_head.returncode == 0, up_head.stdout + up_head.stderr
 
@@ -299,6 +299,6 @@ def test_phone_auth_migration_upgrade_downgrade_retry_head(
             rev = conn.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            assert rev == "0003_phone_login_session"
+            assert rev == "0004_role_access_isolation"
     finally:
         engine.dispose()

@@ -224,17 +224,21 @@ def test_metrics_returns_prometheus_text_without_secrets(
 ) -> None:
     # The ``tokenmarket_`` prefix is the metric namespace, not a credential;
     # secret-shaped values must still never appear.
+    # Domain metric names may contain "authorization" (SF05 RBAC counters);
+    # ban credential-shaped / connection strings only.
     with make_client() as handle:
         response = handle.client.get("/metrics")
     assert response.status_code == 200
     assert "text/plain" in response.headers.get("content-type", "")
     body = response.text
     assert body
-    assert "password" not in body.lower()
-    assert "secret" not in body.lower()
+    lower = body.lower()
+    assert "password" not in lower
+    assert "secret" not in lower
     assert "tm_local_" not in body
     assert "postgresql://" not in body
-    assert "authorization" not in body.lower()
+    assert "bearer " not in lower
+    assert "authorization:" not in lower
 
 
 def test_unknown_business_path_returns_404(make_client: MakeClient) -> None:

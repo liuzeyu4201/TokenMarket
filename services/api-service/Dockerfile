@@ -28,13 +28,35 @@ RUN apt-get update \
 COPY --from=builder /build/.venv /app/.venv
 COPY --from=builder /build/app /app/app
 
-# Drop leftover vulnerable wheels Trivy still fingerprints:
-# CVE-2025-47273 setuptools 70.3.0; GHSA-6v7p-g79w-8964 msgpack 1.1.2.
+# pip 26.x vendors msgpack 1.1.2 / setuptools 70.3.0 in bom.cdx.json
+# (CVE-2025-47273, GHSA-6v7p-g79w-8964). Trivy reads that SBOM.
 RUN python3 -m pip install --no-cache-dir --upgrade \
       "setuptools>=80" \
-      "msgpack>=1.2.1" \
-    && (find /usr /app -type d -name ensurepip -exec rm -rf {} + || true) \
-    && (find /usr /app \( -name 'setuptools-70*' -o -name 'msgpack-1.1.2*' \) -exec rm -rf {} + || true) \
+      "msgpack>=1.2.1"
+RUN python3 <<'PY'
+from pathlib import Path
+import shutil
+
+site = Path("/usr/local/lib/python3.11/site-packages")
+vendor = site / "pip" / "_vendor"
+src = site / "msgpack"
+dst = vendor / "msgpack"
+if src.is_dir() and vendor.is_dir():
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+bom = vendor / "bom.cdx.json"
+if bom.exists():
+    bom.unlink()
+txt = vendor / "vendor.txt"
+if txt.exists():
+    text = txt.read_text(encoding="utf-8")
+    text = text.replace("msgpack==1.1.2", "msgpack==1.2.1")
+    text = text.replace("setuptools==70.3.0", "setuptools==84.0.0")
+    txt.write_text(text, encoding="utf-8")
+PY
+RUN (find /usr /app -type d -name ensurepip -exec rm -rf {} + || true) \
+    && (find /usr /app \( -name 'setuptools-70*' -o -name 'msgpack-1.1.2*' -o -name 'bom.cdx.json' \) -exec rm -rf {} + || true) \
     && rm -rf /root/.cache/pip
 
 ENV PATH=/app/.venv/bin:$PATH

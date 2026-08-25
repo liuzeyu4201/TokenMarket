@@ -6,7 +6,7 @@ import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,10 +18,14 @@ from starlette.responses import Response
 from . import database
 from .api.v1.auth import router as auth_router
 from .api.v1.authorization import router as authorization_router
+from .api.v1.seller_keys import router as seller_keys_router
 from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
+from .domain.sellerkeys.crypto import CredentialEncryptor
+from .domain.sellerkeys.memory_store import MemoryKeyStore
+from .domain.sellerkeys.validator_http import FailClosedValidator, GatewayValidator
 from .errors import DependencyUnavailableError
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
@@ -31,6 +35,57 @@ from .sms.synthetic import build_sms_adapter
 
 VERSION = "0.1.0"
 logger = configure_logging()
+
+def _secret_bytes(name: str) -> bytes:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return os.urandom(32)
+    try:
+        decoded = bytes.fromhex(raw)
+        if len(decoded) >= 32:
+            return decoded
+    except ValueError:
+        pass
+    encoded = raw.encode("utf-8")
+    if len(encoded) < 32:
+        encoded = encoded + b"\x00" * (32 - len(encoded))
+    return encoded
+
+
+def _wire_seller_key_services(application: FastAPI, database_url: str | None = None) -> None:
+    """Attach seller-key domain services used by SF08/SF09 HTTP."""
+    material = _secret_bytes("SELLER_KEY_MATERIAL")
+    fp = _secret_bytes("SELLER_KEY_FINGERPRINT_SECRET")
+    version = os.environ.get("SELLER_KEY_VERSION") or "v1"
+    validate_url = (os.environ.get("PROVIDER_VALIDATE_URL") or "").strip()
+    validate_token = (os.environ.get("PROVIDER_VALIDATE_INTERNAL_TOKEN") or "").strip()
+    if validate_url and validate_token:
+        validator: GatewayValidator | FailClosedValidator = GatewayValidator(
+            validate_url, validate_token
+        )
+    else:
+        validator = FailClosedValidator()
+    application.state.seller_encryptor = CredentialEncryptor(material, version)
+    application.state.seller_fp_secret = fp
+    application.state.seller_validator = validator
+    application.state.seller_sync_engine = None
+    store: Any = MemoryKeyStore()
+    if database_url:
+        try:
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+
+            from app.repositories.sessioned import SessionedSQLKeyStore
+
+            sync_url = database_url.replace("postgresql+asyncpg", "postgresql")
+            engine = create_engine(sync_url, pool_pre_ping=True)
+            application.state.seller_sync_engine = engine
+            maker = sessionmaker(engine)
+            store = SessionedSQLKeyStore(maker)
+        except Exception:
+            logger.warning("seller key SQL store disabled; using memory")
+    application.state.seller_key_store = store
+
 
 service_info = Info("app", "API service build information")
 service_info.info({"service": "api-service", "version": VERSION})
@@ -116,6 +171,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.readiness_probe = database.build_readiness_probe(engine)
     app.state.rate_limiter = rate_limiter
     app.state.auth_rate_limiter = auth_rate_limiter
+    _wire_seller_key_services(app, database_url if session_factory is not None else None)
 
     # Start delivery dispatcher when DB + keys are usable (local/test).
     # Inline ``session_factory is not None`` so mypy narrows the factory type.
@@ -144,6 +200,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await session_engine.dispose()
     if engine is not None:
         await engine.dispose()
+    sync_engine = getattr(app.state, "seller_sync_engine", None)
+    if sync_engine is not None:
+        sync_engine.dispose()
 
 
 app = FastAPI(title="TokenMarket API Service", version=VERSION, lifespan=lifespan)
@@ -151,6 +210,7 @@ app.state.version = VERSION
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(authorization_router)
+app.include_router(seller_keys_router)
 
 app.add_middleware(
     CORSMiddleware,

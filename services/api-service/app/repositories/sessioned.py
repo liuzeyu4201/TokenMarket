@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any, TypeVar
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -132,3 +133,6 @@ class SessionedUsageStore:
 
     def add_conflict(self, request_id: str, reason: str) -> None:
         self._run(lambda s: s.add_conflict(request_id, reason))
+
+    def purge_before(self, cutoff: datetime) -> int:
+        return self._run(lambda s: s.purge_before(cutoff))

@@ -113,3 +113,45 @@ def test_resume_keeps_paused_on_failed_validate() -> None:
         lc.resume(out.key_id, seller, "seller", "r")
     assert ei.value.code == CODE_VALIDATION_FAILED
     assert store.get(out.key_id)["administrative_state"] == "paused"
+
+
+def test_list_routable_skips_zero_quota() -> None:
+    store = MemoryKeyStore()
+    enc = CredentialEncryptor(os.urandom(32), "v1")
+    nonce, ct, tag = enc.encrypt(b"sk-zero")
+    kid = uuid.uuid4()
+    store.insert(
+        {
+            "id": kid,
+            "seller_id": uuid.uuid4(),
+            "platform": "volcano",
+            "fingerprint": "fp-z",
+            "ciphertext": ct,
+            "nonce": nonce,
+            "tag": tag,
+            "administrative_state": "active",
+            "health_state": "healthy",
+            "remaining_quota": "0",
+            "soft_deleted": False,
+        }
+    )
+    nonce2, ct2, tag2 = enc.encrypt(b"sk-ok")
+    kid2 = uuid.uuid4()
+    store.insert(
+        {
+            "id": kid2,
+            "seller_id": uuid.uuid4(),
+            "platform": "volcano",
+            "fingerprint": "fp-ok",
+            "ciphertext": ct2,
+            "nonce": nonce2,
+            "tag": tag2,
+            "administrative_state": "active",
+            "health_state": "healthy",
+            "remaining_quota": "9",
+            "soft_deleted": False,
+        }
+    )
+    got = store.list_routable()
+    assert len(got) == 1
+    assert got[0]["id"] == kid2

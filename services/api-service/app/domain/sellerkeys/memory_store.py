@@ -53,12 +53,13 @@ class MemoryKeyStore:
         self.by_fp[(record["platform"], record["fingerprint"])] = key_id
 
     def list_routable(self) -> list[dict[str, Any]]:
-        from app.domain.sellerkeys.lifecycle import routable
+        from app.domain.sellerkeys.lifecycle import has_positive_quota, routable
 
         return [
             dict(r)
             for r in self.rows.values()
             if routable(str(r.get("administrative_state")), str(r.get("health_state")))
+            and has_positive_quota(r.get("remaining_quota"))
             and r.get("ciphertext")
             and not r.get("soft_deleted")
         ]

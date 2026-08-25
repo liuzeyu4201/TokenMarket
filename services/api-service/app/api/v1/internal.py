@@ -91,6 +91,7 @@ async def list_routable(
                 "administrative_state": str(row.get("administrative_state")),
                 "health_state": str(row.get("health_state")),
                 "platform": str(row.get("platform") or "volcano"),
+                "remaining_quota": str(row.get("remaining_quota") or ""),
             }
         )
     return JSONResponse(

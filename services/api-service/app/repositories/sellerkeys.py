@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.domain.sellerkeys.lifecycle import routable
+from app.domain.sellerkeys.lifecycle import has_positive_quota, routable
 from app.domain.sellerkeys.models import SellerAPIKey, SellerKeyIdempotency
 
 
@@ -153,7 +153,9 @@ class SQLKeyStore:
         return [
             _row_to_dict(r)
             for r in rows
-            if routable(r.administrative_state, r.health_state) and r.ciphertext
+            if routable(r.administrative_state, r.health_state)
+            and has_positive_quota(r.remaining_quota)
+            and r.ciphertext
         ]
 
     def apply_health(self, key_id: uuid.UUID, health: str) -> None:

@@ -70,6 +70,42 @@ def test_idempotent_same_request_id() -> None:
     assert len(r.rows) == 1
 
 
+def test_purge_older_than_30_days() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    r = UsageRecorder()
+    rec = UsageRecord(
+        request_id="old",
+        buyer_id=None,
+        platform="volcano",
+        model="m",
+        prompt_tokens=1,
+        completion_tokens=1,
+        total_tokens=2,
+        status="complete",
+        source="official",
+        created_at=datetime.now(timezone.utc) - timedelta(days=31),
+    )
+    r.record(rec)
+    r.record(
+        UsageRecord(
+            request_id="fresh",
+            buyer_id=None,
+            platform="volcano",
+            model="m",
+            prompt_tokens=1,
+            completion_tokens=1,
+            total_tokens=2,
+            status="complete",
+            source="official",
+        )
+    )
+    n = r.purge_expired(now=datetime.now(timezone.utc), retain_days=30)
+    assert n == 1
+    assert r._store.get("old") is None
+    assert r._store.get("fresh") is not None
+
+
 def test_complete_stored() -> None:
     r = UsageRecorder()
     r.record(

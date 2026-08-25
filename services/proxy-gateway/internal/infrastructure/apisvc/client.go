@@ -57,12 +57,13 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 }
 
 type routableKey struct {
-	ID       string `json:"id"`
-	SellerID string `json:"seller_id"`
-	APIKey   string `json:"api_key"`
-	Admin    string `json:"administrative_state"`
-	Health   string `json:"health_state"`
-	Platform string `json:"platform"`
+	ID             string `json:"id"`
+	SellerID       string `json:"seller_id"`
+	APIKey         string `json:"api_key"`
+	Admin          string `json:"administrative_state"`
+	Health         string `json:"health_state"`
+	Platform       string `json:"platform"`
+	RemainingQuota string `json:"remaining_quota"`
 }
 
 type envelope struct {
@@ -106,6 +107,7 @@ func (c *Client) List(ctx context.Context) ([]keypool.SellerKey, error) {
 		out = append(out, keypool.SellerKey{
 			ID: k.ID, SellerID: k.SellerID, APIKey: k.APIKey,
 			Admin: k.Admin, Health: k.Health, Platform: plat,
+			RemainingQuota: k.RemainingQuota,
 		})
 	}
 	return out, nil

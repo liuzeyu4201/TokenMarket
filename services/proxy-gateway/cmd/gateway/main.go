@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/application"
@@ -178,14 +180,38 @@ func main() {
 		sch.Run(context.Background())
 	}()
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	logger.Info("starting proxy-gateway public listener",
 		"addr", publicAddr,
 		"validate_on_public", mountOnPublic,
 		"proxy_enabled", proxyEnabled,
 	)
-	if err := http.ListenAndServe(publicAddr, publicSrv.Handler()); err != nil {
+	if err := listenServe(ctx, publicAddr, publicSrv.Handler()); err != nil {
 		logger.Error("server exited", "error", err)
 		os.Exit(1)
+	}
+}
+
+func listenServe(ctx context.Context, addr string, h http.Handler) error {
+	srv := &http.Server{Addr: addr, Handler: h}
+	errc := make(chan error, 1)
+	go func() { errc <- srv.ListenAndServe() }()
+	select {
+	case err := <-errc:
+		if err == http.ErrServerClosed {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shctx)
+		err := <-errc
+		if err == http.ErrServerClosed || err == nil {
+			return nil
+		}
+		return err
 	}
 }
 

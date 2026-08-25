@@ -1,0 +1,90 @@
+# Grafana unified alerting (SF19). UI-only — no email/PagerDuty/webhook.
+# Mirrors ops/alerts/proxy.yml: system error rate >5% for 5m with ≥20 samples.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: tokenmarket-proxy
+    folder: TokenMarket
+    interval: 60s
+    rules:
+      - uid: tm-proxy-syserr
+        title: TokenMarketProxySystemErrorRateHigh
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: tokenmarket-prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: tokenmarket-prometheus
+              expr: sum(increase(proxy_requests_total{result=~"system_error|no_capacity"}[5m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: tokenmarket-prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: tokenmarket-prometheus
+              expr: clamp_min(sum(increase(proxy_requests_total[5m])), 1)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: "$A / $B > 0.05 && $B >= 20"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: 代理系统错误率超过 5%（5 分钟窗口，最少 20 个样本）
+          description: 4xx 认证/参数错误不计入分子。恢复阈值 <3% 持续 5 分钟。
+          runbook: ops/runbooks/volcano-openai-compat.md
+        labels:
+          severity: warning
+          priority: p1
+          owner: proxy-gateway
+      - uid: tm-proxy-noroute
+        title: TokenMarketProxyNoRoutableKeys
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: tokenmarket-prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: tokenmarket-prometheus
+              expr: max(provider_key_inventory{status="healthy"}) == 0
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: 可路由卖家 Key 数量为零
+          runbook: ops/runbooks/volcano-openai-compat.md
+        labels:
+          severity: warning
+          owner: proxy-gateway

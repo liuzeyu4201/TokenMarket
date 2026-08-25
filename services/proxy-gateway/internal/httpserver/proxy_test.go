@@ -204,6 +204,32 @@ func TestProxyRateLimited429(t *testing.T) {
 	}
 }
 
+func TestProxy429CooldownsSellerKey(t *testing.T) {
+	st := &stubPoster{status: 429, body: []byte(`{"error":"rl"}`)}
+	pool := keypool.New([]keypool.SellerKey{
+		{ID: "only", SellerID: "seller-z", APIKey: "sk-up", Admin: "active", Health: "healthy"},
+	}, 8)
+	h := proxyHandler(t, st, pool, "buyer-1", nil)
+	body := `{"model":"doubao-pro-32k","messages":[{"role":"user","content":"hi"}]}`
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodPost, "/v1/proxy/volcano/chat/completions", strings.NewReader(body))
+	req1.Header.Set("Authorization", "Bearer "+testProxySecret)
+	h.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusTooManyRequests {
+		t.Fatalf("first %d %s", w1.Code, w1.Body.String())
+	}
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/proxy/volcano/chat/completions", strings.NewReader(body))
+	req2.Header.Set("Authorization", "Bearer "+testProxySecret)
+	h.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusServiceUnavailable {
+		t.Fatalf("cooldown should yield no key, got %d %s", w2.Code, w2.Body.String())
+	}
+	if st.n.Load() != 1 {
+		t.Fatalf("upstream calls %d", st.n.Load())
+	}
+}
+
 func TestProxyExcludesSelfSellerKey(t *testing.T) {
 	st := &stubPoster{status: 200, body: []byte(`{"id":"1","choices":[{"index":0,"message":{"role":"assistant","content":"x"},"finish_reason":"stop"}]}`)}
 	pool := keypool.New([]keypool.SellerKey{

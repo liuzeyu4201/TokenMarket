@@ -2,21 +2,50 @@ package keypool
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 // SellerKey 可路由候选。
 type SellerKey struct {
-	ID       string
-	SellerID string
-	APIKey   string
-	Admin    string
-	Health   string
-	Platform string
+	ID             string
+	SellerID       string
+	APIKey         string
+	Admin          string
+	Health         string
+	Platform       string
+	RemainingQuota string
+	MaxInflight    int
+}
+
+// AllocableConcurrency 官方并发上限的向下取整 80%，至少 1；未知则保守默认 32（SF14）。
+func AllocableConcurrency(official int) int {
+	if official <= 0 {
+		return 32
+	}
+	n := official * 80 / 100
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+func PositiveQuota(q string) bool {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return true
+	}
+	f, err := strconv.ParseFloat(q, 64)
+	if err != nil {
+		return true
+	}
+	return f > 0
 }
 
 func Routable(k SellerKey) bool {
-	return k.Admin == "active" && k.Health == "healthy"
+	return k.Admin == "active" && k.Health == "healthy" && PositiveQuota(k.RemainingQuota)
 }
 
 // Source 从持久事实刷新候选（API 内部接口或测试夹具）。
@@ -35,6 +64,7 @@ type Pool struct {
 	idx         int
 	keys        []SellerKey
 	inflight    map[string]int
+	coolUntil   map[string]time.Time
 	maxInflight int
 	src         Source
 }
@@ -43,7 +73,10 @@ func New(keys []SellerKey, maxInflight int) *Pool {
 	if maxInflight < 1 {
 		maxInflight = 32
 	}
-	return &Pool{keys: keys, inflight: map[string]int{}, maxInflight: maxInflight, src: StaticSource{Keys: keys}}
+	return &Pool{
+		keys: keys, inflight: map[string]int{}, coolUntil: map[string]time.Time{},
+		maxInflight: maxInflight, src: StaticSource{Keys: keys},
+	}
 }
 
 func NewFromSource(src Source, maxInflight int) *Pool {
@@ -84,13 +117,36 @@ func (p *Pool) Pick(excludeSellerID string) (SellerKey, bool) {
 		if excludeSellerID != "" && k.SellerID == excludeSellerID {
 			continue
 		}
-		if p.inflight[k.ID] >= p.maxInflight {
+		if until, ok := p.coolUntil[k.ID]; ok && time.Now().Before(until) {
+			continue
+		}
+		capn := p.maxInflight
+		if k.MaxInflight > 0 {
+			capn = k.MaxInflight
+		}
+		if p.inflight[k.ID] >= capn {
 			continue
 		}
 		p.inflight[k.ID]++
 		return k, true
 	}
 	return SellerKey{}, false
+}
+
+// Cooldown 请求级 429 冷却（默认 30s；更长 Retry-After 由调用方传入）。
+func (p *Pool) Cooldown(id string, d time.Duration) {
+	if id == "" {
+		return
+	}
+	if d <= 0 {
+		d = 30 * time.Second
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.coolUntil == nil {
+		p.coolUntil = map[string]time.Time{}
+	}
+	p.coolUntil[id] = time.Now().Add(d)
 }
 
 func (p *Pool) Release(id string) {

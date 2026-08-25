@@ -35,6 +35,16 @@ def test_system_error_rate_rule() -> None:
     assert "Two consecutive" in text or "two consecutive" in text.lower()
 
 
+def test_grafana_alerting_provisioned() -> None:
+    path = REPO / "infra" / "grafana" / "provisioning" / "alerting" / "proxy.yaml"
+    text = path.read_text(encoding="utf-8")
+    assert "TokenMarketProxySystemErrorRateHigh" in text
+    assert "0.05" in text
+    assert "tokenmarket-prometheus" in text
+    assert "for: 5m" in text or "for: 5m" in text.replace(" ", "")
+    assert "severity: warning" in text
+
+
 def test_dashboard_core_panels() -> None:
     text = DASH.read_text(encoding="utf-8")
     for title in (

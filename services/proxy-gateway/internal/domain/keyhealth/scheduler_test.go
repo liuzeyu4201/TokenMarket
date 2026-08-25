@@ -79,6 +79,91 @@ func TestInvalidNotOverwrittenByTransient(t *testing.T) {
 	}
 }
 
+func TestThreeTemporaryFailuresMarkDown(t *testing.T) {
+	st := &memStore{keys: []keyhealth.KeyFact{
+		{ID: "a", APIKey: "k", Health: "healthy", Admin: "active"},
+	}}
+	n := 0
+	sch := &keyhealth.Scheduler{
+		Store: st,
+		Probe: func(context.Context, string) providervalid.ErrorCategory {
+			n++
+			return providervalid.CategoryTimeout
+		},
+	}
+	sch.Tick(context.Background())
+	if st.keys[0].Health != "healthy" {
+		t.Fatalf("first temp must keep healthy, got %s", st.keys[0].Health)
+	}
+	sch.Tick(context.Background())
+	if st.keys[0].Health != "healthy" {
+		t.Fatalf("second temp must keep healthy, got %s", st.keys[0].Health)
+	}
+	sch.Tick(context.Background())
+	if st.keys[0].Health != "down" {
+		t.Fatalf("third temp must down, got %s", st.keys[0].Health)
+	}
+	if n != 3 {
+		t.Fatalf("probes %d", n)
+	}
+}
+
+func TestSuccessClearsTemporaryStrikes(t *testing.T) {
+	st := &memStore{keys: []keyhealth.KeyFact{
+		{ID: "a", APIKey: "k", Health: "healthy", Admin: "active"},
+	}}
+	cats := []providervalid.ErrorCategory{
+		providervalid.CategoryTimeout,
+		providervalid.CategorySuccess,
+		providervalid.CategoryTimeout,
+	}
+	i := 0
+	sch := &keyhealth.Scheduler{
+		Store: st,
+		Probe: func(context.Context, string) providervalid.ErrorCategory {
+			c := cats[i]
+			i++
+			return c
+		},
+	}
+	sch.Tick(context.Background())
+	sch.Tick(context.Background())
+	sch.Tick(context.Background())
+	if st.keys[0].Health != "healthy" {
+		t.Fatalf("success must reset strikes, got %s", st.keys[0].Health)
+	}
+}
+
+func TestRateLimitedSkipsUntilNextCheck(t *testing.T) {
+	st := &memStore{keys: []keyhealth.KeyFact{
+		{ID: "a", APIKey: "k", Health: "healthy", Admin: "active"},
+	}}
+	probes := 0
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	sch := &keyhealth.Scheduler{
+		Store: st,
+		Now:   func() time.Time { return now },
+		Probe: func(context.Context, string) providervalid.ErrorCategory {
+			probes++
+			return providervalid.CategoryRateLimited
+		},
+	}
+	sch.Tick(context.Background())
+	if st.keys[0].Health != "rate_limited" {
+		t.Fatal(st.keys[0].Health)
+	}
+	now = now.Add(29 * time.Minute)
+	sch.Tick(context.Background())
+	if probes != 1 {
+		t.Fatalf("should skip until 30m, probes=%d", probes)
+	}
+	now = now.Add(2 * time.Minute)
+	sch.Tick(context.Background())
+	if probes != 2 {
+		t.Fatalf("should probe after 30m, probes=%d", probes)
+	}
+}
+
 func TestRunStopsOnCancel(t *testing.T) {
 	st := &memStore{keys: []keyhealth.KeyFact{{ID: "a", APIKey: "k", Health: "unknown", Admin: "active"}}}
 	sch := &keyhealth.Scheduler{

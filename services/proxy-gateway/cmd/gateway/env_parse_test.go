@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -58,5 +61,23 @@ func TestParseProxyAuthRequiresTmk(t *testing.T) {
 	h := proxyauth.HashSecret(pepper, sec)
 	if got[h].BuyerID != "buyer-1" {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestListenServeStopsOnCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() {
+		errc <- listenServe(ctx, "127.0.0.1:0", http.NotFoundHandler())
+	}()
+	time.Sleep(40 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-errc:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("listenServe did not stop")
 	}
 }

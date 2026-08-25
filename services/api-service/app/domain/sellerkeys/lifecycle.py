@@ -41,6 +41,18 @@ def routable(administrative_state: str, health_state: str) -> bool:
     return administrative_state == "active" and health_state == "healthy"
 
 
+def has_positive_quota(remaining: object) -> bool:
+    if remaining is None:
+        return True
+    raw = str(remaining).strip()
+    if raw == "":
+        return True
+    try:
+        return float(raw) > 0
+    except ValueError:
+        return True
+
+
 class LifecycleService:
     def __init__(
         self,

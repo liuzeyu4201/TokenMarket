@@ -142,6 +142,9 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 		}
 		if res.ErrorCategory != chatcompat.CategorySuccess {
 			st, code, msg := mapUpstream(res.ErrorCategory)
+			if res.ErrorCategory == chatcompat.CategoryRateLimited {
+				cooldownKey(d.Pool, sk.ID, res.RetryAfterSeconds)
+			}
 			writeEnvelopeRetry(c, st, code, msg, res.RetryAfterSeconds)
 			observe(st, res, string(res.ErrorCategory), false)
 			finishHTTP(st)
@@ -166,6 +169,9 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 	ch, pre := d.Chat.OpenStream(c.Request.Context(), req)
 	if pre != nil {
 		st, code, msg := mapUpstream(pre.ErrorCategory)
+		if pre.ErrorCategory == chatcompat.CategoryRateLimited {
+			cooldownKey(d.Pool, sk.ID, pre.RetryAfterSeconds)
+		}
 		writeEnvelopeRetry(c, st, code, msg, pre.RetryAfterSeconds)
 		observe(st, *pre, string(pre.ErrorCategory), false)
 		finishHTTP(st)
@@ -181,6 +187,9 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 	for ev := range ch {
 		last = ev
 		if ev.Kind == chatcompat.KindError {
+			if ev.ErrorCategory == chatcompat.CategoryRateLimited {
+				cooldownKey(d.Pool, sk.ID, ev.RetryAfterSeconds)
+			}
 			code, msg := sseErrorFields(ev.ErrorCategory)
 			writeSSEError(c, flusher, code, msg)
 			if yielded == 0 {
@@ -267,4 +276,15 @@ func sseErrorFields(cat chatcompat.ErrorCategory) (code, message string) {
 		return "UPSTREAM_INTERRUPTED", "上游流中断"
 	}
 	return code, message
+}
+
+func cooldownKey(pool *keypool.Pool, id string, retryAfter *int) {
+	if pool == nil || id == "" {
+		return
+	}
+	d := 30 * time.Second
+	if retryAfter != nil && *retryAfter > 30 {
+		d = time.Duration(*retryAfter) * time.Second
+	}
+	pool.Cooldown(id, d)
 }

@@ -67,6 +67,12 @@ class SQLUsageStore:
         )
         self._s.flush()
 
+    def purge_before(self, cutoff: datetime) -> int:
+        from sqlalchemy import delete
+
+        result = self._s.execute(delete(UsageLog).where(UsageLog.created_at < cutoff))
+        return int(result.rowcount or 0)
+
     def add_conflict(self, request_id: str, reason: str) -> None:
         self._s.add(
             UsageConflict(

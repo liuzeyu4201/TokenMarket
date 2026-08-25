@@ -3,6 +3,7 @@ package keypool_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keypool"
 )
@@ -106,6 +107,43 @@ func TestRefreshError(t *testing.T) {
 	p := keypool.NewFromSource(errSrc{}, 2)
 	if err := p.Refresh(context.Background()); err == nil {
 		t.Fatal("want err")
+	}
+}
+
+func TestPickSkipsZeroQuota(t *testing.T) {
+	p := keypool.New([]keypool.SellerKey{
+		{ID: "zero", Admin: "active", Health: "healthy", RemainingQuota: "0"},
+		{ID: "ok", Admin: "active", Health: "healthy", RemainingQuota: "10"},
+	}, 8)
+	k, ok := p.Pick("")
+	if !ok || k.ID != "ok" {
+		t.Fatalf("got %+v ok=%v", k, ok)
+	}
+}
+
+func TestCooldownBlocksThenExpires(t *testing.T) {
+	p := keypool.New([]keypool.SellerKey{
+		{ID: "a", Admin: "active", Health: "healthy"},
+	}, 8)
+	p.Cooldown("a", 50*time.Millisecond)
+	if _, ok := p.Pick(""); ok {
+		t.Fatal("cooldown should block")
+	}
+	time.Sleep(60 * time.Millisecond)
+	if _, ok := p.Pick(""); !ok {
+		t.Fatal("cooldown expired")
+	}
+}
+
+func TestAllocableConcurrencyEightyPercent(t *testing.T) {
+	if keypool.AllocableConcurrency(10) != 8 {
+		t.Fatal(keypool.AllocableConcurrency(10))
+	}
+	if keypool.AllocableConcurrency(1) != 1 {
+		t.Fatal("min 1")
+	}
+	if keypool.AllocableConcurrency(0) != 32 {
+		t.Fatal("unknown official uses conservative 32")
 	}
 }
 

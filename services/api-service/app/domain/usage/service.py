@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 
@@ -25,6 +26,7 @@ class UsageRecord:
     latency_ms: int = 0
     status_code: int = 0
     end_reason: str = ""
+    created_at: datetime | None = None
 
 
 class UsageStore(Protocol):
@@ -33,6 +35,8 @@ class UsageStore(Protocol):
     def insert(self, rec: UsageRecord) -> None: ...
 
     def add_conflict(self, request_id: str, reason: str) -> None: ...
+
+    def purge_before(self, cutoff: datetime) -> int: ...
 
 
 class MemoryUsageStore:
@@ -44,10 +48,22 @@ class MemoryUsageStore:
         return self.by_id.get(request_id)
 
     def insert(self, rec: UsageRecord) -> None:
+        if rec.created_at is None:
+            rec.created_at = datetime.now(timezone.utc)
         self.by_id[rec.request_id] = rec
 
     def add_conflict(self, request_id: str, reason: str) -> None:
         self.conflicts.append((request_id, reason))
+
+    def purge_before(self, cutoff: datetime) -> int:
+        dead = [
+            k
+            for k, v in self.by_id.items()
+            if v.created_at is not None and v.created_at < cutoff
+        ]
+        for k in dead:
+            del self.by_id[k]
+        return len(dead)
 
 
 class UsageRecorder:
@@ -86,9 +102,22 @@ class UsageRecorder:
             if _conflict(existing, rec):
                 self._store.add_conflict(rec.request_id, "payload_mismatch")
             return existing
+        if rec.created_at is None:
+            rec.created_at = datetime.now(timezone.utc)
         self._store.insert(rec)
         self.rows.append(rec)
         return rec
+
+    def purge_expired(
+        self, *, now: datetime | None = None, retain_days: int = 30
+    ) -> int:
+        when = now if now is not None else datetime.now(timezone.utc)
+        cutoff = when - timedelta(days=retain_days)
+        n = self._store.purge_before(cutoff)
+        self.rows = [
+            r for r in self.rows if r.created_at is None or r.created_at >= cutoff
+        ]
+        return n
 
 
 def _conflict(a: UsageRecord, b: UsageRecord) -> bool:

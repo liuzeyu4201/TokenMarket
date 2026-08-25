@@ -15,4 +15,8 @@ paths = [
   '''tests/workflow/.*''',
   '''services/.*/.*_test\.go''',
   '''项目开发/.*''',
+  '''specs/.*''',
+]
+regexes = [
+  '''local-dev-only-token''',
 ]

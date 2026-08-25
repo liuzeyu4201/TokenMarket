@@ -172,12 +172,20 @@ def run_security_checks(repo_root: Any, *, max_retries: int = 1) -> None:
                     check=False,
                 )
                 if result.returncode == 0:
+                    last_error = None
                     break
-                last_error = RuntimeError(f"{name} scan failed (exit {result.returncode})")
+                detail = redact((result.stderr or result.stdout or "").strip())
+                if len(detail) > 2000:
+                    detail = detail[-2000:]
+                last_error = RuntimeError(
+                    f"{name} scan failed (exit {result.returncode}): {detail}"
+                )
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
             if attempt == max_retries:
-                raise RuntimeError(f"security scan {name!r} failed after {attempt + 1} attempts")
+                raise RuntimeError(
+                    f"security scan {name!r} failed after {attempt + 1} attempts: {last_error}"
+                )
         if last_error is not None:
             raise last_error
 

@@ -56,3 +56,21 @@ make build
 go test ./... -count=1
 go test ./internal/domain/providervalid/ ./internal/infrastructure/platform/volcano/ -cover
 ```
+
+## SF07 — 火山方舟请求与响应兼容
+
+契约：`shared/contracts/volcano-openai-compat/v1/`
+
+本功能只交付同进程 `ChatService.Complete` / `OpenStream` 适配端口，**不**挂载公开 HTTP。
+公开入口 `POST /v1/proxy/volcano/chat/completions` 属于 SF12/SF15。
+
+- 出站：`POST {VOLCANO_CHAT_BASE_URL}/chat/completions`（默认复用 `VOLCANO_VALIDATE_BASE_URL`）
+- 允许列表：`model`/`messages`/`stream`/`temperature`/`max_tokens`/`top_p`/`stop`/penalty/`n=1`
+- `messages[].content` 原样转发；`usage` 缺失 **禁止**填 0
+- 缺截止默认 60s；**生成请求禁止自动重试**
+
+```bash
+export VOLCANO_V01_CHAT_MODELS=doubao-pro-32k,doubao-lite-32k
+export VOLCANO_CHAT_BASE_URL=http://127.0.0.1:18080/api/v3
+go test ./internal/domain/chatcompat/ ./internal/application/ ./internal/infrastructure/platform/volcano/ -count=1
+```

@@ -1,0 +1,13 @@
+{
+  "id": "chatcmpl-synthetic",
+  "object": "chat.completion",
+  "created": 1,
+  "model": "doubao-pro-32k",
+  "choices": [
+    {
+      "index": 0,
+      "message": { "role": "assistant", "content": "hello" },
+      "finish_reason": "stop"
+    }
+  ]
+}

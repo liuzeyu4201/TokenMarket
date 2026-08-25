@@ -26,6 +26,7 @@ workflow definitions.
 
 | `role-access-isolation/v1/` | API Service (authorization domain) | 1.0.0 | OpenAPI / Markdown |
 | `volcano-key-validation/v1/` | Proxy Gateway (provider validation) | 1.0.0 | OpenAPI / Markdown |
+| `volcano-openai-compat/v1/` | Proxy Gateway (Chat Completions adapter) | 1.0.0 | OpenAPI / Markdown |
 
 ## Compatibility and deprecation status
 

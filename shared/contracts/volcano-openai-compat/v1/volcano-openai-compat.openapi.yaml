@@ -1,0 +1,249 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket Volcano OpenAI-compatible Chat Adapter (SF07)
+  version: 1.0.0
+  description: |
+    In-process Chat Completions adapter owned by proxy-gateway.
+    Not a public buyer API and not mounted as HTTP in V0.1 (research D1).
+    Schemas are the machine-readable contract for application tests and for
+    SF12/SF15 in-process callers. Field names are contract identifiers.
+
+    Security: seller api_key is ephemeral; responses MUST NOT echo it.
+    Message bodies MUST NOT appear in logs.
+
+servers:
+  - url: http://127.0.0.1:{gatewayPort}
+    description: Logical in-process contract only (no V0.1 listener)
+    variables:
+      gatewayPort:
+        default: "8080"
+
+paths:
+  /internal/v1/chat/completions:
+    post:
+      operationId: adaptChatCompletions
+      summary: Adapt one Volcano Chat Completions call (schema-only in V0.1)
+      description: |
+        Documents request/result JSON. Implementation is a Go port, not this path.
+        Do not expose this route on a public listener.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatAdaptRequest"
+            examples:
+              non_stream:
+                value:
+                  platform: volcano
+                  api_key: sk-synthetic-test-key-not-real
+                  request_id: qs-sf07-1
+                  model: doubao-pro-32k
+                  stream: false
+                  temperature: 0.7
+                  messages:
+                    - role: user
+                      content: Hello
+      responses:
+        "200":
+          description: |
+            Adapter finished. Business outcome is error_category in the body
+            (including parameter and upstream failures). This HTTP mapping is
+            illustrative for schema tests; the Go port returns the same object.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatAdaptResult"
+
+components:
+  schemas:
+    ChatAdaptRequest:
+      type: object
+      additionalProperties: false
+      required: [platform, api_key, request_id, model, messages]
+      properties:
+        platform:
+          type: string
+          description: V0.1 business support is volcano; others → unsupported_platform
+        api_key:
+          type: string
+          minLength: 1
+        request_id:
+          type: string
+          minLength: 1
+        endpoint:
+          type: string
+          description: Omit or chat.completions; anything else → unsupported_endpoint
+        model:
+          type: string
+          minLength: 1
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 128
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        stream:
+          type: boolean
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        max_tokens:
+          type: integer
+          minimum: 1
+        top_p:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+          maximum: 1
+        stop:
+          oneOf:
+            - type: string
+              minLength: 1
+            - type: array
+              minItems: 1
+              maxItems: 4
+              items:
+                type: string
+                minLength: 1
+        presence_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        frequency_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        n:
+          type: integer
+          enum: [1]
+
+    ChatMessage:
+      type: object
+      additionalProperties: false
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+        content:
+          description: Opaque OpenAI-compatible content; forwarded as-is
+          nullable: true
+
+    ChatAdaptResult:
+      type: object
+      additionalProperties: false
+      required: [error_category, usage_status]
+      properties:
+        error_category:
+          $ref: "#/components/schemas/ErrorCategory"
+        usage_status:
+          type: string
+          enum: [complete, missing, inconsistent, not_applicable]
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion]
+        created:
+          type: integer
+        model:
+          type: string
+          description: Public model id (never leak a different mapped id as public)
+        choices:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatChoice"
+        usage:
+          $ref: "#/components/schemas/Usage"
+        finish_reason:
+          type: string
+        retry_after_seconds:
+          type: integer
+          minimum: 1
+        suggested_action:
+          type: string
+          enum: [fix_parameter, fix_credential, retry_later, unsupported]
+        credential_ref:
+          type: string
+          description: Irreversible telemetry id; not the api_key
+
+    ChatChoice:
+      type: object
+      additionalProperties: true
+      required: [index]
+      properties:
+        index:
+          type: integer
+        finish_reason:
+          type: string
+        message:
+          type: object
+          additionalProperties: true
+          properties:
+            role:
+              type: string
+            content: {}
+
+    Usage:
+      type: object
+      additionalProperties: false
+      properties:
+        prompt_tokens:
+          type: integer
+          minimum: 0
+        completion_tokens:
+          type: integer
+          minimum: 0
+        total_tokens:
+          type: integer
+          minimum: 0
+        source:
+          type: string
+          enum: [upstream]
+
+    ErrorCategory:
+      type: string
+      enum:
+        - success
+        - invalid
+        - forbidden
+        - rate_limited
+        - temporary_unavailable
+        - timeout
+        - invalid_response
+        - unsupported_parameter
+        - unsupported_endpoint
+        - unsupported_platform
+        - truncated_stream
+
+    StreamEvent:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [delta, done, truncated, error]
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion.chunk]
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        usage:
+          $ref: "#/components/schemas/Usage"
+        error_category:
+          $ref: "#/components/schemas/ErrorCategory"
+        retry_after_seconds:
+          type: integer
+          minimum: 1

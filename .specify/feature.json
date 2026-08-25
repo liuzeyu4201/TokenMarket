@@ -1,1 +1,3 @@
-{"feature_directory":"specs/006-volcano-key-validation"}
+{
+  "feature_directory": "specs/007-volcano-openai-compat"
+}

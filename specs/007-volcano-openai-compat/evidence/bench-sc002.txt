@@ -1,0 +1,12 @@
+# SC-002 conversion bench (evidence, not CI wall-clock gate)
+# env: Darwin arm64 Apple M4  GOMAXPROCS=default (runtime)
+# command: go test ./internal/domain/chatcompat/ -bench=BenchmarkFilterAndNormalize -benchtime=200ms -count=1
+
+goos: darwin
+goarch: arm64
+pkg: github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/chatcompat
+cpu: Apple M4
+BenchmarkFilterAndNormalize-10       23900      8639 ns/op    7387 B/op     166 allocs/op
+PASS
+
+# 8639 ns/op ≈ 0.009 ms  << 5 ms P95 target (this machine). CI must not fail on 5ms/1ms wall clock.

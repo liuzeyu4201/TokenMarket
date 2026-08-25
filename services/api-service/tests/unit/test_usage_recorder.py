@@ -70,6 +70,49 @@ def test_idempotent_same_request_id() -> None:
     assert len(r.rows) == 1
 
 
+def test_usage_cleanup_entrypoint_purges_store() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from app.domain.usage.service import MemoryUsageStore
+    from app.maintenance.usage_cleanup import main, run_cleanup
+
+    store = MemoryUsageStore()
+    rec = UsageRecorder(store=store)
+    rec.record(
+        UsageRecord(
+            request_id="old",
+            buyer_id=None,
+            platform="volcano",
+            model="m",
+            prompt_tokens=1,
+            completion_tokens=1,
+            total_tokens=2,
+            status="complete",
+            source="official",
+            created_at=datetime.now(timezone.utc) - timedelta(days=31),
+        )
+    )
+    rec.record(
+        UsageRecord(
+            request_id="fresh",
+            buyer_id=None,
+            platform="volcano",
+            model="m",
+            prompt_tokens=1,
+            completion_tokens=1,
+            total_tokens=2,
+            status="complete",
+            source="official",
+        )
+    )
+    result = run_cleanup(store=store, retain_days=30)
+    assert result.outcome == "success"
+    assert result.deleted == 1
+    assert store.get("old") is None
+    assert store.get("fresh") is not None
+    assert main(["--retain-days", "0"]) == 2
+
+
 def test_purge_older_than_30_days() -> None:
     from datetime import datetime, timedelta, timezone
 

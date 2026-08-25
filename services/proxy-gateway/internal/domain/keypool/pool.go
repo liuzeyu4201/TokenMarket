@@ -10,14 +10,15 @@ import (
 
 // SellerKey 可路由候选。
 type SellerKey struct {
-	ID             string
-	SellerID       string
-	APIKey         string
-	Admin          string
-	Health         string
-	Platform       string
-	RemainingQuota string
-	MaxInflight    int
+	ID                  string
+	SellerID            string
+	APIKey              string
+	Admin               string
+	Health              string
+	Platform            string
+	RemainingQuota      string
+	MaxInflight         int
+	OfficialConcurrency int
 }
 
 // AllocableConcurrency 官方并发上限的向下取整 80%，至少 1；未知则保守默认 32（SF14）。
@@ -71,7 +72,7 @@ type Pool struct {
 
 func New(keys []SellerKey, maxInflight int) *Pool {
 	if maxInflight < 1 {
-		maxInflight = 32
+		maxInflight = AllocableConcurrency(0)
 	}
 	return &Pool{
 		keys: keys, inflight: map[string]int{}, coolUntil: map[string]time.Time{},
@@ -120,10 +121,7 @@ func (p *Pool) Pick(excludeSellerID string) (SellerKey, bool) {
 		if until, ok := p.coolUntil[k.ID]; ok && time.Now().Before(until) {
 			continue
 		}
-		capn := p.maxInflight
-		if k.MaxInflight > 0 {
-			capn = k.MaxInflight
-		}
+		capn := p.inflightLimit(k)
 		if p.inflight[k.ID] >= capn {
 			continue
 		}
@@ -131,6 +129,16 @@ func (p *Pool) Pick(excludeSellerID string) (SellerKey, bool) {
 		return k, true
 	}
 	return SellerKey{}, false
+}
+
+func (p *Pool) inflightLimit(k SellerKey) int {
+	if k.OfficialConcurrency > 0 {
+		return AllocableConcurrency(k.OfficialConcurrency)
+	}
+	if k.MaxInflight > 0 {
+		return k.MaxInflight
+	}
+	return p.maxInflight
 }
 
 // Cooldown 请求级 429 冷却（默认 30s；更长 Retry-After 由调用方传入）。

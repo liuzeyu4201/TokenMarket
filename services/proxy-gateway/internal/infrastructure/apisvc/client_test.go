@@ -23,6 +23,7 @@ func TestListAndLookupAndObserve(t *testing.T) {
 			"data": []map[string]string{{
 				"id": "k1", "seller_id": "s1", "api_key": "sk-syn",
 				"administrative_state": "active", "health_state": "healthy", "platform": "volcano",
+				"official_concurrency": "10",
 			}},
 		})
 	})
@@ -46,6 +47,9 @@ func TestListAndLookupAndObserve(t *testing.T) {
 	keys, err := c.List(context.Background())
 	if err != nil || len(keys) != 1 || keys[0].APIKey != "sk-syn" {
 		t.Fatalf("%v %v", keys, err)
+	}
+	if keys[0].OfficialConcurrency != 10 || keys[0].MaxInflight != 8 {
+		t.Fatalf("list must set 80%% cap: %+v", keys[0])
 	}
 	rec, ok := c.Lookup("abc")
 	if !ok || rec.BuyerID != "b1" {

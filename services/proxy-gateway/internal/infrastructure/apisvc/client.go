@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,13 +58,14 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 }
 
 type routableKey struct {
-	ID             string `json:"id"`
-	SellerID       string `json:"seller_id"`
-	APIKey         string `json:"api_key"`
-	Admin          string `json:"administrative_state"`
-	Health         string `json:"health_state"`
-	Platform       string `json:"platform"`
-	RemainingQuota string `json:"remaining_quota"`
+	ID                  string `json:"id"`
+	SellerID            string `json:"seller_id"`
+	APIKey              string `json:"api_key"`
+	Admin               string `json:"administrative_state"`
+	Health              string `json:"health_state"`
+	Platform            string `json:"platform"`
+	RemainingQuota      string `json:"remaining_quota"`
+	OfficialConcurrency string `json:"official_concurrency"`
 }
 
 type envelope struct {
@@ -104,10 +106,16 @@ func (c *Client) List(ctx context.Context) ([]keypool.SellerKey, error) {
 		if plat == "" {
 			plat = "volcano"
 		}
+		official := atoiNonNeg(k.OfficialConcurrency)
+		maxIF := 0
+		if official > 0 {
+			maxIF = keypool.AllocableConcurrency(official)
+		}
 		out = append(out, keypool.SellerKey{
 			ID: k.ID, SellerID: k.SellerID, APIKey: k.APIKey,
 			Admin: k.Admin, Health: k.Health, Platform: plat,
-			RemainingQuota: k.RemainingQuota,
+			RemainingQuota: k.RemainingQuota, OfficialConcurrency: official,
+			MaxInflight: maxIF,
 		})
 	}
 	return out, nil
@@ -241,4 +249,12 @@ func (f FanoutSink) Observe(ctx context.Context, obs usageobs.Observation) error
 		return f.Remote.Observe(ctx, obs)
 	}
 	return nil
+}
+
+func atoiNonNeg(s string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }

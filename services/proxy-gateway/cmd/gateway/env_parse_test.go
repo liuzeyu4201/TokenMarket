@@ -45,9 +45,12 @@ func TestPublishInventoryFromPool(t *testing.T) {
 }
 
 func TestParseSellerKeysPipe(t *testing.T) {
-	keys := parseSellerKeysEnv("id1|seller-a|sk-abc:with:colons|active|healthy")
+	keys := parseSellerKeysEnv("id1|seller-a|sk-abc:with:colons|active|healthy|10")
 	if len(keys) != 1 || keys[0].APIKey != "sk-abc:with:colons" || keys[0].SellerID != "seller-a" {
 		t.Fatalf("%+v", keys)
+	}
+	if keys[0].OfficialConcurrency != 10 || keys[0].MaxInflight != 8 {
+		t.Fatalf("80%% of official 10: %+v", keys[0])
 	}
 }
 

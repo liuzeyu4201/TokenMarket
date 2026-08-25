@@ -235,7 +235,11 @@ func firstNonEmpty(v, def string) string {
 }
 
 func envInt(k string, def int) int {
-	s := strings.TrimSpace(os.Getenv(k))
+	return envIntFrom(os.Getenv(k), def)
+}
+
+func envIntFrom(s string, def int) int {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return def
 	}
@@ -279,7 +283,7 @@ func parseProxyAuthEnv(pepper []byte, raw string) map[string]proxyauth.Record {
 	return out
 }
 
-// PROXY_STATIC_SELLER_KEYS=id|sellerId|apiKey[|admin|health][,...]
+// PROXY_STATIC_SELLER_KEYS=id|sellerId|apiKey[|admin|health[|officialConcurrency]][,...]
 func parseSellerKeysEnv(raw string) []keypool.SellerKey {
 	var keys []keypool.SellerKey
 	for _, part := range strings.Split(raw, ",") {
@@ -298,9 +302,18 @@ func parseSellerKeysEnv(raw string) []keypool.SellerKey {
 		if len(f) >= 5 && strings.TrimSpace(f[4]) != "" {
 			health = strings.TrimSpace(f[4])
 		}
+		official := 0
+		if len(f) >= 6 {
+			official = envIntFrom(strings.TrimSpace(f[5]), 0)
+		}
+		maxIF := 0
+		if official > 0 {
+			maxIF = keypool.AllocableConcurrency(official)
+		}
 		keys = append(keys, keypool.SellerKey{
 			ID: f[0], SellerID: f[1], APIKey: f[2],
 			Admin: admin, Health: health, Platform: "volcano",
+			OfficialConcurrency: official, MaxInflight: maxIF,
 		})
 	}
 	return keys

@@ -147,6 +147,20 @@ func TestAllocableConcurrencyEightyPercent(t *testing.T) {
 	}
 }
 
+func TestPickOfficialTenRejectsNinthLease(t *testing.T) {
+	p := keypool.New([]keypool.SellerKey{{
+		ID: "a", Admin: "active", Health: "healthy", OfficialConcurrency: 10,
+	}}, 32)
+	for i := 0; i < 8; i++ {
+		if _, ok := p.Pick(""); !ok {
+			t.Fatalf("lease %d of 8", i+1)
+		}
+	}
+	if _, ok := p.Pick(""); ok {
+		t.Fatal("9th concurrent lease must be rejected at 80% of official 10")
+	}
+}
+
 func TestRefreshFromSource(t *testing.T) {
 	src := keypool.StaticSource{Keys: []keypool.SellerKey{
 		{ID: "n", SellerID: "s", APIKey: "k", Admin: "active", Health: "healthy"},

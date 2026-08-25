@@ -3,11 +3,11 @@
   "tools": [
     {
       "tool": "go",
-      "exact_version": "1.25.12",
+      "exact_version": "1.25.14",
       "version_source": ".tool-versions (golang)",
       "affected_components": ["proxy-gateway"],
       "install_policy": "asdf-shim",
-      "integrity_reference": "https://go.dev/dl/go1.25.12.darwin-arm64.tar.gz"
+      "integrity_reference": "https://go.dev/dl/go1.25.14.darwin-arm64.tar.gz"
     },
     {
       "tool": "python",

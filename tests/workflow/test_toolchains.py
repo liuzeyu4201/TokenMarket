@@ -26,7 +26,7 @@ HOSTED_ENV = {
 
 # Versions that satisfy the committed local exact_version pins for checked tools.
 _LOCAL_OK: dict[str, str] = {
-    "go": "1.25.12",
+    "go": "1.25.14",
     "python": "3.11.15",
     "node": "24.18.0",
     "npm": "11.16.0",

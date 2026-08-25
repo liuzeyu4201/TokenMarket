@@ -19,7 +19,7 @@ TokenMarket 是一个面向 AI 流量代理与 Token 交易场景的 monorepo �
 
 | 层级 | 技术 |
 |------|------|
-| 网关 | Go 1.25.12、Gin、Prometheus |
+| 网关 | Go 1.25.14、Gin、Prometheus |
 | 后端服务 | Python 3.11.15、FastAPI、Pydantic、SQLAlchemy、Alembic、asyncpg |
 | 前端 | React 18、TypeScript（strict）、Vite、Vitest、ESLint、Prettier |
 | 工程工具 | uv、npm、Docker、Make、GitHub Actions |

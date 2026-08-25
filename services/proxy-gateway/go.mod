@@ -1,6 +1,6 @@
 module github.com/tokenmarket/tokenmarket/services/proxy-gateway
 
-go 1.25.12
+go 1.25.14
 
 require (
 	github.com/gin-gonic/gin v1.10.0

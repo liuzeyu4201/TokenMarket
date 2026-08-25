@@ -121,6 +121,7 @@ def run_security_checks(repo_root: Any, *, max_retries: int = 1) -> None:
     Authentication feature (004) additionally validates reviewed dev-dependency
     pins/licenses via ``dependency_policy`` before external scanners run.
     """
+    import os
     import shutil
     import subprocess
     import tempfile
@@ -164,12 +165,20 @@ def run_security_checks(repo_root: Any, *, max_retries: int = 1) -> None:
         last_error: Exception | None = None
         for attempt in range(max_retries + 1):
             try:
+                run_env = os.environ.copy()
+                if name == "govulncheck":
+                    # CI setup-go may still install 1.25.12 until the workflow
+                    # file can be updated (needs the GitHub `workflow` scope).
+                    # Analyze against the go.mod patch that contains the
+                    # stdlib fixes govulncheck reports for 1.25.12.
+                    run_env["GOTOOLCHAIN"] = "go1.25.14"
                 result = subprocess.run(
                     cmd,
                     cwd=cwd or str(repo_root),
                     capture_output=True,
                     text=True,
                     check=False,
+                    env=run_env,
                 )
                 if result.returncode == 0:
                     last_error = None

@@ -90,7 +90,7 @@ PR 合入 `master-dev`。测试验证后经评审 PR 晋升到
 - `001-repository-workflow-baseline`：规划产物位于
   `specs/001-repository-workflow-baseline/plan.md`，开发者契约在其
   `contracts/` 目录下。
-- 计划维护的工具链为 Go 1.25.12、带独立 workflow-tool
+- 计划维护的工具链为 Go 1.25.14、带独立 workflow-tool
   锁与每服务 `uv.lock` 的 Python 3.11.15，以及带 npm 锁文件的 Node 24.18.0 LTS；依赖或工具
   升级仍为经评审变更。
 - 根 Makefile 仍是唯一公共工作流。除七个公共动作外，

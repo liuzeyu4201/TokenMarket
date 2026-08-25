@@ -281,8 +281,9 @@ def test_body_never_contains_raw_cookie_or_otp(
     text_body = boot.text
     assert "__Host-tokenmarket_session=" not in text_body
     assert re.search(r"cookie_value", text_body, re.I) is None
-    # csrf_token is contracted in data; raw cookie value must not appear
-    assert "1." not in text_body.split('"csrf_token"')[0]  # coarse
+    cookie = session_client.cookies.get(SESSION_COOKIE_NAME)
+    if cookie:
+        assert cookie not in text_body
     logout = session_client.delete(
         "/api/v1/auth/session",
         headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},

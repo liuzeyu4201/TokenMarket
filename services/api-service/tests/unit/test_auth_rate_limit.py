@@ -146,9 +146,11 @@ async def test_phone_limit_five_per_hour() -> None:
     assert not denied.allowed
     assert denied.dimension == "phone"
     assert denied.retry_after_seconds >= 1
-    # Keys never contain raw phone
+    # Keys are HMAC refs under the auth namespace, not CN mobiles
     for k in fake.zsets:
-        assert "138" not in k
+        assert k.startswith("tm:test:auth:")
+        assert ":otp:rl:" in k
+        assert "13800138000" not in k
     await lim.close()
 
 

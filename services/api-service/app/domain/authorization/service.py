@@ -235,7 +235,7 @@ class AuthorizationService:
             )
 
         try:
-            row = await self._repo.get_ownership(rtype, resource_id)
+            row = await self._repo.get_ownership(rtype, resource_id)  # type: ignore[assignment]
         except (OperationalError, SQLAlchemyError):
             logger.exception("authz ownership load failed", extra={"request_id": request_id})
             return await self._denied(

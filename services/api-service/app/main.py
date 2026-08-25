@@ -18,14 +18,18 @@ from starlette.responses import Response
 from . import database
 from .api.v1.auth import router as auth_router
 from .api.v1.authorization import router as authorization_router
+from .api.v1.internal import router as internal_router
+from .api.v1.proxy_keys import router as proxy_keys_router
 from .api.v1.seller_keys import router as seller_keys_router
 from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
+from .domain.proxykeys.service import ProxyKeyService
 from .domain.sellerkeys.crypto import CredentialEncryptor
 from .domain.sellerkeys.memory_store import MemoryKeyStore
 from .domain.sellerkeys.validator_http import FailClosedValidator, GatewayValidator
+from .domain.usage.service import UsageRecorder
 from .errors import DependencyUnavailableError
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
@@ -35,6 +39,7 @@ from .sms.synthetic import build_sms_adapter
 
 VERSION = "0.1.0"
 logger = configure_logging()
+
 
 def _secret_bytes(name: str) -> bytes:
     raw = (os.environ.get(name) or "").strip()
@@ -52,10 +57,11 @@ def _secret_bytes(name: str) -> bytes:
     return encoded
 
 
-def _wire_seller_key_services(application: FastAPI, database_url: str | None = None) -> None:
-    """Attach seller-key domain services used by SF08/SF09 HTTP."""
+def _wire_key_services(application: FastAPI, database_url: str | None = None) -> None:
+    """Attach seller/proxy/usage domain services used by SF08–SF17 HTTP."""
     material = _secret_bytes("SELLER_KEY_MATERIAL")
     fp = _secret_bytes("SELLER_KEY_FINGERPRINT_SECRET")
+    pepper = _secret_bytes("PROXY_AUTH_PEPPER")
     version = os.environ.get("SELLER_KEY_VERSION") or "v1"
     validate_url = (os.environ.get("PROVIDER_VALIDATE_URL") or "").strip()
     validate_token = (os.environ.get("PROVIDER_VALIDATE_INTERNAL_TOKEN") or "").strip()
@@ -75,16 +81,32 @@ def _wire_seller_key_services(application: FastAPI, database_url: str | None = N
             from sqlalchemy import create_engine
             from sqlalchemy.orm import sessionmaker
 
-            from app.repositories.sessioned import SessionedSQLKeyStore
+            from app.repositories.sessioned import (
+                SessionedProxyStore,
+                SessionedSQLKeyStore,
+                SessionedUsageStore,
+            )
 
             sync_url = database_url.replace("postgresql+asyncpg", "postgresql")
             engine = create_engine(sync_url, pool_pre_ping=True)
             application.state.seller_sync_engine = engine
             maker = sessionmaker(engine)
             store = SessionedSQLKeyStore(maker)
+            application.state.proxy_key_service = ProxyKeyService(
+                pepper, store=SessionedProxyStore(maker)
+            )
+            application.state.usage_recorder = UsageRecorder(
+                store=SessionedUsageStore(maker)
+            )
         except Exception:
             logger.warning("seller key SQL store disabled; using memory")
+            application.state.proxy_key_service = ProxyKeyService(pepper)
+            application.state.usage_recorder = UsageRecorder()
+    else:
+        application.state.proxy_key_service = ProxyKeyService(pepper)
+        application.state.usage_recorder = UsageRecorder()
     application.state.seller_key_store = store
+    application.state.internal_token = os.environ.get("INTERNAL_GATEWAY_TOKEN") or ""
 
 
 service_info = Info("app", "API service build information")
@@ -171,7 +193,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.readiness_probe = database.build_readiness_probe(engine)
     app.state.rate_limiter = rate_limiter
     app.state.auth_rate_limiter = auth_rate_limiter
-    _wire_seller_key_services(app, database_url if session_factory is not None else None)
+    _wire_key_services(app, database_url if session_factory is not None else None)
 
     # Start delivery dispatcher when DB + keys are usable (local/test).
     # Inline ``session_factory is not None`` so mypy narrows the factory type.
@@ -211,6 +233,8 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(authorization_router)
 app.include_router(seller_keys_router)
+app.include_router(proxy_keys_router)
+app.include_router(internal_router)
 
 app.add_middleware(
     CORSMiddleware,

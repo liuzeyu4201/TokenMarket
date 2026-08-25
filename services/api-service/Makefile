@@ -44,6 +44,17 @@ test:
 		--cov-report=term-missing \
 		--cov-fail-under=80 \
 		tests/unit tests/integration -q
+	# Seller/proxy/usage domain packages must stay ≥80% (SF08–SF17)
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app.domain.sellerkeys \
+		--cov=app.domain.proxykeys \
+		--cov=app.domain.usage \
+		--cov=app.api.v1.seller_keys \
+		--cov=app.api.v1.proxy_keys \
+		--cov=app.api.v1.internal \
+		--cov-report=term-missing \
+		--cov-fail-under=80 \
+		tests/unit tests/integration -q
 
 build:
 	docker build -t $(IMAGE_TAG) .

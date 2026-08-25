@@ -179,7 +179,7 @@ async def _session_from_request(request: Request) -> AsyncSession:
         from app.errors import DependencyUnavailableError
 
         raise DependencyUnavailableError()
-    return factory()
+    return factory()  # type: ignore[no-any-return]
 
 
 @router.post("/evaluate")

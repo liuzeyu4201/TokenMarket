@@ -119,3 +119,36 @@ async def get_seller_key(key_id: uuid.UUID, request: Request) -> JSONResponse:
     except OnboardingError as exc:
         return _err(exc, rid)
     return JSONResponse(status_code=200, content=success_envelope(item, request_id=rid))
+
+
+@router.post("/{key_id}/pause")
+async def pause_seller_key(key_id: uuid.UUID, request: Request) -> JSONResponse:
+    return await _transition(key_id, request, "pause")
+
+
+@router.post("/{key_id}/resume")
+async def resume_seller_key(key_id: uuid.UUID, request: Request) -> JSONResponse:
+    return await _transition(key_id, request, "resume")
+
+
+@router.post("/{key_id}/revoke")
+async def revoke_seller_key(key_id: uuid.UUID, request: Request) -> JSONResponse:
+    return await _transition(key_id, request, "revoke")
+
+
+async def _transition(key_id: uuid.UUID, request: Request, op: str) -> JSONResponse:
+    rid = _rid(request)
+    actor = await resolve_actor(request)
+    if isinstance(actor, JSONResponse):
+        return actor
+    lc = _lifecycle(request)
+    try:
+        if op == "pause":
+            item = lc.pause(key_id, actor.user_id, actor.role)
+        elif op == "resume":
+            item = lc.resume(key_id, actor.user_id, actor.role, rid)
+        else:
+            item = lc.revoke(key_id, actor.user_id, actor.role)
+    except OnboardingError as exc:
+        return _err(exc, rid)
+    return JSONResponse(status_code=200, content=success_envelope(item, request_id=rid))

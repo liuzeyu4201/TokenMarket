@@ -208,7 +208,9 @@ class AuthorizationService:
                     resource_id=row.resource_id,
                 )
             except (OperationalError, SQLAlchemyError):
-                logger.exception("authz create failed", extra={"request_id": request_id})
+                logger.exception(
+                    "authz create failed", extra={"request_id": request_id}
+                )
                 await self._repo.rollback()
                 return await self._denied(
                     reason=ReasonCode.FACT_STORE_UNAVAILABLE,
@@ -237,7 +239,9 @@ class AuthorizationService:
         try:
             row = await self._repo.get_ownership(rtype, resource_id)  # type: ignore[assignment]
         except (OperationalError, SQLAlchemyError):
-            logger.exception("authz ownership load failed", extra={"request_id": request_id})
+            logger.exception(
+                "authz ownership load failed", extra={"request_id": request_id}
+            )
             return await self._denied(
                 reason=ReasonCode.FACT_STORE_UNAVAILABLE,
                 action=act,
@@ -291,7 +295,9 @@ class AuthorizationService:
                     row, lifecycle_status=new_status
                 )
             except (OperationalError, SQLAlchemyError):
-                logger.exception("authz update failed", extra={"request_id": request_id})
+                logger.exception(
+                    "authz update failed", extra={"request_id": request_id}
+                )
                 await self._repo.rollback()
                 return await self._denied(
                     reason=ReasonCode.FACT_STORE_UNAVAILABLE,
@@ -479,7 +485,9 @@ class AuthorizationService:
                         allowed=False,
                         http_status=503,
                         code=AuthzCode.SERVICE_UNAVAILABLE.value,
-                        message=public_outcome(ReasonCode.FACT_STORE_UNAVAILABLE).message,
+                        message=public_outcome(
+                            ReasonCode.FACT_STORE_UNAVAILABLE
+                        ).message,
                         reason_code=ReasonCode.FACT_STORE_UNAVAILABLE.value,
                         action=action.value,
                     ),
@@ -496,7 +504,9 @@ class AuthorizationService:
                         allowed=False,
                         http_status=503,
                         code=AuthzCode.SERVICE_UNAVAILABLE.value,
-                        message=public_outcome(ReasonCode.FACT_STORE_UNAVAILABLE).message,
+                        message=public_outcome(
+                            ReasonCode.FACT_STORE_UNAVAILABLE
+                        ).message,
                         reason_code=ReasonCode.FACT_STORE_UNAVAILABLE.value,
                         action=action.value,
                     ),

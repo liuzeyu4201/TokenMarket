@@ -38,7 +38,9 @@ def requires_per_request_audit(
     return False
 
 
-def event_type_for(reason: ReasonCode | None, *, allowed: bool, is_state_change: bool) -> str:
+def event_type_for(
+    reason: ReasonCode | None, *, allowed: bool, is_state_change: bool
+) -> str:
     if is_state_change:
         return "authz.resource_state_change"
     if reason is None:
@@ -70,11 +72,15 @@ def build_event_payload(
     request_id: str,
     safe_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    outcome = "allowed_state_change" if (allowed and is_state_change) else (
-        "allowed" if allowed else "denied"
+    outcome = (
+        "allowed_state_change"
+        if (allowed and is_state_change)
+        else ("allowed" if allowed else "denied")
     )
     return {
-        "event_type": event_type_for(reason, allowed=allowed, is_state_change=is_state_change),
+        "event_type": event_type_for(
+            reason, allowed=allowed, is_state_change=is_state_change
+        ),
         "outcome": outcome if allowed else "denied",
         "reason_code": reason.value if reason else ("ALLOWED" if allowed else "DENIED"),
         "action": action.value if isinstance(action, Action) else str(action),

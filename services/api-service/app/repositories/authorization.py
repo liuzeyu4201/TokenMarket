@@ -72,7 +72,9 @@ class AuthorizationRepository:
         await self._session.flush()
         return row
 
-    async def insert_security_event(self, payload: dict[str, Any]) -> AuthorizationSecurityEvent:
+    async def insert_security_event(
+        self, payload: dict[str, Any]
+    ) -> AuthorizationSecurityEvent:
         event = AuthorizationSecurityEvent(
             event_type=payload["event_type"],
             outcome=payload["outcome"],

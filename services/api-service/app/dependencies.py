@@ -139,9 +139,7 @@ async def resolve_authenticated_identity(
     settings = get_auth_settings(request)
     cookie = request.cookies.get(SESSION_COOKIE_NAME)
     service = SessionService(session, settings)
-    result = await service.bootstrap_session(
-        cookie_value=cookie, request_id=request_id
-    )
+    result = await service.bootstrap_session(cookie_value=cookie, request_id=request_id)
     if result.kind == "service_unavailable":
         return AuthIdentityError(
             kind="service_unavailable",

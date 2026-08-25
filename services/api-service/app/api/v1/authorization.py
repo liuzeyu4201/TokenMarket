@@ -65,9 +65,7 @@ def _allowed_origins(request: Request) -> list[str]:
     return origins if origins else list(_DEFAULT_ORIGINS)
 
 
-def _identity_error_response(
-    err: AuthIdentityError, request_id: str
-) -> JSONResponse:
+def _identity_error_response(err: AuthIdentityError, request_id: str) -> JSONResponse:
     return JSONResponse(
         status_code=err.http_status,
         content=error_envelope(err.code, err.message, request_id=request_id),
@@ -78,9 +76,7 @@ async def _require_identity(
     request: Request, session: AsyncSession
 ) -> AuthIdentity | JSONResponse:
     rid = _request_id(request)
-    result = await resolve_authenticated_identity(
-        request, session, request_id=rid
-    )
+    result = await resolve_authenticated_identity(request, session, request_id=rid)
     if isinstance(result, AuthIdentityError):
         return _identity_error_response(result, rid)
     return result
@@ -109,9 +105,7 @@ def _csrf_origin_guard(
     if session_id is None:
         return JSONResponse(
             status_code=403,
-            content=error_envelope(
-                "CSRF_INVALID", MSG_CSRF_INVALID, request_id=rid
-            ),
+            content=error_envelope("CSRF_INVALID", MSG_CSRF_INVALID, request_id=rid),
         )
     csrf_mat = settings.key_material("csrf")
     versions = [csrf_mat.version]
@@ -167,9 +161,7 @@ def _decision_response(decision: Decision, request_id: str) -> JSONResponse:
         )
     return JSONResponse(
         status_code=decision.http_status,
-        content=error_envelope(
-            decision.code, decision.message, request_id=request_id
-        ),
+        content=error_envelope(decision.code, decision.message, request_id=request_id),
     )
 
 

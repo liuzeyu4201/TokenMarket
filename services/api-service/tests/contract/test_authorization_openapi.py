@@ -25,7 +25,9 @@ def test_contract_paths_present_on_app() -> None:
     doc = yaml.safe_load(OPENAPI.read_text())
     contract_paths = set(doc["paths"].keys())
     # Mounted under /api/v1
-    expected = {f"/api/v1{p}" if not p.startswith("/api") else p for p in contract_paths}
+    expected = {
+        f"/api/v1{p}" if not p.startswith("/api") else p for p in contract_paths
+    }
     client = TestClient(app)
     live = set(client.app.openapi()["paths"].keys())
     missing = expected - live

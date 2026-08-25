@@ -13,7 +13,9 @@ from app.domain.authorization.service import AuthorizationService
 from app.domain.users.models import UserRole, UserStatus
 
 
-def _user(role: UserRole, *, status: UserStatus = UserStatus.active, deleted: bool = False):
+def _user(
+    role: UserRole, *, status: UserStatus = UserStatus.active, deleted: bool = False
+):
     return SimpleNamespace(
         id=uuid.uuid4(),
         role=role,

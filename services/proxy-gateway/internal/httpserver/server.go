@@ -23,6 +23,7 @@ type Config struct {
 	Validate *ValidateDeps
 	// MountValidate 为 true 时才在本 Server 上挂载 validate 路由（C1：公网 listener 可关掉）
 	MountValidate bool
+	Proxy         *ProxyDeps
 }
 
 // Server wraps the Gin engine and configuration.
@@ -30,6 +31,7 @@ type Server struct {
 	config       Config
 	engine       *gin.Engine
 	validateDeps *ValidateDeps
+	proxyEnabled bool
 }
 
 // NewServer creates an operational scaffold server (health/metrics + optional validate).
@@ -48,6 +50,10 @@ func NewServer(cfg Config) (*Server, error) {
 	r.GET("/metrics", s.metrics)
 	if cfg.MountValidate && cfg.Validate != nil && cfg.Validate.Enabled {
 		s.registerInternalValidate(*cfg.Validate)
+	}
+	if cfg.Proxy != nil && cfg.Proxy.Enabled {
+		s.proxyEnabled = true
+		s.registerProxy(*cfg.Proxy)
 	}
 	r.NoRoute(s.notFound)
 	return s, nil
@@ -76,6 +82,11 @@ func NewInternalValidateServer(cfg Config) (*Server, error) {
 // HasValidateRoute 是否已挂载内部验证（测试/断言用）。
 func (s *Server) HasValidateRoute() bool {
 	return s != nil && s.validateDeps != nil && s.validateDeps.Enabled
+}
+
+// HasProxyRoute 是否已挂载公开 Chat Completions 代理。
+func (s *Server) HasProxyRoute() bool {
+	return s != nil && s.proxyEnabled
 }
 
 // Handler returns the HTTP handler for tests.

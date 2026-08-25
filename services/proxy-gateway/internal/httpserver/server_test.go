@@ -73,6 +73,19 @@ func requireHealthResponse(t *testing.T, rec *httptest.ResponseRecorder, wantSta
 
 // TestLiveness confirms that the liveness probe returns an alive status and
 // the operational health shape required by the shared service contract.
+func TestProxyNotMountedByDefault(t *testing.T) {
+	srv, _ := newTestServer(t)
+	if srv.HasProxyRoute() {
+		t.Fatal("proxy should be off without Config.Proxy")
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/proxy/volcano/chat/completions", strings.NewReader(`{}`))
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("code %d", rec.Code)
+	}
+}
+
 func TestLiveness(t *testing.T) {
 	srv, _ := newTestServer(t)
 

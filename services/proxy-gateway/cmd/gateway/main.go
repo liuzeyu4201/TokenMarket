@@ -9,6 +9,7 @@ import (
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/application"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/chatcompat"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keyhealth"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keypool"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/providervalid"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/proxyauth"
@@ -75,9 +76,20 @@ func main() {
 		}
 	}
 
-	usageSink := usageobs.Sink(usageobs.NewMemorySink())
+	memUsage := usageobs.NewMemorySink()
+	var usageSink usageobs.Sink = memUsage
+	if strings.TrimSpace(os.Getenv("API_INTERNAL_BASE_URL")) != "" && strings.TrimSpace(os.Getenv("INTERNAL_GATEWAY_TOKEN")) != "" {
+		dur := &usageobs.DurableSink{
+			Dir:  firstNonEmpty(os.Getenv("PROXY_USAGE_WAL_DIR"), ""),
+			Next: apisvc.FanoutSink{Mem: memUsage, Remote: apiClient},
+		}
+		go func() { _ = dur.Replay(context.Background()) }()
+		usageSink = dur
+	}
 
 	httpMetrics := observability.DefaultProxyHTTPMetrics()
+	inventory := observability.DefaultKeyInventoryMetrics()
+	publishInventory(inventory, pool)
 
 	proxyEnabled := os.Getenv("PROXY_ENABLED") != "0"
 	var proxyDeps *httpserver.ProxyDeps
@@ -141,7 +153,29 @@ func main() {
 			if err := pool.Refresh(context.Background()); err != nil {
 				logger.Error("key pool refresh failed", "error", err)
 			}
+			publishInventory(inventory, pool)
 		}
+	}()
+
+	go func() {
+		var api keyhealth.HealthSink
+		if strings.TrimSpace(os.Getenv("API_INTERNAL_BASE_URL")) != "" && strings.TrimSpace(os.Getenv("INTERNAL_GATEWAY_TOKEN")) != "" {
+			api = apiClient
+		}
+		sch := &keyhealth.Scheduler{
+			Interval: 30 * time.Second,
+			Store:    keyhealth.PoolStore{Pool: pool, API: api},
+			Probe: func(ctx context.Context, apiKey string) providervalid.ErrorCategory {
+				res := application.NewValidator(cfg).ValidateCredential(ctx, providervalid.CredentialValidationRequest{
+					Platform: "volcano", APIKey: apiKey, RequestID: "health",
+				})
+				return res.ErrorCategory
+			},
+			OnProbe: func(platform, result string) {
+				httpMetrics.Health(platform, result)
+			},
+		}
+		sch.Run(context.Background())
 	}()
 
 	logger.Info("starting proxy-gateway public listener",
@@ -153,6 +187,18 @@ func main() {
 		logger.Error("server exited", "error", err)
 		os.Exit(1)
 	}
+}
+
+func publishInventory(inv *observability.KeyInventoryMetrics, pool *keypool.Pool) {
+	if inv == nil || pool == nil {
+		return
+	}
+	snap := pool.Snapshot()
+	rows := make([]observability.KeyStatus, 0, len(snap))
+	for _, k := range snap {
+		rows = append(rows, observability.KeyStatus{Admin: k.Admin, Health: k.Health})
+	}
+	inv.Publish("volcano", rows)
 }
 
 func firstNonEmpty(v, def string) string {

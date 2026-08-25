@@ -1,0 +1,1 @@
+# Data Model SF16\n\n见源规格实体；实现 `services/proxy-gateway/internal/domain/keyhealth/`。\n

@@ -1,0 +1,54 @@
+# Prometheus alert rules — proxy path (SF19)
+# System error rate excludes expected client 4xx (auth/schema).
+# Hysteresis: fire >5% for 5m with ≥20 samples; recover <3% for 5m.
+
+groups:
+  - name: tokenmarket-proxy
+    rules:
+      - alert: TokenMarketProxySystemErrorRateHigh
+        expr: |
+          (
+            sum(increase(proxy_requests_total{result=~"system_error|no_capacity"}[5m]))
+            /
+            clamp_min(sum(increase(proxy_requests_total[5m])), 1)
+          ) > 0.05
+          and
+          sum(increase(proxy_requests_total[5m])) >= 20
+        for: 5m
+        labels:
+          severity: warning
+          priority: p1
+          owner: proxy-gateway
+        annotations:
+          summary: 代理系统错误率超过 5%（5 分钟窗口，最少 20 个样本）
+          description: 4xx 认证/参数错误不计入分子。恢复阈值 <3% 持续 5 分钟。
+          runbook: ops/runbooks/volcano-openai-compat.md
+
+      - alert: TokenMarketProxySystemErrorRateResolved
+        expr: |
+          (
+            sum(increase(proxy_requests_total{result=~"system_error|no_capacity"}[5m]))
+            /
+            clamp_min(sum(increase(proxy_requests_total[5m])), 1)
+          ) < 0.03
+          and
+          sum(increase(proxy_requests_total[5m])) >= 20
+        for: 5m
+        labels:
+          severity: info
+          owner: proxy-gateway
+        annotations:
+          summary: 代理系统错误率已低于 3% 持续 5 分钟
+          description: Two consecutive evaluation windows below recover threshold before resolved.
+          runbook: ops/runbooks/volcano-openai-compat.md
+
+      - alert: TokenMarketProxyNoRoutableKeys
+        expr: |
+          max(provider_key_inventory{status="healthy"}) == 0
+        for: 5m
+        labels:
+          severity: warning
+          owner: proxy-gateway
+        annotations:
+          summary: 可路由卖家 Key 数量为零
+          runbook: ops/runbooks/volcano-openai-compat.md

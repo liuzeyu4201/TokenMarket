@@ -50,6 +50,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import signal
 import socket
 import stat
@@ -1176,6 +1177,7 @@ class ComposeAdapter:
         category as preflight.
         """
         compose_bytes = self.verified_compose_bytes()
+        self._stage_grafana_provisioning()
         child_env = self._child_environment(secrets, derived_env)
         result = self._spawn(
             self._compose_argv("up", "--detach", "--pull", "never", with_stdin_file=True),
@@ -1195,6 +1197,22 @@ class ComposeAdapter:
             raise ComposeCommandError(
                 "compose reconcile failed; project state is retained for inspection"
             )
+
+    def _stage_grafana_provisioning(self) -> None:
+        """Copy versioned Grafana dashboards/datasources into the Compose project dir.
+
+        ``compose.local.yml`` bind-mounts ``./grafana-provisioning`` relative to
+        the hashed runtime project directory (stdin transport). The workspace
+        path never appears in Compose YAML.
+        """
+        src = self._repo_root / "infra" / "grafana" / "provisioning"
+        dest = self._compose_project_dir / "grafana-provisioning"
+        if not src.is_dir():
+            return
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest, symlinks=False)
 
     def _child_environment(
         self, secrets: ComposeSecretSet, derived_env: Mapping[str, str] | None
@@ -1231,9 +1249,7 @@ class ComposeAdapter:
         filter_value = f"label={LABEL_REPOSITORY}={REPOSITORY_LABEL_VALUE}"
         return self._list_filtered_resources(filter_value)
 
-    def assert_exact_resource_ownership(
-        self, resources: Sequence[ProjectResource]
-    ) -> None:
+    def assert_exact_resource_ownership(self, resources: Sequence[ProjectResource]) -> None:
         """Authorize every resource by exact project id + full fingerprint."""
         for resource in resources:
             authorize_label_mutation(self._identity, resource.labels)
@@ -1251,8 +1267,7 @@ class ComposeAdapter:
         """
         if timeout_seconds <= 0:
             raise ComposeCommandError(
-                "exact-label removal budget exhausted; project state is retained "
-                "for inspection"
+                "exact-label removal budget exhausted; project state is retained " "for inspection"
             )
         # Refuse volumes and authorize every resource before any spawn.
         for resource in resources:
@@ -1265,14 +1280,8 @@ class ComposeAdapter:
 
         deadline = timeout_seconds
         # Containers first (postgres → redis → grafana grace), then networks.
-        containers = [
-            resource
-            for resource in resources
-            if resource.kind is ResourceKind.CONTAINER
-        ]
-        networks = [
-            resource for resource in resources if resource.kind is ResourceKind.NETWORK
-        ]
+        containers = [resource for resource in resources if resource.kind is ResourceKind.CONTAINER]
+        networks = [resource for resource in resources if resource.kind is ResourceKind.NETWORK]
         for resource in containers:
             grace = self._stop_grace_for(resource)
             stop_budget = min(float(grace) + 5.0, deadline)
@@ -1315,8 +1324,7 @@ class ComposeAdapter:
                 ["docker", "network", "rm", resource.resource_id],
                 timeout_seconds=net_budget,
                 timeout_error=ComposeCommandError(
-                    "docker network rm exceeded its bounded execution time and "
-                    "was terminated"
+                    "docker network rm exceeded its bounded execution time and " "was terminated"
                 ),
             )
             if result.returncode != 0:
@@ -1338,8 +1346,7 @@ class ComposeAdapter:
         """
         if timeout_seconds <= 0:
             raise ComposeCommandError(
-                "compose down budget exhausted; project state is retained for "
-                "inspection"
+                "compose down budget exhausted; project state is retained for " "inspection"
             )
         compose_bytes = self.verified_compose_bytes()
         child_env = self._child_environment(secrets, _TEARDOWN_DERIVED_ENV)
@@ -1357,9 +1364,7 @@ class ComposeAdapter:
         if _indicates_compose_parse_failure(result.stderr):
             # Fallback only needs exact-label containers and networks; volumes
             # are never listed or touched on this path.
-            filter_value = (
-                f"label=com.docker.compose.project={self._identity.project_id}"
-            )
+            filter_value = f"label=com.docker.compose.project={self._identity.project_id}"
             mutable = [
                 *self._list_containers(filter_value),
                 *self._list_networks(filter_value),
@@ -1367,9 +1372,7 @@ class ComposeAdapter:
             self.assert_exact_resource_ownership(mutable)
             self.remove_exact_resources(mutable, timeout_seconds=timeout_seconds)
             return
-        raise ComposeCommandError(
-            "compose down failed; project state is retained for inspection"
-        )
+        raise ComposeCommandError("compose down failed; project state is retained for inspection")
 
     def _stop_grace_for(self, resource: ProjectResource) -> int:
         service = resource.labels.get("com.docker.compose.service", "")
@@ -1482,8 +1485,7 @@ class ComposeAdapter:
             ["docker", "network", "inspect", *ids],
             timeout_seconds=STATE_COMMAND_TIMEOUT_SECONDS,
             timeout_error=ComposeCommandError(
-                "docker network inspect exceeded its bounded execution time and "
-                "was terminated"
+                "docker network inspect exceeded its bounded execution time and " "was terminated"
             ),
         )
         if inspect.returncode != 0:
@@ -1538,8 +1540,7 @@ class ComposeAdapter:
             ["docker", "volume", "inspect", *names],
             timeout_seconds=STATE_COMMAND_TIMEOUT_SECONDS,
             timeout_error=ComposeCommandError(
-                "docker volume inspect exceeded its bounded execution time and "
-                "was terminated"
+                "docker volume inspect exceeded its bounded execution time and " "was terminated"
             ),
         )
         if inspect.returncode != 0:

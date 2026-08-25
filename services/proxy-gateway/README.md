@@ -61,8 +61,8 @@ go test ./internal/domain/providervalid/ ./internal/infrastructure/platform/volc
 
 契约：`shared/contracts/volcano-openai-compat/v1/`
 
-本功能只交付同进程 `ChatService.Complete` / `OpenStream` 适配端口，**不**挂载公开 HTTP。
-公开入口 `POST /v1/proxy/volcano/chat/completions` 属于 SF12/SF15。
+V0.1 公开入口：`POST /v1/proxy/volcano/chat/completions`（SF12/SF15）。
+适配仍为同进程 `ChatService.Complete` / `OpenStream`；`PROXY_ENABLED=0` 可关闭挂载。
 
 - 出站：`POST {VOLCANO_CHAT_BASE_URL}/chat/completions`（默认复用 `VOLCANO_VALIDATE_BASE_URL`）
 - 允许列表：`model`/`messages`/`stream`/`temperature`/`max_tokens`/`top_p`/`stop`/penalty/`n=1`

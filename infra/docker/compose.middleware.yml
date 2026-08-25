@@ -80,6 +80,9 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - target: 3000
         published: "${TOKENMARKET_DEPLOY_GRAFANA_HOST_PORT}"
@@ -88,6 +91,11 @@ services:
         mode: ingress
     tmpfs:
       - /var/lib/grafana:rw,mode=0700,uid=472,gid=472
+    volumes:
+      - type: bind
+        source: ../grafana/provisioning
+        target: /etc/grafana/provisioning
+        read_only: true
     secrets:
       - source: grafana_admin_password
         target: /run/secrets/grafana_admin_password

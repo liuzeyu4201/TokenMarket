@@ -346,16 +346,30 @@ def test_postgres_and_redis_mount_their_named_volumes(
         assert actual == [("volume", source, target)]
 
 
-def test_grafana_uses_only_the_0700_tmpfs(compose_model: dict[str, Any]) -> None:
+def test_grafana_uses_tmpfs_plus_readonly_provisioning(
+    compose_model: dict[str, Any],
+) -> None:
     definition = DEPENDENCIES["grafana"]
     grafana = compose_model["services"]["grafana"]
-    assert not grafana.get("volumes"), "Grafana must not declare any volume"
     expected_tmpfs = (
         f"{definition['ephemeral_storage']['mount_path']}:rw,"
         f"mode={definition['ephemeral_storage']['mode']},"
         f"uid={definition['runtime_uid']},gid={definition['runtime_gid']}"
     )
     assert grafana["tmpfs"] == [expected_tmpfs]
+    mounts = grafana.get("volumes") or []
+    assert len(mounts) == 1
+    mount = mounts[0]
+    assert mount["type"] == "bind"
+    assert mount["target"] == "/etc/grafana/provisioning"
+    assert mount.get("read_only") is True
+    source = str(mount.get("source") or "")
+    assert "grafana-provisioning" in source
+    assert (
+        "/Users/" not in source
+        or "compose-project" in source
+        or "grafana-provisioning" in source
+    )
 
 
 def test_services_run_as_the_verified_non_root_users(
@@ -487,6 +501,7 @@ def test_grafana_environment_wires_the_password_file(
         environment["GF_SECURITY_ADMIN_PASSWORD__FILE"]
         == "/run/secrets/grafana_admin_password"
     )
+    assert environment.get("GF_PATHS_PROVISIONING") == "/etc/grafana/provisioning"
     assert "GF_SECURITY_ADMIN_PASSWORD" not in environment
 
 

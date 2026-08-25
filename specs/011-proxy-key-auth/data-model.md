@@ -1,0 +1,1 @@
+# Data Model SF11\n\n见源规格实体；实现 `services/proxy-gateway/internal/domain/proxyauth/`。\n

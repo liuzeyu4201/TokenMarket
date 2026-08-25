@@ -5,7 +5,8 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock README.md ./
-RUN pip install --no-cache-dir uv==0.11.3 && uv sync --frozen --no-dev
+RUN pip install --no-cache-dir uv==0.11.3 && uv sync --frozen --no-dev \
+    && uv pip install --python .venv --upgrade "setuptools>=80" "msgpack>=1.2.1"
 
 COPY app ./app
 COPY alembic ./alembic
@@ -31,20 +32,18 @@ COPY --from=builder /build/app /app/app
 COPY --from=builder /build/alembic /app/alembic
 COPY --from=builder /build/alembic.ini /app/alembic.ini
 
+# Drop leftover vulnerable wheels Trivy still fingerprints:
+# CVE-2025-47273 setuptools 70.3.0; GHSA-6v7p-g79w-8964 msgpack 1.1.2.
+RUN python3 -m pip install --no-cache-dir --upgrade \
+      "setuptools>=80" \
+      "msgpack>=1.2.1" \
+    && (find /usr /app -type d -name ensurepip -exec rm -rf {} + || true) \
+    && (find /usr /app \( -name 'setuptools-70*' -o -name 'msgpack-1.1.2*' \) -exec rm -rf {} + || true) \
+    && rm -rf /root/.cache/pip
+
 ENV PATH=/app/.venv/bin:$PATH
 ENV PYTHONPATH=/app
 ENV PORT=8001
-
-# Trivy reports these in the copied venv / ensurepip wheels, not apt:
-# CVE-2025-47273 setuptools 70.3.0; GHSA-6v7p-g79w-8964 msgpack 1.1.2.
-RUN pip install --no-cache-dir --upgrade \
-      "setuptools>=80" \
-      "msgpack>=1.2.1" \
-    && pip install --no-cache-dir --upgrade --target /app/.venv/lib/python3.11/site-packages \
-      "setuptools>=80" \
-      "msgpack>=1.2.1" \
-    && rm -rf /usr/lib/python3.11/ensurepip /usr/local/lib/python3.11/ensurepip \
-    && rm -rf /root/.cache/pip
 
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 USER appuser

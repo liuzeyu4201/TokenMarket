@@ -1,0 +1,1 @@
+# Data Model SF14\n\n见源规格实体；实现 `services/proxy-gateway/internal/domain/keypool/pool.go`。\n

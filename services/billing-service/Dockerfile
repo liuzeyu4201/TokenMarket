@@ -35,6 +35,17 @@ ENV PATH=/app/.venv/bin:$PATH
 ENV PYTHONPATH=/app
 ENV PORT=8001
 
+# Trivy reports these in the copied venv / ensurepip wheels, not apt:
+# CVE-2025-47273 setuptools 70.3.0; GHSA-6v7p-g79w-8964 msgpack 1.1.2.
+RUN pip install --no-cache-dir --upgrade \
+      "setuptools>=80" \
+      "msgpack>=1.2.1" \
+    && pip install --no-cache-dir --upgrade --target /app/.venv/lib/python3.11/site-packages \
+      "setuptools>=80" \
+      "msgpack>=1.2.1" \
+    && rm -rf /usr/lib/python3.11/ensurepip /usr/local/lib/python3.11/ensurepip \
+    && rm -rf /root/.cache/pip
+
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 USER appuser
 

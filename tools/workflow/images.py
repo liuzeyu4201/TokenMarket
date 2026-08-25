@@ -67,6 +67,33 @@ def _run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, check=False, **kwargs)
 
 
+def _trivy_finding_summary(payload: str) -> str:
+    """Compact HIGH/CRITICAL finding list for workflow events."""
+    if not payload:
+        return "see trivy output"
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return " ".join(payload.split())[:240]
+    findings: list[str] = []
+    for result in data.get("Results") or []:
+        for vuln in result.get("Vulnerabilities") or []:
+            vid = str(vuln.get("VulnerabilityID") or "").strip()
+            pkg = str(vuln.get("PkgName") or "").strip()
+            installed = str(vuln.get("InstalledVersion") or "").strip()
+            fixed = str(vuln.get("FixedVersion") or "").strip()
+            if not vid:
+                continue
+            findings.append(f"{vid}:{pkg}@{installed}->{fixed}")
+            if len(findings) >= 12:
+                break
+        if len(findings) >= 12:
+            break
+    if findings:
+        return "; ".join(findings)
+    return " ".join(payload.split())[:240]
+
+
 def new_smoke_run_token() -> str:
     """Return a short unique token for one runtime-smoke run."""
     return uuid.uuid4().hex[:12]
@@ -305,9 +332,7 @@ def runtime_smoke(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any
                 phase="aggregate",
                 status=final["status"],
                 code=DiagnosticCode(final["code"]),
-                duration_ms=sum(
-                    int(_event_fields(e).get("duration_ms") or 0) for e in log.events
-                ),
+                duration_ms=sum(int(_event_fields(e).get("duration_ms") or 0) for e in log.events),
                 message=f"runtime-smoke aggregate: {final}",
                 run_id=run_id,
             )
@@ -416,6 +441,8 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
                 "--scanners",
                 "vuln",
                 "--ignore-unfixed",
+                "--format",
+                "json",
                 image_tag,
             ]
         )
@@ -430,9 +457,8 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
             emit(log.events[-1])
         else:
             failed = True
-            detail = (scan.stderr or scan.stdout or "").strip()
-            # Keep message bounded and free of multi-line noise for JSONL.
-            snippet = " ".join(detail.split())[:240] if detail else "see trivy output"
+            detail = (scan.stdout or scan.stderr or "").strip()
+            snippet = _trivy_finding_summary(detail)
             log.finish(
                 "image-scan",
                 comp_id,
@@ -454,9 +480,7 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
             phase="aggregate",
             status=final["status"],
             code=DiagnosticCode(final["code"]),
-            duration_ms=sum(
-                int(_event_fields(e).get("duration_ms") or 0) for e in log.events
-            ),
+            duration_ms=sum(int(_event_fields(e).get("duration_ms") or 0) for e in log.events),
             message=f"image-scan aggregate: {final}",
             run_id=run_id,
         )

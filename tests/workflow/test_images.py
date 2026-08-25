@@ -523,6 +523,31 @@ def test_image_scan_plain_mode_reads_payload_without_keyerror(
     assert "trivy" in out.lower()
 
 
+def test_trivy_finding_summary_extracts_cve_and_fix_versions() -> None:
+    import json
+
+    from workflow.images import _trivy_finding_summary
+
+    payload = json.dumps(
+        {
+            "Results": [
+                {
+                    "Vulnerabilities": [
+                        {
+                            "VulnerabilityID": "CVE-2026-1",
+                            "PkgName": "openssl",
+                            "InstalledVersion": "1.0",
+                            "FixedVersion": "1.1",
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+    assert _trivy_finding_summary(payload) == "CVE-2026-1:openssl@1.0->1.1"
+    assert "not json" in _trivy_finding_summary("this is not json")
+
+
 def test_runtime_smoke_rejects_root_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

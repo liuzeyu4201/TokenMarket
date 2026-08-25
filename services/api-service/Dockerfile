@@ -13,10 +13,13 @@ COPY app ./app
 FROM python:3.11.15-slim
 
 WORKDIR /app
-# Harden the base image Python tooling that Trivy flags (not application deps).
-RUN pip install --no-cache-dir --upgrade \
-      "pip>=25.0" \
-      "setuptools>=78" \
+# Harden OS packages and CPython tooling that Trivy flags (not application deps).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --upgrade \
+      "pip>=25.3" \
+      "setuptools>=80" \
       "wheel>=0.46.2" \
       "jaraco.context>=6.1.0" \
     && rm -rf /root/.cache/pip

@@ -1,38 +1,39 @@
-# Architecture Decision Records
+**中文** | [English](README.en.md)
 
-This directory records significant architectural decisions for the TokenMarket
-monorepo. Each ADR follows the template established by
-`001-github-actions-ci-adapter.md` and includes:
+# 架构决策记录（ADR）
 
-- Context and problem statement
-- Decision owner and stakeholders
-- Options considered
-- Decision and consequences
-- Failure modes, operational costs, and rollback path
-- Alternatives retained for future review
+本目录记录 monorepo 的重大架构决策。每条 ADR 沿用 `001-github-actions-ci-adapter.md` 的结构：
 
-## Index
+- 背景与问题
+- 决策所有者与相关方
+- 备选方案
+- 决策与后果
+- 失败模式、运维成本、回滚路径
+- 保留的替代方案
 
-| ADR | Title | Status |
-|-----|-------|--------|
-| [001](001-github-actions-ci-adapter.md) | GitHub Actions CI adapter | Accepted |
-| [002](002-local-compose-lifecycle.md) | Local dependency lifecycle via Docker Compose | Accepted (implementation verification pending) |
-| [003](003-layered-compose-deploy.md) | Layered Compose and deploy entry isolation | Accepted (implementation verification pending) |
+历史 ADR 正文保持撰写时的语言（多为英文或已中文化的 004），**不在此轮整篇翻译**。
 
-## When to write an ADR
+## 索引
 
-Create or update an ADR before introducing:
+| ADR | 标题 | 状态 |
+|-----|------|------|
+| [001](001-github-actions-ci-adapter.md) | GitHub Actions 作为 `make ci` 的只读薄适配层 | Accepted |
+| [002](002-local-compose-lifecycle.md) | 本地依赖生命周期走 Docker Compose | Accepted（实现已 Verified） |
+| [003](003-layered-compose-deploy.md) | 分层 Compose 与 deploy 入口隔离 | Accepted |
+| [004](004-hosted-toolchain-execution-profiles.md) | 托管工具链执行 profile | Accepted |
 
-- A new service or component
-- A new storage system or persistence model
-- A new protocol or external integration contract
-- A new shared abstraction consumed by more than one component
-- A new cross-service dependency
+## 何时写 ADR
 
-## Review rules
+在引入以下任一对象的 PR 中同时写入或更新 ADR：
 
-1. ADRs are reviewed as part of the same PR that implements the decision.
-2. ADRs must be linked from the relevant component README and from the
-   implementation traceability checklist.
-3. ADRs are immutable once merged; supersede them with a new ADR rather than
-   rewriting history.
+- 新服务或组件
+- 新存储或持久化模型
+- 新协议或外部集成契约
+- 被多个组件消费的新共享抽象
+- 新的跨服务依赖
+
+## 评审规则
+
+1. ADR 与实现它的 PR 一起评审。
+2. 相关组件 README 与可追溯清单必须链接该 ADR。
+3. 合入后 ADR 不可改写历史；用新 ADR 取代，而不是改旧文。

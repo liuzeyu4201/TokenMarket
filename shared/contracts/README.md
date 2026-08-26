@@ -4,6 +4,8 @@ This directory holds versioned cross-component contracts. Contracts are the
 single source of truth for HTTP APIs, events, shared schemas and developer
 workflow definitions.
 
+Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文) · [`docs/api/README.en.md`](../../docs/api/README.en.md) (English). Do not copy OpenAPI trees into `docs/api/`.
+
 ## Ownership and versioning
 
 - Every contract has an owner, semantic version and compatibility statement.

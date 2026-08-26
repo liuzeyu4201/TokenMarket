@@ -1,6 +1,8 @@
 # Frontend
 
-TokenMarket React 18 web frontend (SF01 scaffold + registration shell for SF03).
+TokenMarket React 18 web frontend (SF01 scaffold + registration / login / session shell).
+
+Hub: [`docs/architecture/README.md`](../docs/architecture/README.md) · [English](../docs/architecture/README.en.md).
 
 ## Ownership
 
@@ -20,11 +22,13 @@ make build
 
 ## Routes
 
-| Path        | Purpose                                  |
-| ----------- | ---------------------------------------- |
-| `/`         | Home placeholder (not the register form) |
-| `/register` | User registration form                   |
-| `*`         | Not found / not yet open                 |
+| Path         | Purpose                                              |
+| ------------ | ---------------------------------------------------- |
+| `/`          | Home placeholder (not the register form)             |
+| `/register`  | User registration form (does not issue a session)    |
+| `/login`     | Phone OTP login                                      |
+| `/dashboard` | Authenticated placeholder; no buyer/seller business UI |
+| `*`          | Not found / not yet open                             |
 
 ## Local development
 

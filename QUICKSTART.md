@@ -1,4 +1,8 @@
+**中文** | [English](QUICKSTART.en.md)
+
 # TokenMarket 本地开发快速开始
+
+总览见 [README.md](README.md)。文档分类见 [docs/README.md](docs/README.md)。
 
 目标很简单：完成一次性准备后，日常开发只记两条命令。
 
@@ -135,7 +139,10 @@ curl -fsS http://127.0.0.1:8000/health/ready
 
 常用页面：
 
+- 首页：`http://127.0.0.1:5173/`
 - 注册页：`http://127.0.0.1:5173/register`
+- 登录页：`http://127.0.0.1:5173/login`
+- 工作台（需会话）：`http://127.0.0.1:5173/dashboard`
 - Grafana：`http://127.0.0.1:3000`
 
 `/health/live` 只表示进程存活；依赖数据库的功能还需要就绪检查和迁移成功。
@@ -178,4 +185,5 @@ make deploy mode=test
 - `make help`
 - `ops/runbooks/local-environment.md`
 - `ops/runbooks/deploy.md`
-- `README.md`
+- `README.md` / `README.en.md`
+- `docs/README.md`

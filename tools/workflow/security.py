@@ -1,13 +1,15 @@
-"""Security helpers: redaction and configuration metadata validation.
+"""Security helpers: redaction, placeholder validation, and desensitization scan.
 
 This module provides the minimum redaction and placeholder validation used by
-``events.py`` and ``cli.py`` in SF01. The full configuration contract tests are
-implemented in US2.
+``events.py`` and ``cli.py`` in SF01, plus the tracked-tree desensitization
+scan used before publishing the repository.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -63,18 +65,207 @@ def validate_no_secret_in_text(text: str, context: str = "text") -> None:
                 break
 
 
+def parse_env_assignments(text: str) -> dict[str, str]:
+    """Parse ``.env``-style assignments, ignoring comments and blank lines."""
+    result: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            name, _, value = line.partition("=")
+            result[name.strip()] = value.strip()
+    return result
+
+
 def load_env_example(path: Any) -> dict[str, str]:
     """Parse a .env.example-style file into name/value entries."""
-    result: dict[str, str] = {}
-    with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line or line.startswith("#"):
+    return parse_env_assignments(Path(path).read_text(encoding="utf-8"))
+
+
+# Generic home directory names used as sentinels/placeholders in tests and docs.
+# Real operator or workstation names must not be added here.
+_GENERIC_HOME_USERS = frozenset(
+    {
+        "alice",
+        "bob",
+        "developer",
+        "user",
+        "runner",
+        "example",
+        "workstation",
+        "contributor",
+        "operator",
+    }
+)
+
+_UNIX_HOME_RE = re.compile(r"(?:/Users|/home)/([A-Za-z0-9._-]+)/")
+_WINDOWS_HOME_RE = re.compile(
+    r"[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)\\",
+    re.IGNORECASE,
+)
+_PEM_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN (?:RSA |OPENSSH |EC |DSA |ENCRYPTED )?PRIVATE KEY-----"
+)
+_TM_LOCAL_LIVE_RE = re.compile(r"tm_local_[A-Za-z0-9_-]{32,}")
+_SECRET_ENV_NAME_RE = re.compile(
+    r"(?:^|_)(?:PASSWORD|SECRET|PEPPER|API_KEY|HMAC_KEY|GATEWAY_KEY|" r"KEY_MATERIAL|TOKEN)(?:_|$)",
+    re.IGNORECASE,
+)
+_URL_SECRET_ENV_NAMES = frozenset({"DATABASE_URL", "REDIS_URL", "ADMIN_DATABASE_URL"})
+_GITLEAKS_ALLOWLIST_ITEM_RE = re.compile(r"'''([^']+)'''")
+_BINARY_SUFFIXES = frozenset(
+    {
+        ".xlsx",
+        ".docx",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".pdf",
+        ".zip",
+        ".woff",
+        ".woff2",
+        ".ico",
+        ".bin",
+    }
+)
+
+
+@dataclass(frozen=True)
+class DesenseFinding:
+    """A desensitization hit. Messages carry path/kind/line only — never the value."""
+
+    path: str
+    kind: str
+    line: int
+
+    def format(self) -> str:
+        return f"{self.path}:{self.line}:{self.kind}"
+
+
+def is_generic_home_user(name: str) -> bool:
+    """Return True if *name* is a documented placeholder, not an operator identity."""
+    lowered = name.lower()
+    if lowered.startswith("tmtest-"):
+        return True
+    return lowered in _GENERIC_HOME_USERS
+
+
+def load_gitleaks_allowlist_patterns(config_path: Path) -> tuple[re.Pattern[str], ...]:
+    """Load exact-value allowlist regexes from the repository gitleaks config."""
+    text = Path(config_path).read_text(encoding="utf-8")
+    patterns: list[re.Pattern[str]] = []
+    for raw in _GITLEAKS_ALLOWLIST_ITEM_RE.findall(text):
+        patterns.append(re.compile(raw))
+    return tuple(patterns)
+
+
+def _is_env_template(relative_path: str) -> bool:
+    name = Path(relative_path).name
+    return name == ".env.example" or name.endswith(".example")
+
+
+def _is_secret_env_name(name: str) -> bool:
+    if name in _URL_SECRET_ENV_NAMES:
+        return True
+    return bool(_SECRET_ENV_NAME_RE.search(name))
+
+
+def _is_binary_path(path: Path) -> bool:
+    if path.suffix.lower() in _BINARY_SUFFIXES:
+        return True
+    try:
+        chunk = path.read_bytes()[:8192]
+    except OSError:
+        return True
+    return b"\0" in chunk
+
+
+def _allowlisted_or_placeholder(value: str, allowlist: tuple[re.Pattern[str], ...]) -> bool:
+    if is_safe_placeholder(value):
+        return True
+    return any(pattern.search(value) for pattern in allowlist)
+
+
+def _scan_env_template_values(relative_path: str, text: str) -> list[DesenseFinding]:
+    findings: list[DesenseFinding] = []
+    for line_no, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        name = name.strip()
+        value = value.strip().strip("\"'")
+        if not value:
+            continue
+        if _TM_LOCAL_LIVE_RE.search(value):
+            findings.append(DesenseFinding(relative_path, "env-live-secret", line_no))
+            continue
+        if _is_secret_env_name(name) and not is_safe_placeholder(value):
+            findings.append(DesenseFinding(relative_path, "env-usable-secret", line_no))
+    return findings
+
+
+def scan_text_for_desensitization(
+    relative_path: str,
+    text: str,
+    *,
+    allowlist: tuple[re.Pattern[str], ...] = (),
+) -> list[DesenseFinding]:
+    """Scan one file's text for leaks that default gitleaks rules miss or must confirm."""
+    findings: list[DesenseFinding] = []
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        if _PEM_PRIVATE_KEY_RE.search(line):
+            findings.append(DesenseFinding(relative_path, "private-key-pem", line_no))
+        for match in _UNIX_HOME_RE.finditer(line):
+            if not is_generic_home_user(match.group(1)):
+                findings.append(DesenseFinding(relative_path, "operator-home-path", line_no))
+        for match in _WINDOWS_HOME_RE.finditer(line):
+            if not is_generic_home_user(match.group(1)):
+                findings.append(DesenseFinding(relative_path, "operator-home-path", line_no))
+        for match in _SECRET_PATTERNS[0].finditer(line):
+            if _allowlisted_or_placeholder(match.group(0), allowlist):
                 continue
-            if "=" in line:
-                name, _, value = line.partition("=")
-                result[name.strip()] = value.strip()
-    return result
+            findings.append(DesenseFinding(relative_path, "live-credential", line_no))
+    if _is_env_template(relative_path):
+        findings.extend(_scan_env_template_values(relative_path, text))
+    return findings
+
+
+def _listed_publishable_files(repo_root: Path) -> list[str]:
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "-c", "-o", "--exclude-standard"],
+        cwd=str(repo_root),
+        capture_output=True,
+        check=True,
+    )
+    names = [part.decode("utf-8") for part in result.stdout.split(b"\0") if part]
+    return names
+
+
+def scan_tracked_tree_for_desensitization(repo_root: Path) -> list[DesenseFinding]:
+    """Walk publishable files (tracked + untracked non-ignored) and return leak findings."""
+    root = Path(repo_root)
+    config = root / ".gitleaks.toml"
+    allowlist = load_gitleaks_allowlist_patterns(config) if config.is_file() else ()
+    findings: list[DesenseFinding] = []
+    for rel in _listed_publishable_files(root):
+        path = root / rel
+        if not path.is_file() or _is_binary_path(path):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        findings.extend(scan_text_for_desensitization(rel, text, allowlist=allowlist))
+    return findings
+
+
+def format_desense_findings(findings: list[DesenseFinding]) -> str:
+    """Format findings as path:line:kind lines with no secret values."""
+    return "\n".join(item.format() for item in findings)
 
 
 def validate_config(schema: dict[str, Any], values: dict[str, str]) -> None:

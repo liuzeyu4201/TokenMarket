@@ -1,9 +1,7 @@
 # TokenMarket gitleaks configuration.
-# Synthetic credentials in automated tests, Spec Kit docs, and documentation
-# examples are allowlisted so make security-check can fail closed on real leaks
-# without failing on intentional fixtures.
-# Ephemeral scans in test_secret_scan.py still run without this config on a
-# temp directory so detection of the synthetic pattern remains covered.
+# Only exact inert fixture values are allowlisted. Path-wide exclusions of
+# tests, Go tests, specs, or docs are forbidden: a real secret in those trees
+# must fail make security-check.
 
 title = "TokenMarket"
 
@@ -11,13 +9,18 @@ title = "TokenMarket"
 useDefault = true
 
 [allowlist]
-description = "Synthetic credentials in tests and documentation examples only"
-paths = [
-  '''tests/workflow/.*''',
-  '''services/.*/.*_test\.go''',
-  '''项目开发/.*''',
-  '''specs/.*''',
-]
+description = "Exact inert fixture values only (never path-wide trees)"
 regexes = [
-  '''local-dev-only-token''',
+  '''^local-dev-only-token$''',
+  '''^sk-synthetic-test-key-not-real$''',
+  '''^sk-replace-me$''',
+  '''^sk-live-abc123$''',
+  '''^sk-1234567890abcdef$''',
+  '''^sk-proj-\.\.\.$''',
+  '''^sk-ant-\.\.\.$''',
+  '''^sk-\.\.\.$''',
+  '''^dev-only-proxy-pepper-not-for-prod$''',
+  '''^tmk-0123456789abcdef0123456789abcdef$''',
+  '''^sk-abcdefghijklmnopqrstuvwxyz1234$''',
+  '''^sk-abcdefghijklmnopqrstuvwxyz1234567890$''',
 ]

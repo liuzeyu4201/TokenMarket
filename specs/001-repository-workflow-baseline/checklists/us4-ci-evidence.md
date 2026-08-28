@@ -86,7 +86,7 @@ runtime-smoke → image-scan
 执行的命令：
 
 ```bash
-PATH="/Users/token/.local/go1.25.12/bin:/Users/token/.local/bin:/Users/token/go/bin:/Users/token/.nvm/versions/node/v24.18.0/bin:$PATH" make ci
+PATH="$HOME/.local/bin:$PATH" make ci
 ```
 
 结果：

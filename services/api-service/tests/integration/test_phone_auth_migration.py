@@ -299,6 +299,6 @@ def test_phone_auth_migration_upgrade_downgrade_retry_head(
             rev = conn.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            assert rev == "0006_proxy_keys_and_usage"
+            assert rev == "0007_actor_scoped_idempotency"
     finally:
         engine.dispose()

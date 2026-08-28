@@ -10,8 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domain.owners import owner_can_route_seller_keys
 from app.domain.sellerkeys.lifecycle import has_positive_quota, routable
 from app.domain.sellerkeys.models import SellerAPIKey, SellerKeyIdempotency
+from app.domain.users.models import User, UserRole, UserStatus
 
 
 def _row_to_dict(row: SellerAPIKey) -> dict[str, Any]:
@@ -82,8 +84,10 @@ class SQLKeyStore:
             raise ValueError("duplicate") from exc
         return row.id
 
-    def get_idempotency(self, key: str) -> tuple[str, uuid.UUID | None] | None:
-        row = self._s.get(SellerKeyIdempotency, key)
+    def get_idempotency(
+        self, actor_id: uuid.UUID, key: str
+    ) -> tuple[str, uuid.UUID | None] | None:
+        row = self._s.get(SellerKeyIdempotency, (actor_id, key))
         if row is None:
             return None
         return row.request_hash, row.result_key_id
@@ -96,7 +100,7 @@ class SQLKeyStore:
         code: str,
         key_id: uuid.UUID | None,
     ) -> None:
-        existing = self._s.get(SellerKeyIdempotency, key)
+        existing = self._s.get(SellerKeyIdempotency, (seller_id, key))
         if existing is not None:
             existing.request_hash = digest
             existing.result_code = code
@@ -148,15 +152,29 @@ class SQLKeyStore:
 
     def list_routable(self) -> list[dict[str, Any]]:
         rows = self._s.execute(
-            select(SellerAPIKey).where(SellerAPIKey.soft_deleted.is_(False))
-        ).scalars()
-        return [
-            _row_to_dict(r)
-            for r in rows
-            if routable(r.administrative_state, r.health_state)
-            and has_positive_quota(r.remaining_quota)
-            and r.ciphertext
-        ]
+            select(SellerAPIKey, User)
+            .join(User, User.id == SellerAPIKey.seller_id)
+            .where(
+                SellerAPIKey.soft_deleted.is_(False),
+                User.is_deleted.is_(False),
+                User.status == UserStatus.active,
+                User.role.in_((UserRole.seller, UserRole.both)),
+            )
+        ).all()
+        out: list[dict[str, Any]] = []
+        for key_row, user in rows:
+            if not owner_can_route_seller_keys(
+                user.status.value, user.role.value, user.is_deleted
+            ):
+                continue
+            if not (
+                routable(key_row.administrative_state, key_row.health_state)
+                and has_positive_quota(key_row.remaining_quota)
+                and key_row.ciphertext
+            ):
+                continue
+            out.append(_row_to_dict(key_row))
+        return out
 
     def apply_health(self, key_id: uuid.UUID, health: str) -> None:
         row = self._s.get(SellerAPIKey, key_id)

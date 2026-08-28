@@ -21,6 +21,7 @@ class Actor:
     user_id: uuid.UUID
     role: str
     status: str
+    session_id: uuid.UUID | None = None
 
 
 async def resolve_actor(request: Request) -> Actor | JSONResponse:
@@ -44,12 +45,17 @@ async def resolve_actor(request: Request) -> Actor | JSONResponse:
                 content=error_envelope(ident.code, ident.message, request_id=rid),
             )
         user = await _load_user(session, ident.user_id)
-        if user is None or user.status != UserStatus.active:
+        if user is None or user.status != UserStatus.active or user.is_deleted:
             return JSONResponse(
                 status_code=401,
                 content=error_envelope("UNAUTHENTICATED", "未认证", request_id=rid),
             )
-        return Actor(user_id=user.id, role=user.role.value, status=user.status.value)
+        return Actor(
+            user_id=user.id,
+            role=user.role.value,
+            status=user.status.value,
+            session_id=ident.session_id,
+        )
 
 
 async def _load_user(session: AsyncSession, user_id: uuid.UUID) -> User | None:

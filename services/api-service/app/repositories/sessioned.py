@@ -40,8 +40,10 @@ class SessionedSQLKeyStore:
     def insert(self, record: dict[str, Any]) -> uuid.UUID:
         return self._run(lambda s: s.insert(record))
 
-    def get_idempotency(self, key: str) -> tuple[str, uuid.UUID | None] | None:
-        return self._run(lambda s: s.get_idempotency(key))
+    def get_idempotency(
+        self, actor_id: uuid.UUID, key: str
+    ) -> tuple[str, uuid.UUID | None] | None:
+        return self._run(lambda s: s.get_idempotency(actor_id, key))
 
     def put_idempotency(
         self,
@@ -100,11 +102,17 @@ class SessionedProxyStore:
     def list_by_buyer(self, buyer_id: uuid.UUID) -> list[IssuedProxyKey]:
         return self._run(lambda s: s.list_by_buyer(buyer_id))
 
-    def get_idempotency(self, key: str) -> tuple[str, uuid.UUID | None] | None:
-        return self._run(lambda s: s.get_idempotency(key))
+    def get_idempotency(
+        self, actor_id: uuid.UUID, key: str
+    ) -> tuple[str, uuid.UUID | None] | None:
+        return self._run(lambda s: s.get_idempotency(actor_id, key))
 
     def put_idempotency(
-        self, key: str, buyer_id: uuid.UUID, digest: str, key_id: uuid.UUID
+        self,
+        key: str,
+        buyer_id: uuid.UUID,
+        digest: str,
+        key_id: uuid.UUID | None,
     ) -> None:
         self._run(lambda s: s.put_idempotency(key, buyer_id, digest, key_id))
 

@@ -6,9 +6,12 @@ import hashlib
 import hmac
 import os
 import uuid
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
+
+from app.domain.owners import OwnerState, owner_state_allows_proxy
 
 
 class ProxyKeyError(Exception):
@@ -56,48 +59,91 @@ class ProxyKeyStore(Protocol):
 
     def list_by_buyer(self, buyer_id: uuid.UUID) -> list[IssuedProxyKey]: ...
 
-    def get_idempotency(self, key: str) -> tuple[str, uuid.UUID | None] | None: ...
+    def get_idempotency(
+        self, actor_id: uuid.UUID, key: str
+    ) -> tuple[str, uuid.UUID | None] | None: ...
 
     def put_idempotency(
-        self, key: str, buyer_id: uuid.UUID, digest: str, key_id: uuid.UUID
+        self,
+        key: str,
+        buyer_id: uuid.UUID,
+        digest: str,
+        key_id: uuid.UUID | None,
     ) -> None: ...
 
 
 class MemoryProxyStore:
     def __init__(self) -> None:
+        self._lock = threading.Lock()
         self.by_hash: dict[str, IssuedProxyKey] = {}
         self.by_id: dict[uuid.UUID, IssuedProxyKey] = {}
-        self.idem: dict[str, tuple[str, uuid.UUID | None]] = {}
+        self.idem: dict[tuple[uuid.UUID, str], tuple[str, uuid.UUID | None]] = {}
         self.hashes: dict[uuid.UUID, str] = {}
+        self.owners: dict[uuid.UUID, OwnerState] = {}
+
+    def set_owner(
+        self,
+        user_id: uuid.UUID,
+        *,
+        status: str,
+        role: str,
+        is_deleted: bool = False,
+    ) -> None:
+        with self._lock:
+            self.owners[user_id] = OwnerState(
+                status=status, role=role, is_deleted=is_deleted
+            )
 
     def get_by_hash(self, secret_hash: str) -> IssuedProxyKey | None:
-        rec = self.by_hash.get(secret_hash)
-        return rec
+        with self._lock:
+            rec = self.by_hash.get(secret_hash)
+            if rec is None:
+                return rec
+            owner = self.owners.get(rec.buyer_id)
+            if not owner_state_allows_proxy(owner):
+                return None
+            return rec
 
     def get_by_id(self, key_id: uuid.UUID) -> IssuedProxyKey | None:
-        return self.by_id.get(key_id)
+        with self._lock:
+            return self.by_id.get(key_id)
 
     def insert(self, rec: IssuedProxyKey, secret_hash: str) -> None:
-        self.by_hash[secret_hash] = rec
-        self.by_id[rec.key_id] = rec
-        self.hashes[rec.key_id] = secret_hash
+        with self._lock:
+            self.by_hash[secret_hash] = rec
+            self.by_id[rec.key_id] = rec
+            self.hashes[rec.key_id] = secret_hash
+            if rec.buyer_id not in self.owners:
+                self.owners[rec.buyer_id] = OwnerState(
+                    status="active", role="buyer", is_deleted=False
+                )
 
     def save(self, rec: IssuedProxyKey) -> None:
-        self.by_id[rec.key_id] = rec
-        h = self.hashes.get(rec.key_id)
-        if h:
-            self.by_hash[h] = rec
+        with self._lock:
+            self.by_id[rec.key_id] = rec
+            h = self.hashes.get(rec.key_id)
+            if h:
+                self.by_hash[h] = rec
 
     def list_by_buyer(self, buyer_id: uuid.UUID) -> list[IssuedProxyKey]:
-        return [r for r in self.by_id.values() if r.buyer_id == buyer_id]
+        with self._lock:
+            return [r for r in self.by_id.values() if r.buyer_id == buyer_id]
 
-    def get_idempotency(self, key: str) -> tuple[str, uuid.UUID | None] | None:
-        return self.idem.get(key)
+    def get_idempotency(
+        self, actor_id: uuid.UUID, key: str
+    ) -> tuple[str, uuid.UUID | None] | None:
+        with self._lock:
+            return self.idem.get((actor_id, key))
 
     def put_idempotency(
-        self, key: str, buyer_id: uuid.UUID, digest: str, key_id: uuid.UUID
+        self,
+        key: str,
+        buyer_id: uuid.UUID,
+        digest: str,
+        key_id: uuid.UUID | None,
     ) -> None:
-        self.idem[key] = (digest, key_id)
+        with self._lock:
+            self.idem[(buyer_id, key)] = (digest, key_id)
 
 
 class ProxyKeyService:
@@ -120,7 +166,7 @@ class ProxyKeyService:
             raise ProxyKeyError("UNSUPPORTED_PLATFORM", "平台不受支持", http_status=400)
         digest = hashlib.sha256(f"{platform}|{name or ''}".encode()).hexdigest()
         if idempotency_key:
-            existing = self._store.get_idempotency(idempotency_key)
+            existing = self._store.get_idempotency(buyer_id, idempotency_key)
             if existing:
                 prev_digest, prev_id = existing
                 if prev_digest != digest:

@@ -11,7 +11,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.domain.sellerkeys.crypto import CredentialEncryptor
-from app.domain.usage.service import UsageRecord, UsageRecorder
+from app.domain.usage.service import (
+    UsageConflictError,
+    UsageRecord,
+    UsageRecorder,
+)
 from app.schemas.envelope import error_envelope, success_envelope
 
 router = APIRouter(prefix="/internal/v1", tags=["internal"])
@@ -166,6 +170,8 @@ async def ingest_usage(
         buyer = None
         seller = None
     status = "complete" if body.usage_source == "official" else "missing"
+    if body.partial and body.status_code < 400:
+        status = "incomplete"
     if body.status_code >= 400 and not body.partial:
         status = "failed"
     rec = UsageRecord(
@@ -188,10 +194,21 @@ async def ingest_usage(
     )
     if status == "failed":
         rec.status = "failed"
-    stored = recorder.record(rec)
+    try:
+        stored = recorder.record(rec)
+    except UsageConflictError:
+        return JSONResponse(
+            status_code=409,
+            content=error_envelope(
+                "USAGE_CONFLICT",
+                "用量观察冲突，已保留既有记录",
+                request_id=_rid(request),
+            ),
+        )
     return JSONResponse(
         status_code=200,
         content=success_envelope(
-            {"request_id": stored.request_id}, request_id=_rid(request)
+            {"request_id": stored.request_id, "status": stored.status},
+            request_id=_rid(request),
         ),
     )

@@ -30,6 +30,7 @@ from .domain.sellerkeys.crypto import CredentialEncryptor
 from .domain.sellerkeys.memory_store import MemoryKeyStore
 from .domain.sellerkeys.validator_http import FailClosedValidator, GatewayValidator
 from .domain.usage.service import UsageRecorder
+from .security.shared_secrets import SharedSecretError, load_process_shared_secrets
 from .errors import DependencyUnavailableError
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
@@ -41,28 +42,12 @@ VERSION = "0.1.0"
 logger = configure_logging()
 
 
-def _secret_bytes(name: str) -> bytes:
-    raw = (os.environ.get(name) or "").strip()
-    if not raw:
-        return os.urandom(32)
-    try:
-        decoded = bytes.fromhex(raw)
-        if len(decoded) >= 32:
-            return decoded
-    except ValueError:
-        pass
-    encoded = raw.encode("utf-8")
-    if len(encoded) < 32:
-        encoded = encoded + b"\x00" * (32 - len(encoded))
-    return encoded
-
-
 def _wire_key_services(application: FastAPI, database_url: str | None = None) -> None:
     """Attach seller/proxy/usage domain services used by SF08–SF17 HTTP."""
-    material = _secret_bytes("SELLER_KEY_MATERIAL")
-    fp = _secret_bytes("SELLER_KEY_FINGERPRINT_SECRET")
-    pepper = _secret_bytes("PROXY_AUTH_PEPPER")
-    version = os.environ.get("SELLER_KEY_VERSION") or "v1"
+    try:
+        material, fp, pepper, version = load_process_shared_secrets()
+    except SharedSecretError as exc:
+        raise RuntimeError(f"shared crypto material rejected: {exc.message}") from exc
     validate_url = (os.environ.get("PROVIDER_VALIDATE_URL") or "").strip()
     validate_token = (os.environ.get("PROVIDER_VALIDATE_INTERNAL_TOKEN") or "").strip()
     if validate_url and validate_token:

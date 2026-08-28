@@ -2,20 +2,43 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 import uuid
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.api.v1.actors import resolve_actor
+from app.api.v1.mutation_guard import guard_cookie_mutation
 from app.domain.sellerkeys.codes import OnboardingError
 from app.domain.sellerkeys.lifecycle import LifecycleService
 from app.domain.sellerkeys.service import OnboardingService
 from app.schemas.envelope import error_envelope, success_envelope
 
 router = APIRouter(prefix="/api/v1/seller-keys", tags=["seller-keys"])
+
+_validation_sema: asyncio.Semaphore | None = None
+_validation_sema_n = 0
+_T = TypeVar("_T")
+
+
+def _validation_limit() -> asyncio.Semaphore:
+    global _validation_sema, _validation_sema_n
+    n = max(1, int(os.environ.get("SELLER_VALIDATION_CONCURRENCY", "8")))
+    if _validation_sema is None or _validation_sema_n != n:
+        _validation_sema = asyncio.Semaphore(n)
+        _validation_sema_n = n
+    return _validation_sema
+
+
+async def _run_validated(fn: Callable[..., _T], *args: Any, **kwargs: Any) -> _T:
+    """Run blocking provider validation off the event loop, with a global bound."""
+    async with _validation_limit():
+        return await asyncio.to_thread(fn, *args, **kwargs)
 
 
 class OnboardBody(BaseModel):
@@ -61,6 +84,9 @@ async def onboard_seller_key(
     actor = await resolve_actor(request)
     if isinstance(actor, JSONResponse):
         return actor
+    denied = guard_cookie_mutation(request, session_id=actor.session_id)
+    if denied is not None:
+        return denied
     if not idempotency_key:
         return JSONResponse(
             status_code=400,
@@ -69,7 +95,9 @@ async def onboard_seller_key(
             ),
         )
     try:
-        out = _onboarding(request).onboard(
+        svc = _onboarding(request)
+        out = await _run_validated(
+            svc.onboard,
             seller_id=actor.user_id,
             role=actor.role,
             platform=body.platform,
@@ -141,12 +169,18 @@ async def _transition(key_id: uuid.UUID, request: Request, op: str) -> JSONRespo
     actor = await resolve_actor(request)
     if isinstance(actor, JSONResponse):
         return actor
+    denied = guard_cookie_mutation(request, session_id=actor.session_id)
+    if denied is not None:
+        return denied
     lc = _lifecycle(request)
     try:
         if op == "pause":
             item = lc.pause(key_id, actor.user_id, actor.role)
         elif op == "resume":
-            item = lc.resume(key_id, actor.user_id, actor.role, rid)
+            # Resume re-validates the upstream credential (blocking HTTP).
+            item = await _run_validated(
+                lc.resume, key_id, actor.user_id, actor.role, rid
+            )
         else:
             item = lc.revoke(key_id, actor.user_id, actor.role)
     except OnboardingError as exc:

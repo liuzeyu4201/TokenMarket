@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.api.v1.actors import resolve_actor
+from app.api.v1.mutation_guard import guard_cookie_mutation
 from app.domain.proxykeys.service import ProxyKeyError, ProxyKeyService
 from app.schemas.envelope import error_envelope, success_envelope
 
@@ -40,6 +41,9 @@ async def issue_proxy_key(
     actor = await resolve_actor(request)
     if isinstance(actor, JSONResponse):
         return actor
+    denied = guard_cookie_mutation(request, session_id=actor.session_id)
+    if denied is not None:
+        return denied
     try:
         issued = _svc(request).issue(
             buyer_id=actor.user_id,
@@ -103,6 +107,9 @@ async def revoke_proxy_key(key_id: uuid.UUID, request: Request) -> JSONResponse:
     actor = await resolve_actor(request)
     if isinstance(actor, JSONResponse):
         return actor
+    denied = guard_cookie_mutation(request, session_id=actor.session_id)
+    if denied is not None:
+        return denied
     try:
         rec = _svc(request).revoke(key_id, actor.user_id, actor.role)
     except ProxyKeyError as exc:

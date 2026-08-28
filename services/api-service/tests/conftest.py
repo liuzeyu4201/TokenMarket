@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import secrets
 import shutil
 import socket
@@ -44,6 +45,12 @@ POSTGRES_IMAGE = "postgres:15.18-bookworm"
 TEST_LABEL_KEY = "tmtest"
 TEST_LABEL_VALUE = "api-service-readiness"
 CONTAINER_PREFIX = "tmtest-"
+
+# Isolated tests inject shared crypto; production paths never invent keys.
+os.environ.setdefault("SELLER_KEY_MATERIAL", "11" * 32)
+os.environ.setdefault("SELLER_KEY_FINGERPRINT_SECRET", "22" * 32)
+os.environ.setdefault("PROXY_AUTH_PEPPER", "33" * 32)
+os.environ.setdefault("SELLER_KEY_VERSION", "v1")
 
 
 class ScriptedProbe:

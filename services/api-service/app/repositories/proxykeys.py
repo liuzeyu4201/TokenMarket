@@ -8,8 +8,10 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.owners import owner_can_use_proxy_keys
 from app.domain.proxykeys.models import ProxyKey, ProxyKeyIdempotency
 from app.domain.proxykeys.service import IssuedProxyKey
+from app.domain.users.models import User, UserRole, UserStatus
 
 
 def _to_issued(row: ProxyKey) -> IssuedProxyKey:
@@ -30,11 +32,24 @@ class SQLProxyStore:
 
     def get_by_hash(self, secret_hash: str) -> IssuedProxyKey | None:
         row = self._s.execute(
-            select(ProxyKey).where(
-                ProxyKey.secret_hash == secret_hash, ProxyKey.soft_deleted.is_(False)
+            select(ProxyKey)
+            .join(User, User.id == ProxyKey.buyer_id)
+            .where(
+                ProxyKey.secret_hash == secret_hash,
+                ProxyKey.soft_deleted.is_(False),
+                User.is_deleted.is_(False),
+                User.status == UserStatus.active,
+                User.role.in_((UserRole.buyer, UserRole.both)),
             )
         ).scalar_one_or_none()
-        return _to_issued(row) if row is not None else None
+        if row is None:
+            return None
+        owner = self._s.get(User, row.buyer_id)
+        if owner is None or not owner_can_use_proxy_keys(
+            owner.status.value, owner.role.value, owner.is_deleted
+        ):
+            return None
+        return _to_issued(row)
 
     def get_by_id(self, key_id: uuid.UUID) -> IssuedProxyKey | None:
         row = self._s.get(ProxyKey, key_id)
@@ -77,16 +92,22 @@ class SQLProxyStore:
         ).scalars()
         return [_to_issued(r) for r in rows]
 
-    def get_idempotency(self, key: str) -> tuple[str, uuid.UUID | None] | None:
-        row = self._s.get(ProxyKeyIdempotency, key)
+    def get_idempotency(
+        self, actor_id: uuid.UUID, key: str
+    ) -> tuple[str, uuid.UUID | None] | None:
+        row = self._s.get(ProxyKeyIdempotency, (actor_id, key))
         if row is None:
             return None
         return row.request_hash, row.result_key_id
 
     def put_idempotency(
-        self, key: str, buyer_id: uuid.UUID, digest: str, key_id: uuid.UUID
+        self,
+        key: str,
+        buyer_id: uuid.UUID,
+        digest: str,
+        key_id: uuid.UUID | None,
     ) -> None:
-        existing = self._s.get(ProxyKeyIdempotency, key)
+        existing = self._s.get(ProxyKeyIdempotency, (buyer_id, key))
         if existing is not None:
             existing.request_hash = digest
             existing.result_key_id = key_id

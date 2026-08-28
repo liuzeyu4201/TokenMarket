@@ -149,6 +149,62 @@ def test_purge_older_than_30_days() -> None:
     assert r._store.get("fresh") is not None
 
 
+def test_conflicting_payload_raises_and_keeps_first() -> None:
+    from app.domain.usage.service import UsageConflictError
+
+    r = UsageRecorder()
+    first = UsageRecord(
+        request_id="same-server-id",
+        buyer_id=None,
+        platform="volcano",
+        model="m",
+        prompt_tokens=1,
+        completion_tokens=1,
+        total_tokens=2,
+        status="complete",
+        source="official",
+    )
+    r.record(first)
+    with pytest.raises(UsageConflictError):
+        r.record(
+            UsageRecord(
+                request_id="same-server-id",
+                buyer_id=None,
+                platform="volcano",
+                model="other",
+                prompt_tokens=9,
+                completion_tokens=9,
+                total_tokens=18,
+                status="complete",
+                source="official",
+            )
+        )
+    kept = r._store.get("same-server-id")
+    assert kept is not None
+    assert kept.total_tokens == 2
+    assert r._store.conflicts[-1][1] == "payload_mismatch"
+
+
+def test_incomplete_stream_status_is_stored() -> None:
+    r = UsageRecorder()
+    r.record(
+        UsageRecord(
+            request_id="stream-missing",
+            buyer_id=None,
+            platform="volcano",
+            model="m",
+            prompt_tokens=None,
+            completion_tokens=None,
+            total_tokens=None,
+            status="incomplete",
+            source="not_available",
+            partial=True,
+        )
+    )
+    assert r.rows[0].status == "incomplete"
+    assert r.rows[0].total_tokens is None
+
+
 def test_complete_stored() -> None:
     r = UsageRecorder()
     r.record(

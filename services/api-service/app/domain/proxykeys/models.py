@@ -5,7 +5,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Integer,
+    PrimaryKeyConstraint,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -56,9 +64,14 @@ class ProxyKey(Base):
 
 class ProxyKeyIdempotency(Base):
     __tablename__ = "proxy_key_idempotency"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "buyer_id", "idempotency_key", name="pk_proxy_key_idempotency"
+        ),
+    )
 
-    idempotency_key: Mapped[str] = mapped_column(String(128), primary_key=True)
     buyer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     result_key_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True

@@ -66,6 +66,10 @@ class MemoryUsageStore:
         return len(dead)
 
 
+class UsageConflictError(ValueError):
+    """Identical request_id with a conflicting payload; the first row is kept."""
+
+
 class UsageRecorder:
     def __init__(self, store: UsageStore | None = None) -> None:
         self._store: UsageStore = store if store is not None else MemoryUsageStore()
@@ -101,6 +105,9 @@ class UsageRecorder:
         if existing is not None:
             if _conflict(existing, rec):
                 self._store.add_conflict(rec.request_id, "payload_mismatch")
+                raise UsageConflictError(
+                    f"conflicting usage observation for {rec.request_id}"
+                )
             return existing
         if rec.created_at is None:
             rec.created_at = datetime.now(timezone.utc)

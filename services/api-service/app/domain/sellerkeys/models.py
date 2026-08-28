@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Integer,
     LargeBinary,
+    PrimaryKeyConstraint,
     String,
     UniqueConstraint,
     text,
@@ -75,9 +76,14 @@ class SellerAPIKey(Base):
 
 class SellerKeyIdempotency(Base):
     __tablename__ = "seller_key_idempotency"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "seller_id", "idempotency_key", name="pk_seller_key_idempotency"
+        ),
+    )
 
-    idempotency_key: Mapped[str] = mapped_column(String(128), primary_key=True)
     seller_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     result_key_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True

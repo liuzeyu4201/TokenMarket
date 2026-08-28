@@ -57,7 +57,9 @@ class KeyStore(Protocol):
 
     def insert(self, record: dict[str, Any]) -> uuid.UUID: ...
 
-    def get_idempotency(self, key: str) -> tuple[str, uuid.UUID | None] | None: ...
+    def get_idempotency(
+        self, actor_id: uuid.UUID, key: str
+    ) -> tuple[str, uuid.UUID | None] | None: ...
 
     def put_idempotency(
         self,
@@ -127,7 +129,7 @@ class OnboardingService:
             )
         api_key = normalize_key(api_key)
         digest = request_digest(platform, api_key)
-        existing = self._store.get_idempotency(idempotency_key)
+        existing = self._store.get_idempotency(seller_id, idempotency_key)
         if existing:
             prev_digest, prev_id = existing
             if prev_digest != digest:

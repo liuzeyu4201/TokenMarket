@@ -14,7 +14,7 @@ Language rules: [Language](#language).
 | Local quick start | [`QUICKSTART.md`](../QUICKSTART.md) | — | Chinese + [`QUICKSTART.en.md`](../QUICKSTART.en.md) |
 | Contributing / branches | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | — | Chinese + [`CONTRIBUTING.en.md`](../CONTRIBUTING.en.md) |
 | Security disclosure | [`SECURITY.md`](../SECURITY.md) | — | Bilingual single file (GitHub-reserved name) |
-| License | [`LICENSE`](../LICENSE) | — | Bilingual single file |
+| License | [`LICENSE`](../LICENSE), [`NOTICE`](../NOTICE) | — | LICENSE is the official Apache-2.0 English text; NOTICE is bilingual |
 | Architecture | [`项目开发/1-项目架构与目录结构.md`](../项目开发/1-项目架构与目录结构.md) | [`architecture/`](architecture/README.en.md) | Hub bilingual; source Chinese |
 | HTTP / event contracts | [`shared/contracts/`](../shared/contracts/README.md) | [`api/`](api/README.en.md) | English identifiers; bilingual guides |
 | Product and research | [`产品调研/`](../产品调研/README.md), [`项目开发/`](../项目开发/README.md) | [`product/`](product/README.en.md) | Sources Chinese; hub bilingual |

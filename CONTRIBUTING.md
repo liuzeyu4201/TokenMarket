@@ -2,7 +2,7 @@
 
 # 贡献指南
 
-TokenMarket 是专有仓库。本文说明内部如何改代码、命名分支、开 PR。权威细则：[ops/runbooks/workflow.md](ops/runbooks/workflow.md)。
+TokenMarket 以 [Apache License 2.0](LICENSE) 开源。本文说明如何改代码、命名分支、开 PR。权威细则：[ops/runbooks/workflow.md](ops/runbooks/workflow.md)。
 
 ## 开发循环
 

@@ -14,7 +14,7 @@
 | 本地快速开始 | [`QUICKSTART.md`](../QUICKSTART.md) | — | 中文 + [`QUICKSTART.en.md`](../QUICKSTART.en.md) |
 | 贡献与分支 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | — | 中文 + [`CONTRIBUTING.en.md`](../CONTRIBUTING.en.md) |
 | 安全披露 | [`SECURITY.md`](../SECURITY.md) | — | 中英合订（GitHub 固定文件名） |
-| 许可 | [`LICENSE`](../LICENSE) | — | 中英合订 |
+| 许可 | [`LICENSE`](../LICENSE)、[`NOTICE`](../NOTICE) | — | LICENSE 为 Apache-2.0 官方英文正文；NOTICE 中英合订 |
 | 架构 | [`项目开发/1-项目架构与目录结构.md`](../项目开发/1-项目架构与目录结构.md) | [`architecture/`](architecture/README.md) | 枢纽双语；规范原文中文 |
 | HTTP / 事件契约 | [`shared/contracts/`](../shared/contracts/README.md) | [`api/`](api/README.md) | 契约英文标识；说明双语 |
 | 产品与调研 | [`产品调研/`](../产品调研/README.md)、[`项目开发/`](../项目开发/README.md) | [`product/`](product/README.md) | 原文中文；枢纽双语 |

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "TokenMarket API service scaffold (SF01)"
 readme = "README.md"
 requires-python = "==3.11.15"
-license = { text = "Proprietary" }
+license = { text = "Apache-2.0" }
 authors = [
     { name = "TokenMarket Engineering" },
 ]

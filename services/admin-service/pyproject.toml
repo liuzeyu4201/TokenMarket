@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Admin service scaffold for the TokenMarket monorepo."
 readme = "README.md"
 requires-python = "==3.11.15"
-license = { text = "Proprietary" }
+license = { text = "Apache-2.0" }
 authors = [
     { name = "TokenMarket Engineering" },
 ]

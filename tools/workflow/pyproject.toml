@@ -3,7 +3,7 @@ name = "workflow"
 version = "0.1.0"
 description = "Maintained repository workflow tooling for the TokenMarket monorepo."
 requires-python = "==3.11.15"
-license = "LicenseRef-Proprietary"
+license = "Apache-2.0"
 authors = [
     { name = "TokenMarket Engineering" },
 ]

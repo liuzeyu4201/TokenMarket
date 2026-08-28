@@ -176,4 +176,4 @@ Details: [SECURITY.md](SECURITY.md) and [`ops/runbooks/workflow.md`](ops/runbook
 
 ## License
 
-[Proprietary](LICENSE) — use, copy, or distribution without permission is prohibited.
+This repository is licensed under the [Apache License 2.0](LICENSE). Copyright and attribution are in [NOTICE](NOTICE).

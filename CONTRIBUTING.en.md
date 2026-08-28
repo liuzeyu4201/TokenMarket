@@ -2,7 +2,7 @@
 
 # Contributing
 
-TokenMarket is a proprietary repository. This page is the internal loop for changing code, naming branches, and opening PRs. Canonical detail: [ops/runbooks/workflow.md](ops/runbooks/workflow.md).
+TokenMarket is licensed under the [Apache License 2.0](LICENSE). This page covers changing code, naming branches, and opening PRs. Canonical detail: [ops/runbooks/workflow.md](ops/runbooks/workflow.md).
 
 ## Loop
 

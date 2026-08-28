@@ -176,4 +176,4 @@ curl -fsS http://127.0.0.1:8000/health/ready
 
 ## 许可
 
-[Proprietary](LICENSE) — 未经许可不得使用、复制或分发。
+本仓库以 [Apache License 2.0](LICENSE) 授权。版权与归属见 [NOTICE](NOTICE)。

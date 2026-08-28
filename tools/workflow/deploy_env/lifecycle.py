@@ -490,6 +490,10 @@ def load_deploy_config(repo_root: Path, selection: ModeSelection) -> DeployConfi
     for key, image in images.items():
         if not image or ":latest" in image:
             raise DeployError("INVALID_CONFIG", f"invalid image reference for {key}")
+        if selection.mode == "prod":
+            from ..image_pin import require_digest_pinned_image
+
+            images[key] = require_digest_pinned_image(image, name=key)
 
     # App containers reach middleware by Compose DNS name `postgres`.
     app_database_url = (
@@ -613,8 +617,21 @@ def deploy_up(
                 "INVALID_MODE",
                 "make deploy requires explicit mode=test or mode=prod",
             )
+        cfg = None
         if selection.mode == "prod":
-            selection = require_production_approval(selection)
+            cfg = load_deploy_config(repo_root, selection)
+            from ..image_pin import verify_approved_digests
+
+            raw_proof = os.environ.get("TOKENMARKET_PROD_APPROVAL") or ""
+            proof = json.loads(raw_proof) if raw_proof else None
+            selection = require_production_approval(
+                selection,
+                approval_proof=proof,
+                action="deploy",
+                target=cfg.project_name,
+                image_digests=tuple(cfg.app_images),
+            )
+            verify_approved_digests(cfg.app_images)
 
         # Optional feature-004 auth release gate (Make: auth_release_manifest=…).
         # Runs before Docker so missing/bad manifests fail closed without side effects.
@@ -632,7 +649,8 @@ def deploy_up(
             )
 
         _ensure_docker()
-        cfg = load_deploy_config(repo_root, selection)
+        if cfg is None:
+            cfg = load_deploy_config(repo_root, selection)
         _ensure_app_images(cfg.app_images)
         _print(plain, f"[STARTED] deploy project={cfg.project_name} mode={cfg.mode}")
         _pull_middleware(cfg.child_env, repo_root, cfg.project_name)

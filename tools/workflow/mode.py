@@ -64,45 +64,45 @@ def require_production_approval(
     interactive: bool = True,
     approval_proof: dict[str, Any] | None = None,
     confirmation_phrase: str = "deploy-to-production",
+    hmac_key: bytes | None = None,
+    operator: str | None = None,
+    action: str | None = None,
+    target: str | None = None,
+    image_digests: tuple[str, ...] | None = None,
 ) -> ModeSelection:
-    """Require a separate approval gate for production mode."""
+    """Require a signed approval issued by a separately authenticated principal."""
     if selection.mode != "prod":
         return selection
 
-    if approval_proof:
-        required = {"action", "commit_sha", "run_id", "approval_reference"}
-        missing = required - approval_proof.keys()
-        if missing:
-            raise ModeError(
-                "PROD_APPROVAL_REQUIRED",
-                f"production approval proof missing fields: {sorted(missing)}",
-            )
-        return ModeSelection(
-            mode="prod",
-            origin=selection.origin,
-            approved=True,
-            approval_reference=str(approval_proof["approval_reference"]),
+    from .prod_approval import approval_hmac_key, verify_approval
+
+    if not approval_proof:
+        raise ModeError(
+            "PROD_APPROVAL_REQUIRED",
+            "production mode requires a signed independent approval proof",
         )
 
-    if interactive and os.isatty(0):
-        prompt = (
-            "Production mode selected. Type the confirmation phrase "
-            f"'{confirmation_phrase}' to proceed: "
-        )
-        answer = getpass.getpass(prompt)
-        if answer.strip() != confirmation_phrase:
-            raise ModeError(
-                "PROD_APPROVAL_REQUIRED",
-                "production confirmation phrase mismatch",
-            )
-        return ModeSelection(
-            mode="prod",
-            origin=selection.origin,
-            approved=True,
-            approval_reference="interactive-phrase",
-        )
-
-    raise ModeError(
-        "PROD_APPROVAL_REQUIRED",
-        "production mode requires explicit approval; none provided",
+    who = str(operator or os.environ.get("TOKENMARKET_OPERATOR") or getpass.getuser() or "")
+    if not who:
+        raise ModeError("PROD_APPROVAL_REQUIRED", "production operator identity is required")
+    bound_action = str(action or approval_proof.get("action") or "deploy")
+    bound_target = str(target if target is not None else approval_proof.get("target") or "")
+    bound_digests = image_digests
+    if bound_digests is None:
+        bound_digests = tuple(str(x) for x in (approval_proof.get("image_digests") or ()))
+    key = hmac_key if hmac_key is not None else approval_hmac_key()
+    verify_approval(
+        approval_proof,
+        operator=who,
+        action=bound_action,
+        environment="prod",
+        target=bound_target,
+        image_digests=bound_digests,
+        key=key,
+    )
+    return ModeSelection(
+        mode="prod",
+        origin=selection.origin,
+        approved=True,
+        approval_reference=str(approval_proof.get("nonce") or approval_proof.get("signature")),
     )

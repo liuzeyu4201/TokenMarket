@@ -7,6 +7,8 @@ runs when ``AUTH_BACKUP_TEST_DATABASE_URL`` is set *and* Docker is available.
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,7 @@ from workflow.auth_backup_restore import (
     verify_auth_invariants,
     verify_export_payload,
 )
+from workflow.auth_backup_secure import confirm_restore_matches, validate_restore_tables
 
 
 def _challenge(
@@ -45,6 +48,11 @@ def _challenge(
         "consumed_at": consumed_at,
         "code_digest": code_digest,
     }
+
+
+@pytest.fixture(autouse=True)
+def _backup_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTH_BACKUP_ENCRYPTION_KEY", "aa" * 32)
 
 
 def _session(
@@ -287,6 +295,74 @@ def test_verify_export_payload_wrapper() -> None:
         }
     }
     assert verify_export_payload(payload).ok is True
+
+
+def test_sql_fragments_in_keys_rejected_before_connection() -> None:
+    with pytest.raises(AuthBackupError) as exc:
+        validate_restore_tables(
+            {
+                "auth_sessions": [
+                    { 'id"; DROP TABLE users--': "1" },
+                ]
+            }
+        )
+    assert exc.value.code == "INVALID_IDENTIFIER"
+
+
+def test_restore_reread_mismatch_rolls_back_signal() -> None:
+    with pytest.raises(AuthBackupError) as exc:
+        confirm_restore_matches(
+            {"auth_sessions": [{"id": "keep"}]},
+            {"auth_sessions": [{"id": "mutated-during-restore"}]},
+        )
+    assert exc.value.code == "RESTORE_MISMATCH"
+
+
+def test_backup_umask_and_symlink_and_encryption(tmp_path: Path) -> None:
+    old = os.umask(0o022)
+    try:
+        dest = tmp_path / "bak"
+        artifact = backup_from_rows(
+            output_dir=dest,
+            challenges=[
+                _challenge(
+                    cid="c1",
+                    state="consumed",
+                    consumed_at="2026-01-01T00:01:00+00:00",
+                    send_started_at="2026-01-01T00:00:00+00:00",
+                )
+            ],
+            sessions=[_session(sid="s1", user_id="u1")],
+        )
+        assert stat.S_IMODE(dest.stat().st_mode) == 0o700
+        assert stat.S_IMODE(artifact.export_path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(artifact.manifest_path.stat().st_mode) == 0o600
+        raw = artifact.export_path.read_bytes()
+        assert raw.startswith(b"TM1")
+        assert b"verification_challenges" not in raw
+        assert b'"id"' not in raw
+    finally:
+        os.umask(old)
+
+    planted = tmp_path / "outside.json"
+    planted.write_text("do-not-touch", encoding="utf-8")
+    dest2 = tmp_path / "bak2"
+    dest2.mkdir()
+    os.symlink(planted, dest2 / "auth_tables.json")
+    with pytest.raises(AuthBackupError):
+        backup_from_rows(
+            output_dir=dest2,
+            challenges=[
+                _challenge(
+                    cid="c1",
+                    state="consumed",
+                    consumed_at="2026-01-01T00:01:00+00:00",
+                    send_started_at="2026-01-01T00:00:00+00:00",
+                )
+            ],
+            sessions=[_session(sid="s1", user_id="u1")],
+        )
+    assert planted.read_text(encoding="utf-8") == "do-not-touch"
 
 
 @pytest.mark.skipif(

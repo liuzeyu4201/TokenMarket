@@ -18,6 +18,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
+from urllib.parse import urlparse
 
 from .events import DiagnosticCode, EventLog, aggregate_status, emit_event, to_jsonl
 from .images import image_scan, runtime_smoke
@@ -312,6 +313,45 @@ def resolve_fingerprint(component_path: Path) -> str:
     return "none"
 
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def dsn_is_production_shaped(url: str) -> bool:
+    """True when a DSN host is not a loopback address."""
+    text = (url or "").strip()
+    if not text:
+        return False
+    try:
+        parsed = urlparse(text)
+    except Exception:
+        return True
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return True
+    return host not in _LOOPBACK_HOSTS
+
+
+def bind_test_migration_environment(base: Mapping[str, str]) -> dict[str, str]:
+    """mode=test: drop ambient DATABASE_URL and refuse production-shaped DSNs."""
+    env = dict(base)
+    ambient = env.pop("DATABASE_URL", "")
+    if ambient and dsn_is_production_shaped(ambient):
+        raise WorkflowError(
+            "INVALID_TARGET",
+            "mode=test refuses a production-shaped ambient DATABASE_URL before Alembic",
+        )
+    explicit = (env.get("TOKENMARKET_TEST_DATABASE_URL") or "").strip()
+    chosen = explicit or ambient
+    if chosen and dsn_is_production_shaped(chosen):
+        raise WorkflowError(
+            "INVALID_TARGET",
+            "mode=test refuses a production-shaped database URL before Alembic",
+        )
+    if chosen:
+        env["DATABASE_URL"] = chosen
+    return env
+
+
 def _local_migration_environment(
     repo_root: Path,
     *,
@@ -371,13 +411,14 @@ def _run_component_action(
             f"{component['id']}: Makefile missing at {make_path}",
         )
 
+    child_env = dict(env) if env is not None else os.environ.copy()
+    child_env.setdefault("PYTHONUNBUFFERED", "1")
     result = subprocess.run(
         ["make", action],
         cwd=comp_path,
-        capture_output=True,
         text=True,
         check=False,
-        env=dict(env) if env is not None else None,
+        env=child_env,
     )
     return result.returncode
 
@@ -480,15 +521,19 @@ def execute_action(
                 selection = require_production_approval(selection)
             if selection.mode == "local":
                 action_env = _local_migration_environment(repo_root)
+            elif selection.mode == "test":
+                action_env = bind_test_migration_environment(os.environ)
 
         manifest_path = repo_root / "ops" / "workflow" / "components.json"
         manifest = load_manifest(manifest_path)
         validate_all(manifest, repo_root)
 
         log.start(action, "repository", "preflight")
+        emit(log.events[-1])
         toolchain_path = repo_root / "ops" / "workflow" / "toolchains.json"
         toolchain_check(toolchain_path, repo_root=repo_root)
         log.finish(action, "repository", "preflight", status="PASSED")
+        emit(log.events[-1])
 
         failed = False
         for component in manifest["components"]:
@@ -504,9 +549,11 @@ def execute_action(
                 log.skip(
                     action, component["id"], "execution", reason="previous step failed"
                 )
+                emit(log.events[-1])
                 continue
 
             log.start(action, component["id"], "execution")
+            emit(log.events[-1])
             start = time.monotonic()
             rc = _run_component_action(
                 component,
@@ -535,6 +582,7 @@ def execute_action(
                     duration_ms=duration,
                     message=f"{component['id']} {action} exited with {rc}",
                 )
+            emit(log.events[-1])
 
         final = aggregate_status(log.events)
         emit(

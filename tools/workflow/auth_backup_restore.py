@@ -280,16 +280,35 @@ def _logical_export_payload(
 
 
 def write_logical_export(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    from .auth_backup_secure import (
+        backup_encryption_key,
+        encrypt_bytes,
+        secure_mkdir,
+        secure_write_bytes,
+        validate_restore_tables,
+    )
+
+    tables = payload.get("tables") or {}
+    if isinstance(tables, dict):
+        validate_restore_tables(tables)
+    secure_mkdir(path.parent)
     body = json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
-    path.write_text(body, encoding="utf-8")
+    blob = encrypt_bytes(body.encode("utf-8"), backup_encryption_key())
+    secure_write_bytes(path, blob)
 
 
 def read_logical_export(path: Path) -> dict[str, Any]:
+    from .auth_backup_secure import backup_encryption_key, decrypt_bytes
+
     if not path.is_file():
         raise AuthBackupError("BACKUP_MISSING", f"logical export not found: {path}")
+    raw = path.read_bytes()
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        if raw.startswith(b"TM1"):
+            text = decrypt_bytes(raw, backup_encryption_key()).decode("utf-8")
+        else:
+            raise AuthBackupError("BACKUP_INVALID", "export is not encrypted at rest")
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise AuthBackupError("BACKUP_INVALID", f"export is not JSON: {exc}") from exc
     if not isinstance(data, dict):
@@ -331,7 +350,9 @@ def backup_from_rows(
     source_url_redacted: str = "synthetic",
 ) -> BackupArtifact:
     """Write a logical export + redacted manifest from in-memory rows (tests/offline)."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    from .auth_backup_secure import secure_mkdir, secure_write_bytes
+
+    secure_mkdir(output_dir)
     export_path = output_dir / "auth_tables.json"
     manifest_path = output_dir / "auth_backup_manifest.json"
     payload = _logical_export_payload(
@@ -353,9 +374,9 @@ def backup_from_rows(
             "method": "logical-json",
         },
     )
-    manifest_path.write_text(
-        json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    secure_write_bytes(
+        manifest_path,
+        (json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8"),
     )
     return BackupArtifact(
         export_path=export_path,
@@ -521,7 +542,9 @@ def backup_database(
         raise AuthBackupError("INVALID_URL", "DATABASE_URL is missing or malformed")
 
     redacted = redact_database_url(database_url)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    from .auth_backup_secure import secure_mkdir, secure_write_bytes
+
+    secure_mkdir(output_dir)
 
     if prefer_pg_dump and _which("pg_dump"):
         dump_path = output_dir / "auth_tables.dump"
@@ -573,9 +596,9 @@ def backup_database(
                 "pg_dump_recipe": document_pg_dump_command(database_url, dump_path),
             },
         )
-        manifest_path.write_text(
-            json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        secure_write_bytes(
+            manifest_path,
+            (json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8"),
         )
         return BackupArtifact(
             export_path=dump_path if dump_path.is_file() else export_path,
@@ -605,9 +628,9 @@ def backup_database(
             "export_sha256": _sha256_file(export_path),
         },
     )
-    manifest_path.write_text(
-        json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    secure_write_bytes(
+        manifest_path,
+        (json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8"),
     )
     return BackupArtifact(
         export_path=export_path,
@@ -689,11 +712,19 @@ async def _insert_logical_rows_async(
     database_url: str,
     tables: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> None:
+    from .auth_backup_secure import (
+        confirm_restore_matches,
+        quote_ident,
+        validate_restore_tables,
+    )
+
+    validate_restore_tables(tables)
     import asyncpg
 
     conn = await asyncpg.connect(database_url)
+    tx = conn.transaction()
+    await tx.start()
     try:
-        # Dependency-friendly order: idempotency → challenges → sessions → events
         order = (
             "verification_request_idempotency_records",
             "verification_challenges",
@@ -704,14 +735,15 @@ async def _insert_logical_rows_async(
             rows = tables.get(table) or []
             if not rows:
                 continue
+            table_sql = quote_ident(table)
             for row in rows:
-                cols = list(row.keys())
+                cols = [quote_ident(c) for c in row.keys()]
                 if not cols:
                     continue
-                col_sql = ", ".join(f'"{c}"' for c in cols)
+                col_sql = ", ".join(cols)
                 placeholders = ", ".join(f"${i}" for i in range(1, len(cols) + 1))
-                values = [_coerce_pg_value(row[c]) for c in cols]
-                sql = f'INSERT INTO "{table}" ({col_sql}) VALUES ({placeholders})'  # noqa: S608
+                values = [_coerce_pg_value(row[c]) for c in row.keys()]
+                sql = f"INSERT INTO {table_sql} ({col_sql}) VALUES ({placeholders})"  # noqa: S608
                 try:
                     await conn.execute(sql, *values)
                 except Exception as exc:  # pragma: no cover - driver specific
@@ -719,8 +751,22 @@ async def _insert_logical_rows_async(
                         "RESTORE_INSERT_FAILED",
                         f"insert into {table} failed: {type(exc).__name__}",
                     ) from exc
+        reread = await _fetch_auth_tables_on_connection(conn)
+        confirm_restore_matches(tables, reread)
+        await tx.commit()
+    except Exception:
+        await tx.rollback()
+        raise
     finally:
         await conn.close()
+
+
+async def _fetch_auth_tables_on_connection(conn: Any) -> dict[str, list[dict[str, Any]]]:
+    out: dict[str, list[dict[str, Any]]] = {}
+    for table in AUTH_TABLES:
+        rows = await conn.fetch(f"SELECT * FROM {table}")  # noqa: S608
+        out[table] = [dict(r) for r in rows]
+    return out
 
 
 def _coerce_pg_value(value: Any) -> Any:

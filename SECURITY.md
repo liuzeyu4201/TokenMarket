@@ -21,7 +21,7 @@ TokenMarket 处理第三方提供商凭证与计价值记录。安全默认失�
 - 真实配置只放在被 Git 忽略的 `.env.local`；[`.env.example`](.env.example) 仅含不可用占位符。
 - 不得提交提供商 Key、会话 Cookie、生产数据或未脱敏日志。
 - `make ci` 中的 gitleaks、govulncheck、pip-audit、npm audit 失败关闭。
-- 生产动作必须显式 `mode=prod` 并经独立审批。
+- 生产动作必须显式 `mode=prod` 并持有由另一名授权主体签发的短时绑定审批证明（禁止操作者自批，禁止仅凭确认短语授权）。
 - 卖家上游 Key 使用认证加密；比较、轮换、吊销与脱敏路径必须可测。
 
 ---
@@ -49,5 +49,5 @@ Details: [`ops/runbooks/workflow.md`](ops/runbooks/workflow.md).
 - Real config lives only in gitignored `.env.local`; [`.env.example`](.env.example) holds unusable placeholders.
 - Do not commit provider keys, session cookies, production data, or unredacted logs.
 - gitleaks, govulncheck, pip-audit, and npm audit in `make ci` fail closed.
-- Production actions require explicit `mode=prod` and independent approval.
+- Production actions require explicit `mode=prod` and a short-lived approval proof issued by a separately authenticated authorized principal. Self-approval and phrase-only confirmation are not authorization.
 - Seller upstream keys use authenticated encryption; compare, rotate, revoke, and redact paths must be testable.

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/application"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/chatcompat"
@@ -96,9 +97,10 @@ func proxyHandler(t *testing.T, poster *stubPoster, pool *keypool.Pool, buyer st
 			Auth: proxyauth.Authenticator{Pepper: []byte("pep"), Store: memStore{rec: proxyauth.Record{
 				KeyID: "pk1", BuyerID: buyer, Platform: "volcano", Status: "active",
 			}}},
-			Pool:  pool,
-			Chat:  chat,
-			Usage: usage,
+			Pool:      pool,
+			Chat:      chat,
+			Usage:     usage,
+			WriteIdle: 80 * time.Millisecond,
 		},
 	})
 	if err != nil {
@@ -180,8 +182,17 @@ func TestProxySuccessOpenAIBodyAndUsage(t *testing.T) {
 	if st.n.Load() != 1 {
 		t.Fatal("calls")
 	}
-	obs, ok := sink.Get("rid-success")
-	if !ok || obs.UsageSource != "official" || obs.BuyerID != "buyer-1" {
+	if sink.Len() != 1 {
+		t.Fatalf("usage len %d", sink.Len())
+	}
+	obs := sink.All()[0]
+	if obs.RequestID == "rid-success" {
+		t.Fatal("usage identity must not be the client X-Request-ID")
+	}
+	if obs.ClientRequestID != "rid-success" {
+		t.Fatalf("client correlation %q", obs.ClientRequestID)
+	}
+	if obs.UsageSource != "official" || obs.BuyerID != "buyer-1" {
 		t.Fatalf("%+v", obs)
 	}
 }

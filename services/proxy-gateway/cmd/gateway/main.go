@@ -58,13 +58,18 @@ func main() {
 	chat := application.NewChatService(chatCfg)
 	chat.Logger = logger
 
-	pepper := []byte(firstNonEmpty(os.Getenv("PROXY_AUTH_PEPPER"), "dev-only-proxy-pepper-not-for-prod"))
+	pepper, err := proxyauth.LoadSharedSecret(os.Getenv("PROXY_AUTH_PEPPER"))
+	if err != nil {
+		logger.Error("PROXY_AUTH_PEPPER rejected", "error", err)
+		os.Exit(1)
+	}
 	staticAuth := proxyauth.MapStore{Records: parseProxyAuthEnv(pepper, os.Getenv("PROXY_STATIC_PROXY_KEYS"))}
 	apiClient := apisvc.New(os.Getenv("API_INTERNAL_BASE_URL"), os.Getenv("INTERNAL_GATEWAY_TOKEN"))
 	var authStore proxyauth.Store = staticAuth
 	if strings.TrimSpace(os.Getenv("API_INTERNAL_BASE_URL")) != "" && strings.TrimSpace(os.Getenv("INTERNAL_GATEWAY_TOKEN")) != "" {
 		authStore = apisvc.CompositeStore{Static: staticAuth, Remote: apiClient}
 	}
+	authLimiter := proxyauth.NewAdmissionLimiter(32, 16, 32)
 	staticKeys := parseSellerKeysEnv(os.Getenv("PROXY_STATIC_SELLER_KEYS"))
 	var src keypool.Source = keypool.StaticSource{Keys: staticKeys}
 	if strings.TrimSpace(os.Getenv("API_INTERNAL_BASE_URL")) != "" && strings.TrimSpace(os.Getenv("INTERNAL_GATEWAY_TOKEN")) != "" {
@@ -97,12 +102,13 @@ func main() {
 	var proxyDeps *httpserver.ProxyDeps
 	if proxyEnabled {
 		proxyDeps = &httpserver.ProxyDeps{
-			Enabled: true,
-			Auth:    proxyauth.Authenticator{Pepper: pepper, Store: authStore},
-			Pool:    pool,
-			Chat:    chat,
-			Usage:   usageSink,
-			Metrics: httpMetrics,
+			Enabled:   true,
+			Auth:      proxyauth.Authenticator{Pepper: pepper, Store: authStore, Limiter: authLimiter},
+			Pool:      pool,
+			Chat:      chat,
+			Usage:     usageSink,
+			Metrics:   httpMetrics,
+			WriteIdle: httpserver.DefaultSSEWriteIdle,
 		}
 	}
 
@@ -194,7 +200,7 @@ func main() {
 }
 
 func listenServe(ctx context.Context, addr string, h http.Handler) error {
-	srv := &http.Server{Addr: addr, Handler: h}
+	srv := httpserver.NewPublicHTTPServer(addr, h)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	select {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -148,23 +147,12 @@ func requestIDMiddleware(logger *slog.Logger) gin.HandlerFunc {
 		c.Set("request_id", rid)
 		c.Header("X-Request-ID", rid)
 
-		// Redact common secret headers before logging.
 		req := c.Request
-		cleanHeaders := make(http.Header, len(req.Header))
-		for k, v := range req.Header {
-			lower := strings.ToLower(k)
-			if lower == "authorization" || strings.Contains(lower, "secret") || strings.Contains(lower, "api-key") {
-				cleanHeaders.Set(k, "[REDACTED]")
-			} else {
-				cleanHeaders[k] = v
-			}
-		}
-
 		logger.Info("request",
 			"method", req.Method,
 			"path", req.URL.Path,
 			"request_id", rid,
-			"headers", cleanHeaders,
+			"headers", SanitizeHeaders(req.Header),
 		)
 		c.Next()
 	}

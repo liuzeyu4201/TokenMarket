@@ -128,34 +128,43 @@ type authRec struct {
 	Status   string `json:"status"`
 }
 
-// Lookup 实现 proxyauth.Store。失败关闭：错误视为未命中。
+// Lookup 实现 proxyauth.Store。
 func (c *Client) Lookup(hashHex string) (proxyauth.Record, bool) {
+	rec, st := c.LookupResult(hashHex)
+	return rec, st == proxyauth.LookupHit
+}
+
+// LookupResult 实现 proxyauth.ResultStore：404 为权威未命中，传输错误为瞬时失败。
+func (c *Client) LookupResult(hashHex string) (proxyauth.Record, proxyauth.LookupStatus) {
 	if !c.enabled() || hashHex == "" {
-		return proxyauth.Record{}, false
+		return proxyauth.Record{}, proxyauth.LookupMiss
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	q := "/internal/v1/proxy-keys/by-hash?hash=" + url.QueryEscape(hashHex)
 	resp, err := c.do(ctx, http.MethodGet, q, nil)
 	if err != nil {
-		return proxyauth.Record{}, false
+		return proxyauth.Record{}, proxyauth.LookupUnavailable
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return proxyauth.Record{}, proxyauth.LookupMiss
+	}
 	if resp.StatusCode != http.StatusOK {
-		return proxyauth.Record{}, false
+		return proxyauth.Record{}, proxyauth.LookupUnavailable
 	}
 	var env envelope
 	if json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&env) != nil {
-		return proxyauth.Record{}, false
+		return proxyauth.Record{}, proxyauth.LookupUnavailable
 	}
 	var rec authRec
 	if json.Unmarshal(env.Data, &rec) != nil {
-		return proxyauth.Record{}, false
+		return proxyauth.Record{}, proxyauth.LookupUnavailable
 	}
 	if rec.Status != "active" {
-		return proxyauth.Record{}, false
+		return proxyauth.Record{}, proxyauth.LookupMiss
 	}
-	return proxyauth.Record{KeyID: rec.KeyID, BuyerID: rec.BuyerID, Platform: rec.Platform, Status: rec.Status}, true
+	return proxyauth.Record{KeyID: rec.KeyID, BuyerID: rec.BuyerID, Platform: rec.Platform, Status: rec.Status}, proxyauth.LookupHit
 }
 
 type usageBody struct {
@@ -224,15 +233,27 @@ type CompositeStore struct {
 }
 
 func (s CompositeStore) Lookup(hashHex string) (proxyauth.Record, bool) {
+	rec, st := s.LookupResult(hashHex)
+	return rec, st == proxyauth.LookupHit
+}
+
+func (s CompositeStore) LookupResult(hashHex string) (proxyauth.Record, proxyauth.LookupStatus) {
 	if s.Static != nil {
 		if rec, ok := s.Static.Lookup(hashHex); ok {
-			return rec, true
+			return rec, proxyauth.LookupHit
 		}
 	}
-	if s.Remote != nil {
-		return s.Remote.Lookup(hashHex)
+	if rs, ok := s.Remote.(proxyauth.ResultStore); ok {
+		return rs.LookupResult(hashHex)
 	}
-	return proxyauth.Record{}, false
+	if s.Remote != nil {
+		rec, hit := s.Remote.Lookup(hashHex)
+		if hit {
+			return rec, proxyauth.LookupHit
+		}
+		return proxyauth.Record{}, proxyauth.LookupMiss
+	}
+	return proxyauth.Record{}, proxyauth.LookupMiss
 }
 
 // FanoutSink 内存幂等 + 远程持久化。远程失败不阻断调用方（由 DurableSink 保留文件）。
@@ -243,7 +264,9 @@ type FanoutSink struct {
 
 func (f FanoutSink) Observe(ctx context.Context, obs usageobs.Observation) error {
 	if f.Mem != nil {
-		_ = f.Mem.Observe(ctx, obs)
+		if err := f.Mem.Observe(ctx, obs); err != nil {
+			return err
+		}
 	}
 	if f.Remote != nil {
 		return f.Remote.Observe(ctx, obs)

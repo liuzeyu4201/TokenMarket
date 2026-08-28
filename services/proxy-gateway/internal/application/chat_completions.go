@@ -221,6 +221,7 @@ func (s *ChatService) consumeSSE(ctx context.Context, req chatcompat.ChatAdaptRe
 	yielded := 0
 	sentDone := false
 	public := req.Model
+	var lastUsage *chatcompat.Usage
 
 	for {
 		ev, err := parser.Next()
@@ -245,11 +246,14 @@ func (s *ChatService) consumeSSE(ctx context.Context, req chatcompat.ChatAdaptRe
 		}
 		if volcano.IsDoneData(ev.Data) {
 			if !sentDone {
-				emit(chatcompat.StreamEvent{Kind: chatcompat.KindDone})
+				emit(chatcompat.StreamEvent{Kind: chatcompat.KindDone, Usage: lastUsage})
 				sentDone = true
 			}
 			finish(chatcompat.CategorySuccess)
 			return
+		}
+		if u := parseStreamUsage(ev.Data); u != nil {
+			lastUsage = u
 		}
 		if !json.Valid([]byte(ev.Data)) {
 			if yielded == 0 {
@@ -271,6 +275,26 @@ func (s *ChatService) consumeSSE(ctx context.Context, req chatcompat.ChatAdaptRe
 		emit(chunk)
 		yielded++
 	}
+}
+
+func parseStreamUsage(data string) *chatcompat.Usage {
+	var obj map[string]json.RawMessage
+	if json.Unmarshal([]byte(data), &obj) != nil {
+		return nil
+	}
+	raw, ok := obj["usage"]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var parsed chatcompat.Usage
+	if json.Unmarshal(raw, &parsed) != nil {
+		return nil
+	}
+	if parsed.PromptTokens == nil && parsed.CompletionTokens == nil && parsed.TotalTokens == nil {
+		return nil
+	}
+	parsed.Source = "upstream"
+	return &parsed
 }
 
 func extractChoices(data string) []byte {

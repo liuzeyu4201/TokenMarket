@@ -36,8 +36,9 @@ func (m MapStore) Lookup(hashHex string) (Record, bool) {
 
 // Authenticator Bearer 认证。
 type Authenticator struct {
-	Pepper []byte
-	Store  Store
+	Pepper  []byte
+	Store   Store
+	Limiter *AdmissionLimiter
 }
 
 func HashSecret(pepper []byte, secret string) string {
@@ -52,7 +53,7 @@ func ValidProxySecret(secret string) bool {
 		return false
 	}
 	rest := secret[4:]
-	if len(rest) < 32 {
+	if len(rest) < 32 || len(rest) > 256 {
 		return false
 	}
 	for _, c := range rest {
@@ -81,8 +82,38 @@ func (a Authenticator) Authenticate(authorization string) (Record, bool) {
 	if a.Store == nil {
 		return Record{}, false
 	}
-	rec, ok := a.Store.Lookup(HashSecret(a.Pepper, sec))
+	hash := HashSecret(a.Pepper, sec)
+	if a.Limiter != nil && a.Limiter.CachedMiss(hash) {
+		return Record{}, false
+	}
+	if a.Limiter != nil && !a.Limiter.AllowLookup() {
+		return Record{}, false
+	}
+	if a.Limiter != nil {
+		defer a.Limiter.FinishLookup()
+	}
+	if rs, ok := a.Store.(ResultStore); ok {
+		rec, st := rs.LookupResult(hash)
+		switch st {
+		case LookupUnavailable:
+			return Record{}, false
+		case LookupMiss:
+			if a.Limiter != nil {
+				a.Limiter.RememberMiss(hash)
+			}
+			return Record{}, false
+		default:
+			if rec.Status != "active" {
+				return Record{}, false
+			}
+			return rec, true
+		}
+	}
+	rec, ok := a.Store.Lookup(hash)
 	if !ok || rec.Status != "active" {
+		if a.Limiter != nil && !ok {
+			a.Limiter.RememberMiss(hash)
+		}
 		return Record{}, false
 	}
 	return rec, true

@@ -1,7 +1,9 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -18,12 +20,13 @@ import (
 
 // ProxyDeps 公开代理路径依赖（SF12/SF15）。
 type ProxyDeps struct {
-	Auth    proxyauth.Authenticator
-	Pool    *keypool.Pool
-	Chat    *application.ChatService
-	Usage   usageobs.Sink
-	Metrics *observability.ProxyHTTPMetrics
-	Enabled bool
+	Auth      proxyauth.Authenticator
+	Pool      *keypool.Pool
+	Chat      *application.ChatService
+	Usage     usageobs.Sink
+	Metrics   *observability.ProxyHTTPMetrics
+	Enabled   bool
+	WriteIdle time.Duration
 }
 
 func (s *Server) registerProxy(d ProxyDeps) {
@@ -71,7 +74,12 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 
 		req.Platform = "volcano"
 		req.APIKey = sk.APIKey
-		req.RequestID = c.GetString("request_id")
+		clientRID := c.GetString("request_id")
+		usageID := usageobs.NewEventID()
+		if usageID == "" {
+			usageID = rec.KeyID
+		}
+		req.RequestID = usageID
 		if req.RequestID == "" {
 			req.RequestID = rec.KeyID
 		}
@@ -87,18 +95,19 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 				src = "not_available"
 			}
 			obs := usageobs.Observation{
-				RequestID:   req.RequestID,
-				ProxyKeyID:  rec.KeyID,
-				APIKeyID:    sk.ID,
-				BuyerID:     rec.BuyerID,
-				SellerID:    sk.SellerID,
-				Platform:    "volcano",
-				Model:       req.Model,
-				UsageSource: src,
-				Partial:     partial,
-				LatencyMS:   time.Since(start).Milliseconds(),
-				StatusCode:  status,
-				EndReason:   end,
+				RequestID:       req.RequestID,
+				ClientRequestID: clientRID,
+				ProxyKeyID:      rec.KeyID,
+				APIKeyID:        sk.ID,
+				BuyerID:         rec.BuyerID,
+				SellerID:        sk.SellerID,
+				Platform:        "volcano",
+				Model:           req.Model,
+				UsageSource:     src,
+				Partial:         partial,
+				LatencyMS:       time.Since(start).Milliseconds(),
+				StatusCode:      status,
+				EndReason:       end,
 			}
 			if res.Usage != nil {
 				obs.PromptTokens = res.Usage.PromptTokens
@@ -150,7 +159,7 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 			finishHTTP(st)
 			return
 		}
-		c.Header("X-Request-ID", req.RequestID)
+		c.Header("X-Request-ID", clientRID)
 		c.JSON(http.StatusOK, gin.H{
 			"id":      res.ID,
 			"object":  res.Object,
@@ -166,7 +175,13 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 
 func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAdaptRequest, rec proxyauth.Record, sk keypool.SellerKey, observe func(int, chatcompat.ChatAdaptResult, string, bool), finishHTTP func(int)) {
 	_ = rec
-	ch, pre := d.Chat.OpenStream(c.Request.Context(), req)
+	writeIdle := d.WriteIdle
+	if writeIdle <= 0 {
+		writeIdle = DefaultSSEWriteIdle
+	}
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+	ch, pre := d.Chat.OpenStream(ctx, req)
 	if pre != nil {
 		st, code, msg := mapUpstream(pre.ErrorCategory)
 		if pre.ErrorCategory == chatcompat.CategoryRateLimited {
@@ -179,11 +194,29 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 	}
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
-	c.Header("X-Request-ID", req.RequestID)
+	c.Header("X-Request-ID", c.GetString("request_id"))
 	c.Status(http.StatusOK)
 	flusher, _ := c.Writer.(http.Flusher)
+	rc := http.NewResponseController(c.Writer)
+	writeChunk := func(p []byte) error {
+		if err := rc.SetWriteDeadline(time.Now().Add(writeIdle)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
+		if _, err := c.Writer.Write(p); err != nil {
+			return err
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return nil
+	}
 	var last chatcompat.StreamEvent
 	yielded := 0
+	failWrite := func() {
+		cancel()
+		observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryTimeout}, "write_idle", yielded > 0)
+		finishHTTP(http.StatusOK)
+	}
 	for ev := range ch {
 		last = ev
 		if ev.Kind == chatcompat.KindError {
@@ -191,7 +224,10 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 				cooldownKey(d.Pool, sk.ID, ev.RetryAfterSeconds)
 			}
 			code, msg := sseErrorFields(ev.ErrorCategory)
-			writeSSEError(c, flusher, code, msg)
+			if err := writeSSEErrorBytes(writeChunk, code, msg); err != nil {
+				failWrite()
+				return
+			}
 			if yielded == 0 {
 				observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: ev.ErrorCategory}, string(ev.ErrorCategory), false)
 			} else {
@@ -202,22 +238,34 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 		}
 		if ev.Kind == chatcompat.KindTruncated {
 			code, msg := sseErrorFields(chatcompat.CategoryTruncatedStream)
-			writeSSEError(c, flusher, code, msg)
+			if err := writeSSEErrorBytes(writeChunk, code, msg); err != nil {
+				failWrite()
+				return
+			}
 			observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryTruncatedStream}, "upstream_interrupted", true)
 			finishHTTP(http.StatusOK)
 			return
 		}
 		if ev.Kind == chatcompat.KindDone {
-			_, _ = c.Writer.Write([]byte("data: [DONE]\n\n"))
-			if flusher != nil {
-				flusher.Flush()
+			if err := writeChunk([]byte("data: [DONE]\n\n")); err != nil {
+				failWrite()
+				return
 			}
 			res := chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategorySuccess, Model: req.Model}
+			incomplete := true
 			if ev.Usage != nil {
-				res.Usage = ev.Usage
-				res.UsageStatus = chatcompat.UsageComplete
+				st, u := chatcompat.InspectUsage(ev.Usage.PromptTokens, ev.Usage.CompletionTokens, ev.Usage.TotalTokens, true)
+				res.Usage = u
+				res.UsageStatus = st
+				incomplete = st != chatcompat.UsageComplete
+			} else {
+				res.UsageStatus = chatcompat.UsageMissing
 			}
-			observe(http.StatusOK, res, "success", false)
+			end := "success"
+			if incomplete {
+				end = "incomplete"
+			}
+			observe(http.StatusOK, res, end, incomplete)
 			finishHTTP(http.StatusOK)
 			return
 		}
@@ -229,11 +277,9 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 			"choices": json.RawMessage(ev.Choices),
 		}
 		b, _ := json.Marshal(chunk)
-		_, _ = c.Writer.Write([]byte("data: "))
-		_, _ = c.Writer.Write(b)
-		_, _ = c.Writer.Write([]byte("\n\n"))
-		if flusher != nil {
-			flusher.Flush()
+		if err := writeChunk(append(append([]byte("data: "), b...), []byte("\n\n")...)); err != nil {
+			failWrite()
+			return
 		}
 		yielded++
 	}
@@ -252,6 +298,18 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 }
 
 func writeSSEError(c *gin.Context, flusher http.Flusher, code, message string) {
+	_ = writeSSEErrorBytes(func(p []byte) error {
+		if _, err := c.Writer.Write(p); err != nil {
+			return err
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return nil
+	}, code, message)
+}
+
+func writeSSEErrorBytes(write func([]byte) error, code, message string) error {
 	payload, err := json.Marshal(gin.H{
 		"error": gin.H{
 			"message": message,
@@ -260,14 +318,13 @@ func writeSSEError(c *gin.Context, flusher http.Flusher, code, message string) {
 		},
 	})
 	if err != nil {
-		return
+		return err
 	}
-	_, _ = c.Writer.Write([]byte("data: "))
-	_, _ = c.Writer.Write(payload)
-	_, _ = c.Writer.Write([]byte("\n\n"))
-	if flusher != nil {
-		flusher.Flush()
-	}
+	buf := make([]byte, 0, 6+len(payload)+2)
+	buf = append(buf, []byte("data: ")...)
+	buf = append(buf, payload...)
+	buf = append(buf, []byte("\n\n")...)
+	return write(buf)
 }
 
 func sseErrorFields(cat chatcompat.ErrorCategory) (code, message string) {

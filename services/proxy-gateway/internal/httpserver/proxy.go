@@ -36,11 +36,15 @@ func (s *Server) registerProxy(d ProxyDeps) {
 func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		rec, ok := d.Auth.Authenticate(c.GetHeader("Authorization"))
-		if !ok {
+		rec, st := d.Auth.AuthenticateStatus(c.GetHeader("Authorization"))
+		if st != proxyauth.AuthOK {
 			if d.Metrics != nil {
 				d.Metrics.AuthFail()
 				d.Metrics.ObserveRequest("volcano", "false", "auth_error", time.Since(start))
+			}
+			if st == proxyauth.AuthOverload {
+				writeEnvelope(c, http.StatusTooManyRequests, "AUTH_OVERLOAD", "认证过载，请稍后重试")
+				return
 			}
 			writeEnvelope(c, http.StatusUnauthorized, "INVALID_API_KEY", "代理 Key 无效")
 			return
@@ -84,9 +88,9 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 			req.RequestID = rec.KeyID
 		}
 
-		observe := func(status int, res chatcompat.ChatAdaptResult, end string, partial bool) {
+		observe := func(status int, res chatcompat.ChatAdaptResult, end string, partial bool) error {
 			if d.Usage == nil {
-				return
+				return nil
 			}
 			src := "not_available"
 			if res.UsageStatus == chatcompat.UsageComplete {
@@ -121,9 +125,12 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 				if d.Metrics != nil {
 					d.Metrics.Usage("failed")
 				}
-			} else if d.Metrics != nil {
+				return err
+			}
+			if d.Metrics != nil {
 				d.Metrics.Usage("accepted")
 			}
+			return nil
 		}
 
 		stream := req.Stream != nil && *req.Stream
@@ -145,7 +152,7 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 		res, err := d.Chat.Complete(c.Request.Context(), req)
 		if err != nil && res.ErrorCategory == chatcompat.CategorySuccess {
 			writeEnvelope(c, http.StatusGatewayTimeout, "UPSTREAM_TIMEOUT", "上游超时")
-			observe(http.StatusGatewayTimeout, res, "timeout", false)
+			_ = observe(http.StatusGatewayTimeout, res, "timeout", false)
 			finishHTTP(http.StatusGatewayTimeout)
 			return
 		}
@@ -155,8 +162,13 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 				cooldownKey(d.Pool, sk.ID, res.RetryAfterSeconds)
 			}
 			writeEnvelopeRetry(c, st, code, msg, res.RetryAfterSeconds)
-			observe(st, res, string(res.ErrorCategory), false)
+			_ = observe(st, res, string(res.ErrorCategory), false)
 			finishHTTP(st)
+			return
+		}
+		if err := observe(http.StatusOK, res, "success", false); err != nil {
+			writeUsageFailure(c, err)
+			finishHTTP(http.StatusServiceUnavailable)
 			return
 		}
 		c.Header("X-Request-ID", clientRID)
@@ -168,12 +180,19 @@ func (s *Server) handleProxy(d ProxyDeps) gin.HandlerFunc {
 			"choices": res.Choices,
 			"usage":   res.Usage,
 		})
-		observe(http.StatusOK, res, "success", false)
 		finishHTTP(http.StatusOK)
 	}
 }
 
-func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAdaptRequest, rec proxyauth.Record, sk keypool.SellerKey, observe func(int, chatcompat.ChatAdaptResult, string, bool), finishHTTP func(int)) {
+func writeUsageFailure(c *gin.Context, err error) {
+	if errors.Is(err, usageobs.ErrBackpressure) {
+		writeEnvelope(c, http.StatusServiceUnavailable, "USAGE_BACKPRESSURE", "用量记录过载")
+		return
+	}
+	writeEnvelope(c, http.StatusServiceUnavailable, "USAGE_DURABILITY", "用量未能持久化")
+}
+
+func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAdaptRequest, rec proxyauth.Record, sk keypool.SellerKey, observe func(int, chatcompat.ChatAdaptResult, string, bool) error, finishHTTP func(int)) {
 	_ = rec
 	writeIdle := d.WriteIdle
 	if writeIdle <= 0 {
@@ -188,7 +207,7 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 			cooldownKey(d.Pool, sk.ID, pre.RetryAfterSeconds)
 		}
 		writeEnvelopeRetry(c, st, code, msg, pre.RetryAfterSeconds)
-		observe(st, *pre, string(pre.ErrorCategory), false)
+		_ = observe(st, *pre, string(pre.ErrorCategory), false)
 		finishHTTP(st)
 		return
 	}
@@ -214,7 +233,7 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 	yielded := 0
 	failWrite := func() {
 		cancel()
-		observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryTimeout}, "write_idle", yielded > 0)
+		_ = observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryTimeout}, "write_idle", yielded > 0)
 		finishHTTP(http.StatusOK)
 	}
 	for ev := range ch {
@@ -229,9 +248,9 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 				return
 			}
 			if yielded == 0 {
-				observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: ev.ErrorCategory}, string(ev.ErrorCategory), false)
+				_ = observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: ev.ErrorCategory}, string(ev.ErrorCategory), false)
 			} else {
-				observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: ev.ErrorCategory}, "upstream_interrupted", true)
+				_ = observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: ev.ErrorCategory}, "upstream_interrupted", true)
 			}
 			finishHTTP(http.StatusOK)
 			return
@@ -242,15 +261,11 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 				failWrite()
 				return
 			}
-			observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryTruncatedStream}, "upstream_interrupted", true)
+			_ = observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryTruncatedStream}, "upstream_interrupted", true)
 			finishHTTP(http.StatusOK)
 			return
 		}
 		if ev.Kind == chatcompat.KindDone {
-			if err := writeChunk([]byte("data: [DONE]\n\n")); err != nil {
-				failWrite()
-				return
-			}
 			res := chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategorySuccess, Model: req.Model}
 			incomplete := true
 			if ev.Usage != nil {
@@ -265,7 +280,21 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 			if incomplete {
 				end = "incomplete"
 			}
-			observe(http.StatusOK, res, end, incomplete)
+			if err := observe(http.StatusOK, res, end, incomplete); err != nil {
+				code := "USAGE_DURABILITY"
+				msg := "用量未能持久化"
+				if errors.Is(err, usageobs.ErrBackpressure) {
+					code = "USAGE_BACKPRESSURE"
+					msg = "用量记录过载"
+				}
+				_ = writeSSEErrorBytes(writeChunk, code, msg)
+				finishHTTP(http.StatusServiceUnavailable)
+				return
+			}
+			if err := writeChunk([]byte("data: [DONE]\n\n")); err != nil {
+				failWrite()
+				return
+			}
 			finishHTTP(http.StatusOK)
 			return
 		}
@@ -288,11 +317,11 @@ func (s *Server) writeStream(c *gin.Context, d ProxyDeps, req chatcompat.ChatAda
 	if yielded > 0 {
 		code, msg := sseErrorFields(chatcompat.CategoryTruncatedStream)
 		writeSSEError(c, flusher, code, msg)
-		observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryTruncatedStream}, "upstream_interrupted", true)
+		_ = observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryTruncatedStream}, "upstream_interrupted", true)
 	} else {
 		code, msg := sseErrorFields(chatcompat.CategoryInvalidResponse)
 		writeSSEError(c, flusher, code, msg)
-		observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryInvalidResponse}, "invalid_response", false)
+		_ = observe(http.StatusOK, chatcompat.ChatAdaptResult{ErrorCategory: chatcompat.CategoryInvalidResponse}, "invalid_response", false)
 	}
 	finishHTTP(http.StatusOK)
 }

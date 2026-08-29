@@ -90,7 +90,7 @@ func main() {
 			Dir:  firstNonEmpty(os.Getenv("PROXY_USAGE_WAL_DIR"), ""),
 			Next: apisvc.FanoutSink{Mem: memUsage, Remote: apiClient},
 		}
-		go func() { _ = dur.Replay(context.Background()) }()
+		go dur.RunReplay(context.Background())
 		usageSink = dur
 	}
 

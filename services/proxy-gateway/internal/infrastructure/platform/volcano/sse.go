@@ -3,8 +3,19 @@ package volcano
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"strings"
+)
+
+const (
+	DefaultMaxSSEEventBytes = 1 << 20
+	DefaultMaxSSELineBytes  = 64 << 10
+)
+
+var (
+	ErrSSEEventTooLarge = errors.New("sse event exceeds configured limit")
+	ErrSSELineTooLarge  = errors.New("sse line exceeds configured limit")
 )
 
 // SSEEvent 一个已分帧的 SSE 事件（data 已拼接）。
@@ -15,12 +26,25 @@ type SSEEvent struct {
 
 // SSEParser 增量 SSE 分帧，禁止 ReadAll 全响应。
 type SSEParser struct {
-	r   *bufio.Reader
-	buf bytes.Buffer
+	r        *bufio.Reader
+	buf      bytes.Buffer
+	line     int
+	maxEvent int
+	maxLine  int
 }
 
 func NewSSEParser(r io.Reader) *SSEParser {
-	return &SSEParser{r: bufio.NewReaderSize(r, 4096)}
+	return NewSSEParserLimited(r, DefaultMaxSSEEventBytes, DefaultMaxSSELineBytes)
+}
+
+func NewSSEParserLimited(r io.Reader, maxEvent, maxLine int) *SSEParser {
+	if maxEvent < 1 {
+		maxEvent = DefaultMaxSSEEventBytes
+	}
+	if maxLine < 1 {
+		maxLine = DefaultMaxSSELineBytes
+	}
+	return &SSEParser{r: bufio.NewReaderSize(r, 4096), maxEvent: maxEvent, maxLine: maxLine}
 }
 
 // Next 返回下一个完整事件。EOF 且无残留完整事件时 io.EOF。
@@ -32,20 +56,36 @@ func (p *SSEParser) Next() (SSEEvent, error) {
 				// 不把半帧当完整事件
 				if ev, ok := flushEvent(p.buf.Bytes(), true); ok {
 					p.buf.Reset()
+					p.line = 0
 					return ev, nil
 				}
 			}
 			return SSEEvent{}, err
+		}
+		if p.buf.Len()+1 > p.maxEvent {
+			p.buf.Reset()
+			p.line = 0
+			return SSEEvent{}, ErrSSEEventTooLarge
+		}
+		if b != '\n' {
+			p.line++
+			if p.line > p.maxLine {
+				p.buf.Reset()
+				p.line = 0
+				return SSEEvent{}, ErrSSELineTooLarge
+			}
+		} else {
+			p.line = 0
 		}
 		_ = p.buf.WriteByte(b)
 		if b != '\n' {
 			continue
 		}
 		raw := p.buf.Bytes()
-		// 空行结束事件：\n\n 或 \r\n\r\n
 		if endsEvent(raw) {
 			ev, ok := flushEvent(raw, false)
 			p.buf.Reset()
+			p.line = 0
 			if !ok {
 				continue
 			}
@@ -87,7 +127,6 @@ func flushEvent(raw []byte, eof bool) (SSEEvent, bool) {
 	if !hasData {
 		return SSEEvent{}, false
 	}
-	// data: 多行用 \n 拼接；每行去掉一个可选前导空格
 	for i := range dataLines {
 		dataLines[i] = strings.TrimPrefix(dataLines[i], " ")
 	}
@@ -99,5 +138,5 @@ func IsDoneData(data string) bool {
 	return strings.TrimSpace(data) == "[DONE]"
 }
 
-// DidReadAll 检测测试替身是否错误地 ReadAll（文档/断言辅助，恒 false 于解析器）。
+// Incremental 检测测试替身是否错误地 ReadAll（文档/断言辅助，恒 false 于解析器）。
 func (p *SSEParser) Incremental() bool { return true }

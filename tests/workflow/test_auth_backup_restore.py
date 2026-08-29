@@ -17,6 +17,7 @@ import pytest
 from workflow.auth_backup_restore import (
     AUTH_TABLES,
     AuthBackupError,
+    backup_database,
     backup_from_rows,
     backup_restore_verify_memory,
     build_redacted_manifest,
@@ -24,7 +25,9 @@ from workflow.auth_backup_restore import (
     document_pg_dump_command,
     isolated_database_url_from_env,
     redact_database_url,
+    restore_database,
     restore_logical_export_to_memory,
+    validate_pg_restore_toc_text,
     verify_auth_invariants,
     verify_export_payload,
 )
@@ -75,6 +78,123 @@ def test_redact_database_url_strips_password() -> None:
     assert "tm_local_" not in redacted or "[REDACTED]" in redacted
     assert "127.0.0.1" in redacted
     assert "tokenmarket" in redacted
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql://app:pw@127.0.0.1:5432/db?password=s3cret-query",
+        "postgresql://app:pw@127.0.0.1:5432/db?passfile=/tmp/pgpass",
+        "postgresql://app:pw@127.0.0.1:5432/db?token=tok_live_abcdef",
+        "postgresql://app:pw@127.0.0.1:5432/db?secret=hunter2secret",
+        "postgresql://app:pw@127.0.0.1:5432/db?PASSWORD=MixEdCaseSecret99",
+    ],
+)
+def test_redact_database_url_strips_query_secrets(url: str) -> None:
+    """tm-dsn-query-secret-leak."""
+    redacted = redact_database_url(url)
+    lowered = redacted.lower()
+    assert "s3cret-query" not in redacted
+    assert "pgpass" not in lowered or "[redacted]" in lowered
+    assert "tok_live_abcdef" not in redacted
+    assert "hunter2secret" not in redacted
+    assert "mixedcasesecret99" not in lowered
+    recipe = document_pg_dump_command(url, Path("/var/backup/auth.dump"))
+    assert "s3cret-query" not in recipe
+    assert "tok_live_abcdef" not in recipe
+    assert "hunter2secret" not in recipe
+    assert "MixEdCaseSecret99" not in recipe
+
+
+def test_pg_restore_rejects_non_auth_toc_before_mutation() -> None:
+    """tm-pgrestore-archive-scope."""
+    toc = """
+;
+; Archive created at 2026-08-29
+;
+226; 1259 16386 TABLE public verification_challenges postgres
+3378; 0 16386 TABLE DATA public verification_challenges postgres
+4000; 0 0 TABLE DATA public users postgres
+"""
+    with pytest.raises(AuthBackupError) as exc:
+        validate_pg_restore_toc_text(toc)
+    assert exc.value.code == "BACKUP_INVALID"
+    assert "users" in exc.value.message
+
+
+def test_pg_restore_error_does_not_mutate_when_toc_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = tmp_path / "evil.dump"
+    archive.write_bytes(b"PGDMP-fake")
+    calls: list[list[str]] = []
+
+    def fake_which(name: str) -> str | None:
+        return f"/usr/bin/{name}"
+
+    def fake_run(cmd: list[str], **kwargs: object) -> object:
+        calls.append(list(cmd))
+        from types import SimpleNamespace
+
+        if "--list" in cmd:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    "4000; 0 0 TABLE DATA public users postgres\n"
+                    "226; 1259 16386 TABLE DATA public verification_challenges postgres\n"
+                ),
+                stderr="",
+            )
+        raise AssertionError("pg_restore --dbname must not run after a bad TOC")
+
+    import workflow.auth_backup_restore as mod
+
+    monkeypatch.setattr(mod, "_which", fake_which)
+    monkeypatch.setattr(mod, "_run_redacted", fake_run)
+    with pytest.raises(AuthBackupError) as exc:
+        restore_database("postgresql://u:p@127.0.0.1:5432/dest", archive, method="pg_dump")
+    assert exc.value.code == "BACKUP_INVALID"
+    assert any("--list" in c for c in calls)
+    assert not any("--dbname=" in x for c in calls for x in c)
+
+
+def test_pg_dump_artifact_is_encrypted_without_plaintext(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """tm-pgdump-plaintext."""
+    import workflow.auth_backup_restore as mod
+    from workflow.auth_backup_secure import decrypt_bytes, backup_encryption_key
+
+    plaintext = b"PGDMP-custom-format-not-a-secret-schema"
+
+    def fake_which(name: str) -> str | None:
+        return "/usr/bin/" + name
+
+    def fake_bytes(cmd: list[str], **kwargs: object) -> object:
+        from types import SimpleNamespace
+
+        assert "--file=-" in cmd
+        return SimpleNamespace(returncode=0, stdout=plaintext, stderr=b"")
+
+    monkeypatch.setattr(mod, "_which", fake_which)
+    monkeypatch.setattr(mod, "_run_redacted_bytes", fake_bytes)
+    monkeypatch.setattr(mod, "_sync_fetch_tables", lambda _url: {t: [] for t in AUTH_TABLES})
+
+    artifact = backup_database(
+        "postgresql://u:p@127.0.0.1:5432/db",
+        tmp_path / "out",
+        prefer_pg_dump=True,
+    )
+    blob = artifact.export_path.read_bytes()
+    assert blob.startswith(b"TM1")
+    assert plaintext not in blob
+    leftover = list((tmp_path / "out").glob("*plain*")) + list((tmp_path / "out").glob("*.tmp"))
+    assert leftover == []
+    outside = tmp_path / "stolen.dump"
+    outside.write_bytes(blob)
+    assert plaintext not in outside.read_bytes()
+    recovered = decrypt_bytes(outside.read_bytes(), backup_encryption_key())
+    assert recovered == plaintext
 
 
 def test_document_pg_dump_command_is_redacted() -> None:

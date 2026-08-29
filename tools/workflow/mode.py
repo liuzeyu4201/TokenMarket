@@ -69,12 +69,23 @@ def require_production_approval(
     action: str | None = None,
     target: str | None = None,
     image_digests: tuple[str, ...] | None = None,
+    expected_commit_sha: str | None = None,
+    expected_run_id: str | None = None,
+    expected_manifest_digest: str | None = None,
+    dirty_worktree: bool = False,
+    durable_nonce_dir: Any = None,
 ) -> ModeSelection:
     """Require a signed approval issued by a separately authenticated principal."""
     if selection.mode != "prod":
         return selection
 
-    from .prod_approval import approval_hmac_key, verify_approval
+    from pathlib import Path
+
+    from .prod_approval import (
+        production_verify_key,
+        refuse_hmac_mint_authority,
+        verify_approval,
+    )
 
     if not approval_proof:
         raise ModeError(
@@ -90,7 +101,9 @@ def require_production_approval(
     bound_digests = image_digests
     if bound_digests is None:
         bound_digests = tuple(str(x) for x in (approval_proof.get("image_digests") or ()))
-    key = hmac_key if hmac_key is not None else approval_hmac_key()
+    refuse_hmac_mint_authority(hmac_key=hmac_key)
+    production_verify_key(hmac_key=hmac_key)
+    nonce_dir = Path(durable_nonce_dir) if durable_nonce_dir is not None else None
     verify_approval(
         approval_proof,
         operator=who,
@@ -98,7 +111,14 @@ def require_production_approval(
         environment="prod",
         target=bound_target,
         image_digests=bound_digests,
-        key=key,
+        key=b"",
+        expected_commit_sha=expected_commit_sha,
+        expected_run_id=expected_run_id,
+        expected_manifest_digest=expected_manifest_digest,
+        dirty_worktree=dirty_worktree,
+        durable_nonce_dir=nonce_dir,
+        enforce_issuer_allowlist=True,
+        require_asymmetric=True,
     )
     return ModeSelection(
         mode="prod",

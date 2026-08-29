@@ -84,6 +84,28 @@ class MemoryKeyStore:
             self.rows[key_id] = dict(record)
             self.by_fp[(record["platform"], record["fingerprint"])] = key_id
 
+    def save_if_unmodified(self, record: dict[str, Any], expected_version: int) -> bool:
+        key_id: uuid.UUID = record["id"]
+        with self._lock:
+            existing = self.rows.get(key_id)
+            if existing is None:
+                return False
+            if int(existing.get("version") or 0) != expected_version:
+                return False
+            if str(existing.get("administrative_state")) == "revoked":
+                return False
+            self.rows[key_id] = dict(record)
+            self.by_fp[(record["platform"], record["fingerprint"])] = key_id
+            return True
+
+    def persisted_key_versions(self) -> set[str]:
+        with self._lock:
+            return {
+                str(r.get("key_version"))
+                for r in self.rows.values()
+                if r.get("key_version") and not r.get("soft_deleted")
+            }
+
     def list_routable(self) -> list[dict[str, Any]]:
         from app.domain.sellerkeys.lifecycle import has_positive_quota, routable
 

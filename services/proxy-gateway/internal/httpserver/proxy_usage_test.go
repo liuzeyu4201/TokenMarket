@@ -1,9 +1,12 @@
 package httpserver_test
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -44,6 +47,52 @@ func TestSameClientRequestIDPersistsTwoUsageFacts(t *testing.T) {
 	}
 	if len(seen) != 2 {
 		t.Fatalf("ids %+v", seen)
+	}
+}
+
+type failUsageSink struct{ err error }
+
+func (f failUsageSink) Observe(_ context.Context, _ usageobs.Observation) error {
+	return f.err
+}
+
+func TestWALFailureDoesNotAcknowledgeSuccess(t *testing.T) {
+	up := []byte(`{"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"ep","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
+	st := &stubPoster{status: 200, body: up}
+	dir := t.TempDir()
+	d := &usageobs.DurableSink{Dir: dir, Next: usageobs.NewMemorySink()}
+	d.InjectFS(func(string, os.FileMode) error { return errors.New("mkdir-denied") }, nil)
+	h := proxyHandler(t, st, nil, "buyer-1", d)
+	w := httptest.NewRecorder()
+	body := `{"model":"doubao-pro-32k","messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/proxy/volcano/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testProxySecret)
+	h.ServeHTTP(w, req)
+	if w.Code == http.StatusOK {
+		t.Fatalf("WAL failure must not return 200: %s", w.Body.String())
+	}
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("code %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "USAGE_DURABILITY") {
+		t.Fatalf("body %s", w.Body.String())
+	}
+}
+
+func TestWALBackpressureDoesNotAcknowledgeSuccess(t *testing.T) {
+	up := []byte(`{"id":"chatcmpl-1","object":"chat.completion","created":1,"model":"ep","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
+	st := &stubPoster{status: 200, body: up}
+	h := proxyHandler(t, st, nil, "buyer-1", failUsageSink{err: usageobs.ErrBackpressure})
+	w := httptest.NewRecorder()
+	body := `{"model":"doubao-pro-32k","messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/proxy/volcano/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testProxySecret)
+	h.ServeHTTP(w, req)
+	if w.Code == http.StatusOK {
+		t.Fatal("quota backpressure must not return 200")
+	}
+	if !strings.Contains(w.Body.String(), "USAGE_BACKPRESSURE") {
+		t.Fatalf("body %s", w.Body.String())
 	}
 }
 

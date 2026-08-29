@@ -60,6 +60,24 @@ func TestPostJSONParsesChoicesAndAllowlistHeaders(t *testing.T) {
 	}
 }
 
+func TestPostJSONRejectsBodyOneByteOverCapBeforeJSON(t *testing.T) {
+	payload := []byte("xxxxx") // 5 bytes, not JSON
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		_, _ = w.Write(payload)
+	}))
+	defer srv.Close()
+	c := volcano.NewChatClient(srv.URL)
+	c.MaxResponseBytes = 4
+	res := c.PostJSON(context.Background(), "sk-synthetic-test-key-not-real", []byte(`{}`), false)
+	if res.Err != volcano.ErrResponseTooLarge {
+		t.Fatalf("got %v body=%q", res.Err, res.Body)
+	}
+	if json.Valid(res.Body) {
+		t.Fatal("must not JSON-decode an oversized body")
+	}
+}
+
 func TestPostJSONDoesNotForwardBuyerHeaders(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Cookie") != "" || r.Header.Get("X-Internal-Token") != "" {

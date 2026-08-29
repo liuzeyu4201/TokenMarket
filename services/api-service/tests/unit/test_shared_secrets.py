@@ -62,7 +62,60 @@ def test_unknown_and_mismatched_version_fails() -> None:
         "SELLER_KEY_MATERIAL": "11" * 32,
         "SELLER_KEY_FINGERPRINT_SECRET": "22" * 32,
         "PROXY_AUTH_PEPPER": "33" * 32,
-        "SELLER_KEY_VERSION": "v2",
+        "SELLER_KEY_VERSION": "v99",
     }
     with pytest.raises(SharedSecretError):
         load_process_shared_secrets(env)
+
+
+def test_current_previous_ring_decrypts_old_rows() -> None:
+    from app.security.shared_secrets import load_process_shared_secrets
+
+    env = {
+        "SELLER_KEY_MATERIAL": "11" * 32,
+        "SELLER_KEY_FINGERPRINT_SECRET": "22" * 32,
+        "PROXY_AUTH_PEPPER": "33" * 32,
+        "SELLER_KEY_VERSION": "v2",
+        "SELLER_KEY_PREVIOUS_VERSION": "v1",
+        "SELLER_KEY_MATERIAL_PREVIOUS": "44" * 32,
+    }
+    material, _fp, _pepper, version, previous = load_process_shared_secrets(env)
+    assert version == "v2"
+    assert "v1" in previous
+    old = CredentialEncryptor(previous["v1"], "v1")
+    nonce, ct, tag = old.encrypt(b"sk-synthetic-test-key-not-real")
+    ring = CredentialEncryptor(material, version, previous=previous)
+    assert ring.decrypt(nonce, ct, tag, "v1") == b"sk-synthetic-test-key-not-real"
+    n2, c2, t2, ver, rotated = ring.reencrypt(nonce, ct, tag, "v1")
+    assert rotated is True
+    assert ver == "v2"
+    assert ring.decrypt(n2, c2, t2, "v2") == b"sk-synthetic-test-key-not-real"
+
+
+def test_unknown_persisted_version_fails_closed() -> None:
+    enc = CredentialEncryptor(b"k" * 32, "v1")
+    with pytest.raises(ValueError, match="unknown key version"):
+        enc.decrypt(b"n" * 12, b"ct", b"t" * 32, "v9")
+
+
+def test_unknown_persisted_versions_fail_readiness() -> None:
+    from app.domain.sellerkeys.memory_store import MemoryKeyStore
+    from app.health import seller_key_ring_ready
+
+    store = MemoryKeyStore()
+    kid = __import__("uuid").uuid4()
+    store.insert(
+        {
+            "id": kid,
+            "seller_id": __import__("uuid").uuid4(),
+            "platform": "volcano",
+            "fingerprint": "fp",
+            "key_version": "v9",
+            "ciphertext": b"x",
+            "soft_deleted": False,
+        }
+    )
+    enc = CredentialEncryptor(b"k" * 32, "v1")
+    assert seller_key_ring_ready(store, enc) is False
+    store.rows[kid]["key_version"] = "v1"
+    assert seller_key_ring_ready(store, enc) is True

@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageobs"
 )
@@ -140,6 +141,49 @@ func TestIdenticalEventIsExactlyOnceAndConflictPreservesWAL(t *testing.T) {
 	if got.TotalTokens == nil || *got.TotalTokens != 3 {
 		t.Fatalf("%+v", got)
 	}
+}
+
+func TestDurableMkdirWriteFailuresAreVisible(t *testing.T) {
+	dir := t.TempDir()
+	d := &usageobs.DurableSink{Dir: dir, Next: usageobs.NewMemorySink()}
+	d.InjectFS(func(string, os.FileMode) error {
+		return errString("mkdir-denied")
+	}, nil)
+	if err := d.Observe(context.Background(), usageobs.Observation{RequestID: "rid-fail"}); err == nil {
+		t.Fatal("mkdir failure must be visible")
+	}
+	d.InjectFS(nil, func(string, []byte, os.FileMode) error {
+		return errString("write-denied")
+	})
+	if err := d.Observe(context.Background(), usageobs.Observation{RequestID: "rid-write"}); err == nil {
+		t.Fatal("write failure must be visible")
+	}
+}
+
+func TestDurableReplayWithoutRestartAndQuotaBackpressure(t *testing.T) {
+	dir := t.TempDir()
+	fail := failSink{}
+	d := &usageobs.DurableSink{Dir: dir, Next: fail, MaxFiles: 1, MaxBytes: 1 << 20}
+	if err := d.Observe(context.Background(), usageobs.Observation{RequestID: "rid-q1"}); err == nil {
+		t.Fatal("expected next failure with wal retained")
+	}
+	if err := d.Observe(context.Background(), usageobs.Observation{RequestID: "rid-q2"}); err != usageobs.ErrBackpressure {
+		t.Fatalf("quota: %v", err)
+	}
+	ok := usageobs.NewMemorySink()
+	d.Next = ok
+	ctx, cancel := context.WithCancel(context.Background())
+	go d.RunReplay(ctx)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if ok.Len() == 1 {
+			cancel()
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	t.Fatal("backlog did not drain without process restart")
 }
 
 func TestDurableReplayAfterFailure(t *testing.T) {

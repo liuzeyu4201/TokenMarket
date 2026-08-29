@@ -17,6 +17,7 @@ under ``tests/workflow/fixtures/auth-release/``.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -99,6 +100,42 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def auth_release_verify_key(raw: str | None = None) -> bytes:
+    text = (raw if raw is not None else os.environ.get("AUTH_RELEASE_VERIFY_KEY", "")).strip()
+    if os.environ.get("AUTH_RELEASE_ISSUE_KEY", "").strip():
+        raise DeployError(
+            "AUTH_SELF_SIGNED",
+            "auth release verification refuses a process that can mint manifests",
+        )
+    if len(text) < 32:
+        raise DeployError(
+            "AUTH_SIGNATURE_MISSING",
+            "AUTH_RELEASE_VERIFY_KEY must be at least 32 characters",
+        )
+    return text.encode("utf-8")
+
+
+def sign_auth_release_payload(payload: Mapping[str, Any], key: bytes) -> str:
+    body = {k: v for k, v in payload.items() if k != "signature"}
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hmac.new(key, canonical, hashlib.sha256).hexdigest()
+
+
+def _resolve_evidence_file(rel: str, *, manifest_path: Path, repo_root: Path | None) -> Path:
+    path = Path(rel)
+    if path.is_absolute():
+        return path
+    bases = []
+    if repo_root is not None:
+        bases.append(repo_root)
+    bases.append(manifest_path.parent)
+    for base in bases:
+        candidate = base / path
+        if candidate.is_file():
+            return candidate
+    return (repo_root or manifest_path.parent) / path
+
+
 def auth_release_companion_path(manifest_path: Path) -> Path:
     """Sibling ``.sha256`` companion next to the auth release manifest JSON."""
     return manifest_path.with_suffix(manifest_path.suffix + ".sha256")
@@ -121,22 +158,15 @@ def verify_auth_release_manifest(
     repo_root: Path | None = None,
     require_activation: bool = True,
     target_mode: str | None = None,
+    expected_commit_sha: str | None = None,
+    expected_image_digests: Mapping[str, str] | None = None,
+    verify_key: bytes | None = None,
 ) -> dict[str, Any]:
-    """Fail-closed verification of an auth release candidate + evidence binding.
+    """Fail-closed verification of a signed auth release candidate + evidence binding.
 
-    Checks (in order):
-    1. Manifest file exists and is a JSON object.
-    2. Sibling ``.sha256`` companion exists and matches the JSON bytes.
-    3. Required top-level fields and every :data:`REQUIRED_AUTH_EVIDENCE_KEYS`
-       entry is present under ``evidence`` with a non-empty ``sha256``.
-    4. Image/frontend digests look like ``sha256:<64 hex>`` when present.
-    5. When ``require_activation`` is true, the ``activation`` block is present
-       and fail-closed for TLS, approved SMS, trusted proxy/origin, keys,
-       dispatcher, and cleanup schedule — especially for ``target_mode=prod``.
-
-    Never loads real secrets; activation only carries non-secret readiness flags
-    and adapter *names*. Evidence paths are opaque strings (synthetic fixtures
-    or repo-relative evidence paths) and are not opened here.
+    Companion checksums are not authority. The host verification key must sign
+    the payload; evidence files are rehashed; optional commit/image claims are
+    compared to the clean checkout and deploy refs.
     """
     manifest_path = resolve_auth_release_manifest_path(path, repo_root=repo_root)
     if not manifest_path.is_file():
@@ -243,6 +273,53 @@ def verify_auth_release_manifest(
                 "AUTH_DIGEST_MISMATCH",
                 "frontend_digest is not a sha256:<64hex> digest",
             )
+
+    key_material = verify_key if verify_key is not None else auth_release_verify_key()
+    presented_sig = str(payload.get("signature") or "").strip()
+    expected_sig = sign_auth_release_payload(payload, key_material)
+    if not presented_sig or not hmac.compare_digest(expected_sig, presented_sig):
+        raise DeployError(
+            "AUTH_SIGNATURE_INVALID",
+            "auth release manifest is not signed by the host verification key",
+        )
+
+    for key in sorted(REQUIRED_AUTH_EVIDENCE_KEYS):
+        entry = evidence[key]
+        rel = str(entry.get("path") or "").strip()
+        if not rel:
+            raise DeployError(
+                "AUTH_EVIDENCE_MISSING",
+                f"evidence.{key} path is missing",
+            )
+        file_path = _resolve_evidence_file(
+            rel, manifest_path=manifest_path, repo_root=repo_root
+        )
+        if not file_path.is_file():
+            raise DeployError(
+                "AUTH_EVIDENCE_MISSING",
+                f"evidence.{key} file is missing",
+            )
+        actual_hash = _sha256_file(file_path)
+        recorded_hash = str(entry.get("sha256") or "").strip().removeprefix("sha256:")
+        if actual_hash.lower() != recorded_hash.lower():
+            raise DeployError(
+                "AUTH_EVIDENCE_TAMPERED",
+                f"evidence.{key} hash does not match the file",
+            )
+
+    if expected_commit_sha is not None and str(payload.get("commit_sha") or "") != expected_commit_sha:
+        raise DeployError(
+            "AUTH_COMMIT_MISMATCH",
+            "auth release commit does not match the clean checkout",
+        )
+    if expected_image_digests:
+        presented = image_digests if isinstance(image_digests, dict) else {}
+        for name, digest in expected_image_digests.items():
+            if str(presented.get(name) or "") != digest:
+                raise DeployError(
+                    "AUTH_DIGEST_MISMATCH",
+                    f"auth release image_digests[{name!r}] does not match deploy refs",
+                )
 
     activation_report: dict[str, Any] | None = None
     if require_activation:
@@ -618,10 +695,50 @@ def deploy_up(
                 "make deploy requires explicit mode=test or mode=prod",
             )
         cfg = None
+        dirty = False
+        head = ""
+        try:
+            from ..release_candidate import git_commit_sha, git_tree_clean
+
+            dirty = not git_tree_clean(repo_root)
+            head = git_commit_sha(repo_root)
+        except Exception:
+            if selection.mode == "prod":
+                raise DeployError(
+                    "DIRTY_TREE",
+                    "production deploy could not resolve a clean checkout",
+                )
+
+        run_id = (
+            os.environ.get("TOKENMARKET_DEPLOY_RUN_ID")
+            or os.environ.get("GITHUB_RUN_ID")
+            or ""
+        ).strip()
+        auth_manifest = auth_release_manifest_from_env()
+        auth_report: dict[str, Any] | None = None
+
         if selection.mode == "prod":
+            if dirty:
+                raise DeployError(
+                    "DIRTY_TREE",
+                    "production deploy refuses an uncommitted worktree before Docker",
+                )
+            if not run_id:
+                raise DeployError(
+                    "PROD_APPROVAL_REQUIRED",
+                    "TOKENMARKET_DEPLOY_RUN_ID (or GITHUB_RUN_ID) is required for production",
+                )
             cfg = load_deploy_config(repo_root, selection)
             from ..image_pin import verify_approved_digests
 
+            if auth_manifest:
+                auth_report = verify_auth_release_manifest(
+                    auth_manifest,
+                    repo_root=repo_root,
+                    require_activation=True,
+                    target_mode=selection.mode,
+                    expected_commit_sha=head,
+                )
             raw_proof = os.environ.get("TOKENMARKET_PROD_APPROVAL") or ""
             proof = json.loads(raw_proof) if raw_proof else None
             selection = require_production_approval(
@@ -630,13 +747,18 @@ def deploy_up(
                 action="deploy",
                 target=cfg.project_name,
                 image_digests=tuple(cfg.app_images),
+                expected_commit_sha=head,
+                expected_run_id=run_id or None,
+                expected_manifest_digest=(
+                    str(auth_report["manifest_sha256"]) if auth_report else None
+                ),
+                dirty_worktree=dirty,
             )
             verify_approved_digests(cfg.app_images)
 
         # Optional feature-004 auth release gate (Make: auth_release_manifest=…).
         # Runs before Docker so missing/bad manifests fail closed without side effects.
-        auth_manifest = auth_release_manifest_from_env()
-        if auth_manifest:
+        if auth_manifest and auth_report is None:
             verify_auth_release_manifest(
                 auth_manifest,
                 repo_root=repo_root,

@@ -7,7 +7,7 @@ import re
 
 _HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
 _VERSION_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
-ALLOWED_SELLER_KEY_VERSIONS = frozenset({"v1"})
+ALLOWED_SELLER_KEY_VERSIONS = frozenset({"v1", "v2"})
 MIN_SECRET_BYTES = 32
 
 
@@ -73,10 +73,29 @@ def load_seller_key_version(raw: str | None) -> str:
     return text
 
 
+def load_seller_previous_keys(
+    environ: dict[str, str] | None = None,
+) -> dict[str, bytes]:
+    """Load optional previous ring members (SELLER_KEY_MATERIAL_PREVIOUS)."""
+    env = os.environ if environ is None else environ
+    prev_ver = (env.get("SELLER_KEY_PREVIOUS_VERSION") or "").strip()
+    prev_raw = (env.get("SELLER_KEY_MATERIAL_PREVIOUS") or "").strip()
+    if not prev_ver and not prev_raw:
+        return {}
+    if not prev_ver or not prev_raw:
+        raise SharedSecretError(
+            "SECRET_VERSION_MISSING",
+            "SELLER_KEY_PREVIOUS_VERSION and SELLER_KEY_MATERIAL_PREVIOUS must be set together",
+        )
+    version = load_seller_key_version(prev_ver)
+    material = load_shared_secret_bytes("SELLER_KEY_MATERIAL_PREVIOUS", prev_raw)
+    return {version: material}
+
+
 def load_process_shared_secrets(
     environ: dict[str, str] | None = None,
-) -> tuple[bytes, bytes, bytes, str]:
-    """Return (seller_material, fingerprint_secret, proxy_pepper, key_version)."""
+) -> tuple[bytes, bytes, bytes, str, dict[str, bytes]]:
+    """Return (seller_material, fingerprint_secret, proxy_pepper, key_version, previous)."""
     env = os.environ if environ is None else environ
     material = load_shared_secret_bytes(
         "SELLER_KEY_MATERIAL", env.get("SELLER_KEY_MATERIAL")
@@ -88,4 +107,6 @@ def load_process_shared_secrets(
         "PROXY_AUTH_PEPPER", env.get("PROXY_AUTH_PEPPER")
     )
     version = load_seller_key_version(env.get("SELLER_KEY_VERSION"))
-    return material, fingerprint, pepper, version
+    previous = load_seller_previous_keys(env)
+    previous.pop(version, None)
+    return material, fingerprint, pepper, version, previous

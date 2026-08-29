@@ -115,6 +115,97 @@ def test_resume_keeps_paused_on_failed_validate() -> None:
     assert store.get(out.key_id)["administrative_state"] == "paused"
 
 
+def test_resume_revoke_race_stays_revoked() -> None:
+    """tm-seller-resume-revoke-race: resume-read, revoke-commit, resume-save."""
+    import threading
+
+    store = MemoryKeyStore()
+    enc = CredentialEncryptor(os.urandom(32), "v1")
+    ok = _V(ValidationSnapshot("success", remaining_quota="3", quota_unit="t"))
+    onboard = OnboardingService(
+        validator=ok, encryptor=enc, store=store, fingerprint_secret=b"s" * 32
+    )
+    seller = uuid.uuid4()
+    out = onboard.onboard(
+        seller_id=seller,
+        role="seller",
+        platform="volcano",
+        api_key="sk-synthetic-test-key-not-real",
+        idempotency_key="i",
+        request_id="r",
+    )
+    lc = LifecycleService(store=store, encryptor=enc, validator=ok)
+    lc.pause(out.key_id, seller, "seller")
+
+    class Gated(MemoryKeyStore):
+        def __init__(self, inner: MemoryKeyStore) -> None:
+            super().__init__()
+            self.inner = inner
+            self.rows = inner.rows
+            self.by_fp = inner.by_fp
+            self.read_event = threading.Event()
+            self.revoke_event = threading.Event()
+            self.gets = 0
+
+        def get(self, key_id: uuid.UUID) -> dict | None:
+            row = MemoryKeyStore.get(self, key_id)
+            self.gets += 1
+            if self.gets == 1:
+                self.read_event.set()
+                assert self.revoke_event.wait(timeout=5)
+            return row
+
+    gated = Gated(store)
+    lc2 = LifecycleService(store=gated, encryptor=enc, validator=ok)
+    err: list[BaseException] = []
+
+    def resume() -> None:
+        try:
+            lc2.resume(out.key_id, seller, "seller", "r-race")
+        except BaseException as exc:  # noqa: BLE001
+            err.append(exc)
+
+    t = threading.Thread(target=resume)
+    t.start()
+    assert gated.read_event.wait(timeout=5)
+    lc.revoke(out.key_id, seller, "seller")
+    gated.revoke_event.set()
+    t.join(timeout=5)
+    row = store.get(out.key_id)
+    assert row is not None
+    assert row["administrative_state"] == "revoked"
+    assert row["ciphertext"] is None
+    assert err
+    assert getattr(err[0], "code", "") == CODE_CONFLICT
+
+
+def test_stale_version_rejected_on_resume() -> None:
+    store = MemoryKeyStore()
+    enc = CredentialEncryptor(os.urandom(32), "v1")
+    ok = _V(ValidationSnapshot("success", remaining_quota="3", quota_unit="t"))
+    onboard = OnboardingService(
+        validator=ok, encryptor=enc, store=store, fingerprint_secret=b"s" * 32
+    )
+    seller = uuid.uuid4()
+    out = onboard.onboard(
+        seller_id=seller,
+        role="seller",
+        platform="volcano",
+        api_key="sk-synthetic-test-key-not-real",
+        idempotency_key="i",
+        request_id="r",
+    )
+    lc = LifecycleService(store=store, encryptor=enc, validator=ok)
+    lc.pause(out.key_id, seller, "seller")
+    row = store.get(out.key_id)
+    assert row is not None
+    stale = dict(row)
+    stale["administrative_state"] = "active"
+    stale["version"] = int(row["version"]) + 5
+    assert store.save_if_unmodified(stale, expected_version=int(row["version"]) - 1) is False
+    assert store.get(out.key_id)["administrative_state"] == "paused"
+
+
 def test_list_routable_skips_zero_quota() -> None:
     store = MemoryKeyStore()
     enc = CredentialEncryptor(os.urandom(32), "v1")

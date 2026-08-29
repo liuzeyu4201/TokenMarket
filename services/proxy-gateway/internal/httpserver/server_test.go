@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/httpserver"
@@ -173,6 +174,45 @@ func TestRequestIDGenerated(t *testing.T) {
 
 // TestUnknownBusinessPathReturns404 confirms that no business routes exist in
 // the SF01 scaffold and that any unknown path returns a clear 404.
+func TestConcurrentMetricsScrapesNoPanic(t *testing.T) {
+	srv, _ := newTestServer(t)
+	var wg sync.WaitGroup
+	errCh := make(chan error, 32)
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if rec := recover(); rec != nil {
+					errCh <- errString("panic")
+				}
+			}()
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			srv.Handler().ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				errCh <- errString("status")
+				return
+			}
+			if !strings.Contains(rec.Body.String(), testService) {
+				errCh <- errString("body")
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		t.Fatal(err)
+	}
+	if srv.MetricsRegisterCount() != 1 {
+		t.Fatalf("collector registered %d times", srv.MetricsRegisterCount())
+	}
+}
+
+type errString string
+
+func (e errString) Error() string { return string(e) }
+
 func TestUnknownBusinessPathReturns404(t *testing.T) {
 	srv, _ := newTestServer(t)
 

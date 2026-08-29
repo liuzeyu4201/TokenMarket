@@ -45,7 +45,7 @@ logger = configure_logging()
 def _wire_key_services(application: FastAPI, database_url: str | None = None) -> None:
     """Attach seller/proxy/usage domain services used by SF08–SF17 HTTP."""
     try:
-        material, fp, pepper, version = load_process_shared_secrets()
+        material, fp, pepper, version, previous = load_process_shared_secrets()
     except SharedSecretError as exc:
         raise RuntimeError(f"shared crypto material rejected: {exc.message}") from exc
     validate_url = (os.environ.get("PROVIDER_VALIDATE_URL") or "").strip()
@@ -56,7 +56,9 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
         )
     else:
         validator = FailClosedValidator()
-    application.state.seller_encryptor = CredentialEncryptor(material, version)
+    application.state.seller_encryptor = CredentialEncryptor(
+        material, version, previous=previous
+    )
     application.state.seller_fp_secret = fp
     application.state.seller_validator = validator
     application.state.seller_sync_engine = None

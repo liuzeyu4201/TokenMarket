@@ -114,11 +114,15 @@ class BackupArtifact:
 
 
 def redact_database_url(url: str) -> str:
-    """Return a connection string with password (and tm_local_ secrets) redacted."""
+    """Return a connection string with password and credential query fields redacted."""
     if not url:
         return ""
-    redacted = _URL_USERINFO_RE.sub(r"\1:[REDACTED]@", url)
+    from .dsn import redact_dsn
+
+    redacted = redact_dsn(url)
     redacted = _SECRET_FRAGMENT_RE.sub("[REDACTED]", redacted)
+    # Structural redaction already covers userinfo; keep the token pattern as a belt.
+    redacted = _URL_USERINFO_RE.sub(r"\1:[REDACTED]@", redacted)
     return redacted
 
 
@@ -476,6 +480,121 @@ def _run_redacted(
     return result
 
 
+def _run_redacted_bytes(
+    cmd: list[str],
+    *,
+    env: Mapping[str, str] | None = None,
+    timeout: int = 300,
+) -> subprocess.CompletedProcess[bytes]:
+    """Run a subprocess capturing binary stdout (pg_dump custom format)."""
+    return subprocess.run(
+        cmd,
+        env=dict(env) if env is not None else None,
+        capture_output=True,
+        check=False,
+        timeout=timeout,
+    )
+
+
+_TOC_CLASS_PREFIXES = (
+    ("TABLE DATA", 2),
+    ("FK CONSTRAINT", 2),
+    ("SEQUENCE SET", 2),
+    ("TABLE", 1),
+    ("INDEX", 1),
+    ("CONSTRAINT", 1),
+    ("SEQUENCE", 1),
+    ("ACL", 1),
+    ("COMMENT", 1),
+    ("BLOB", 1),
+    ("BLOBS", 1),
+    ("TRIGGER", 1),
+    ("TYPE", 1),
+    ("FUNCTION", 1),
+    ("VIEW", 1),
+    ("SCHEMA", 1),
+    ("EXTENSION", 1),
+)
+
+
+def parse_pg_restore_toc(text: str) -> list[tuple[str, str]]:
+    """Return (object_type, name) pairs from ``pg_restore --list`` output."""
+    entries: list[tuple[str, str]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(";") or ";" not in line:
+            continue
+        _, _, rest = line.partition(";")
+        tokens = rest.split()
+        if len(tokens) < 3:
+            continue
+        body = tokens[2:]
+        joined = " ".join(body)
+        obj = body[0]
+        consumed = 1
+        for prefix, n in _TOC_CLASS_PREFIXES:
+            if joined.startswith(prefix + " ") or joined == prefix:
+                obj = prefix
+                consumed = n
+                break
+        rest_tokens = body[consumed:]
+        if not rest_tokens:
+            continue
+        ident = rest_tokens[1] if len(rest_tokens) >= 2 else rest_tokens[0]
+        entries.append((obj, ident))
+    return entries
+
+
+def validate_pg_restore_toc_text(text: str) -> list[tuple[str, str]]:
+    """Reject TOC entries that are not allowlisted auth tables."""
+    entries = parse_pg_restore_toc(text)
+    allowed_classes = {
+        "TABLE",
+        "TABLE DATA",
+        "INDEX",
+        "CONSTRAINT",
+        "FK CONSTRAINT",
+        "SEQUENCE",
+        "SEQUENCE SET",
+        "ACL",
+        "COMMENT",
+        "BLOB",
+        "BLOBS",
+    }
+    seen_tables: set[str] = set()
+    for obj, ident in entries:
+        if ident in {"public", "postgres", "pg_catalog"}:
+            continue
+        if obj in {"SCHEMA", "EXTENSION"}:
+            raise AuthBackupError(
+                "BACKUP_INVALID",
+                f"pg_restore TOC contains non-auth object {obj} {ident}",
+            )
+        if obj.startswith("TABLE"):
+            if ident not in AUTH_TABLES:
+                raise AuthBackupError(
+                    "BACKUP_INVALID",
+                    f"pg_restore archive contains non-auth table {ident}",
+                )
+            seen_tables.add(ident)
+        elif obj not in allowed_classes:
+            raise AuthBackupError(
+                "BACKUP_INVALID",
+                f"pg_restore TOC contains non-auth object {obj} {ident}",
+            )
+    return entries
+
+
+def inspect_pg_restore_toc(archive: Path) -> str:
+    if not _which("pg_restore"):
+        raise AuthBackupError("TOOL_MISSING", "pg_restore is not installed")
+    result = _run_redacted(["pg_restore", "--list", str(archive)], timeout=60)
+    if result.returncode != 0:
+        safe_err = redact_database_url((result.stderr or result.stdout or "")[:400])
+        raise AuthBackupError("BACKUP_INVALID", f"pg_restore --list failed: {safe_err}")
+    return result.stdout or ""
+
+
 def document_pg_dump_command(database_url: str, dump_path: Path) -> str:
     """Return a redacted operator-facing pg_dump recipe for auth tables.
 
@@ -553,15 +672,23 @@ def backup_database(
             "--format=custom",
             "--no-owner",
             "--no-acl",
-            f"--file={dump_path}",
+            "--file=-",
         ]
         for table in AUTH_TABLES:
             cmd.append(f"--table=public.{table}")
         cmd.append(database_url)
-        result = _run_redacted(cmd, timeout=300)
+        result = _run_redacted_bytes(cmd, timeout=300)
         if result.returncode != 0:
-            safe_err = redact_database_url((result.stderr or result.stdout or "")[:400])
+            safe_err = redact_database_url(
+                ((result.stderr or b"")[:400]).decode("utf-8", errors="replace")
+            )
             raise AuthBackupError("PG_DUMP_FAILED", f"pg_dump failed: {safe_err}")
+        from .auth_backup_secure import backup_encryption_key, encrypt_bytes
+
+        plaintext = result.stdout or b""
+        blob = encrypt_bytes(plaintext, backup_encryption_key())
+        secure_write_bytes(dump_path, blob)
+        del plaintext
 
         # Also write a logical JSON snapshot for invariant verification without
         # requiring restore mid-flight (best-effort; falls back if asyncpg fails).
@@ -676,18 +803,43 @@ def restore_database(
     if resolved_method == "pg_dump":
         if not _which("pg_restore"):
             raise AuthBackupError("TOOL_MISSING", "pg_restore is not installed")
-        cmd = [
-            "pg_restore",
-            "--no-owner",
-            "--no-acl",
-            "--data-only",
-            f"--dbname={database_url}",
-            str(backup),
-        ]
-        result = _run_redacted(cmd, timeout=300)
-        if result.returncode != 0:
-            safe_err = redact_database_url((result.stderr or result.stdout or "")[:400])
-            raise AuthBackupError("PG_RESTORE_FAILED", f"pg_restore failed: {safe_err}")
+        from .auth_backup_secure import backup_encryption_key, decrypt_bytes
+
+        raw = backup.read_bytes()
+        archive_path = backup
+        tmp_plain: Path | None = None
+        try:
+            if raw.startswith(b"TM1"):
+                plaintext = decrypt_bytes(raw, backup_encryption_key())
+                tmp_plain = backup.parent / (backup.name + ".plain.tmp")
+                flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+                if hasattr(os, "O_NOFOLLOW"):
+                    flags |= os.O_NOFOLLOW
+                fd = os.open(tmp_plain, flags, 0o600)
+                try:
+                    os.write(fd, plaintext)
+                finally:
+                    os.close(fd)
+                archive_path = tmp_plain
+            toc = inspect_pg_restore_toc(archive_path)
+            validate_pg_restore_toc_text(toc)
+            cmd = [
+                "pg_restore",
+                "--no-owner",
+                "--no-acl",
+                "--data-only",
+                "--single-transaction",
+                "--exit-on-error",
+                f"--dbname={database_url}",
+                str(archive_path),
+            ]
+            result = _run_redacted(cmd, timeout=300)
+            if result.returncode != 0:
+                safe_err = redact_database_url((result.stderr or result.stdout or "")[:400])
+                raise AuthBackupError("PG_RESTORE_FAILED", f"pg_restore failed: {safe_err}")
+        finally:
+            if tmp_plain is not None and tmp_plain.is_file():
+                tmp_plain.unlink()
         # Re-read and verify
         logical = _sync_fetch_tables(database_url)
         return verify_auth_invariants(

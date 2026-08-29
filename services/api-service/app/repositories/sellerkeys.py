@@ -147,8 +147,31 @@ class SQLKeyStore:
         row.nonce = record.get("nonce")
         row.tag = record.get("tag")
         row.version = int(record.get("version") or row.version)
+        if record.get("key_version"):
+            row.key_version = str(record["key_version"])
         row.updated_at = datetime.now(timezone.utc)
         row.soft_deleted = bool(record.get("soft_deleted") or False)
+
+    def save_if_unmodified(self, record: dict[str, Any], expected_version: int) -> bool:
+        row = self._s.execute(
+            select(SellerAPIKey)
+            .where(SellerAPIKey.id == record["id"])
+            .with_for_update()
+        ).scalar_one_or_none()
+        if row is None:
+            return False
+        if int(row.version) != expected_version:
+            return False
+        if str(row.administrative_state) == "revoked":
+            return False
+        self.save(record)
+        return True
+
+    def persisted_key_versions(self) -> set[str]:
+        rows = self._s.execute(
+            select(SellerAPIKey.key_version).where(SellerAPIKey.soft_deleted.is_(False))
+        )
+        return {str(v) for (v,) in rows.all() if v}
 
     def list_routable(self) -> list[dict[str, Any]]:
         rows = self._s.execute(

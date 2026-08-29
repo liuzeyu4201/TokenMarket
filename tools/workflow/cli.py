@@ -18,7 +18,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
-from urllib.parse import urlparse
+from .dsn import DSNError, attested_test_dsn, dsn_is_production_shaped as _dsn_is_production_shaped
 
 from .events import DiagnosticCode, EventLog, aggregate_status, emit_event, to_jsonl
 from .images import image_scan, runtime_smoke
@@ -313,22 +313,9 @@ def resolve_fingerprint(component_path: Path) -> str:
     return "none"
 
 
-_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
-
-
 def dsn_is_production_shaped(url: str) -> bool:
-    """True when a DSN host is not a loopback address."""
-    text = (url or "").strip()
-    if not text:
-        return False
-    try:
-        parsed = urlparse(text)
-    except Exception:
-        return True
-    host = (parsed.hostname or "").lower()
-    if not host:
-        return True
-    return host not in _LOOPBACK_HOSTS
+    """True when a DSN host is not a loopback address or can retarget the host."""
+    return _dsn_is_production_shaped(url)
 
 
 def bind_test_migration_environment(base: Mapping[str, str]) -> dict[str, str]:
@@ -342,13 +329,14 @@ def bind_test_migration_environment(base: Mapping[str, str]) -> dict[str, str]:
         )
     explicit = (env.get("TOKENMARKET_TEST_DATABASE_URL") or "").strip()
     chosen = explicit or ambient
-    if chosen and dsn_is_production_shaped(chosen):
-        raise WorkflowError(
-            "INVALID_TARGET",
-            "mode=test refuses a production-shaped database URL before Alembic",
-        )
     if chosen:
-        env["DATABASE_URL"] = chosen
+        try:
+            attested = attested_test_dsn(chosen)
+        except DSNError as exc:
+            raise WorkflowError("INVALID_TARGET", exc.message) from exc
+        env["DATABASE_URL"] = attested
+        env["TOKENMARKET_TEST_DATABASE_URL"] = attested
+        env["TOKENMARKET_ATTESTED_TEST_DSN"] = attested
     return env
 
 

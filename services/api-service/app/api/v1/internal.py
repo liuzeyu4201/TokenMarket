@@ -67,9 +67,18 @@ def _decrypt_row(enc: CredentialEncryptor, row: dict[str, Any]) -> str | None:
     if not ct or not nonce or not tag:
         return None
     try:
-        return enc.decrypt(nonce, ct, tag).decode("utf-8")
+        nonce, ct, tag, key_ver, rotated = enc.reencrypt(
+            nonce, ct, tag, row.get("key_version")
+        )
+        secret = enc.decrypt(nonce, ct, tag, key_ver).decode("utf-8")
     except ValueError:
         return None
+    if rotated:
+        row["nonce"] = nonce
+        row["ciphertext"] = ct
+        row["tag"] = tag
+        row["key_version"] = key_ver
+    return secret
 
 
 @router.get("/seller-keys/routable")
@@ -84,9 +93,12 @@ async def list_routable(
     enc: CredentialEncryptor = request.app.state.seller_encryptor
     keys: list[dict[str, str]] = []
     for row in store.list_routable():
+        before_ver = row.get("key_version")
         secret = _decrypt_row(enc, row)
         if secret is None:
             continue
+        if row.get("key_version") != before_ver and hasattr(store, "save"):
+            store.save(row)
         keys.append(
             {
                 "id": str(row["id"]),

@@ -48,10 +48,23 @@ async def test_buyer_filters_self() -> None:
         is_deleted=False,
     )
     other = uuid.uuid4()
+    self_id = uuid.uuid4()
+    other_id = uuid.uuid4()
     repo = MagicMock()
     repo.get_user = AsyncMock(return_value=user)
     repo.commit = AsyncMock()
     repo.insert_security_event = AsyncMock()
+
+    async def _own(_rtype: str, rid: uuid.UUID):
+        if rid == self_id:
+            return SimpleNamespace(
+                resource_id=self_id, owner_user_id=user.id, lifecycle_status="active"
+            )
+        return SimpleNamespace(
+            resource_id=other_id, owner_user_id=other, lifecycle_status="active"
+        )
+
+    repo.get_ownership = AsyncMock(side_effect=_own)
     svc = AuthorizationService(repo)
     d = await svc.authorize(
         user_id=user.id,
@@ -59,8 +72,8 @@ async def test_buyer_filters_self() -> None:
         action=Action.route_candidate_exclude_self,
         request_id="r",
         candidates=[
-            RouteCandidate(uuid.uuid4(), user.id, "active"),
-            RouteCandidate(uuid.uuid4(), other, "active"),
+            RouteCandidate(self_id, user.id, "active"),
+            RouteCandidate(other_id, other, "active"),
         ],
     )
     assert d.allowed is True
@@ -76,17 +89,83 @@ async def test_only_self_no_candidate() -> None:
         status=UserStatus.active,
         is_deleted=False,
     )
+    rid = uuid.uuid4()
     repo = MagicMock()
     repo.get_user = AsyncMock(return_value=user)
     repo.commit = AsyncMock()
     repo.insert_security_event = AsyncMock()
+    repo.get_ownership = AsyncMock(
+        return_value=SimpleNamespace(
+            resource_id=rid, owner_user_id=user.id, lifecycle_status="active"
+        )
+    )
     svc = AuthorizationService(repo)
     d = await svc.authorize(
         user_id=user.id,
         session_id=None,
         action=Action.route_candidate_exclude_self,
         request_id="r",
-        candidates=[RouteCandidate(uuid.uuid4(), user.id, "active")],
+        candidates=[RouteCandidate(rid, user.id, "active")],
     )
     assert d.code == "NO_ROUTE_CANDIDATE"
     assert d.http_status == 404
+
+
+@pytest.mark.asyncio
+async def test_forged_owner_resolved_from_storage() -> None:
+    user = SimpleNamespace(
+        id=uuid.uuid4(),
+        role=UserRole.buyer,
+        status=UserStatus.active,
+        is_deleted=False,
+    )
+    rid = uuid.uuid4()
+    other = uuid.uuid4()
+    repo = MagicMock()
+    repo.get_user = AsyncMock(return_value=user)
+    repo.commit = AsyncMock()
+    repo.insert_security_event = AsyncMock()
+    repo.get_ownership = AsyncMock(
+        return_value=SimpleNamespace(
+            resource_id=rid, owner_user_id=user.id, lifecycle_status="active"
+        )
+    )
+    svc = AuthorizationService(repo)
+    d = await svc.authorize(
+        user_id=user.id,
+        session_id=None,
+        action=Action.route_candidate_exclude_self,
+        request_id="r",
+        candidates=[RouteCandidate(rid, other, "active")],
+    )
+    assert d.code == "NO_ROUTE_CANDIDATE"
+
+
+@pytest.mark.asyncio
+async def test_relabel_disabled_loses_to_server_state() -> None:
+    user = SimpleNamespace(
+        id=uuid.uuid4(),
+        role=UserRole.buyer,
+        status=UserStatus.active,
+        is_deleted=False,
+    )
+    rid = uuid.uuid4()
+    other = uuid.uuid4()
+    repo = MagicMock()
+    repo.get_user = AsyncMock(return_value=user)
+    repo.commit = AsyncMock()
+    repo.insert_security_event = AsyncMock()
+    repo.get_ownership = AsyncMock(
+        return_value=SimpleNamespace(
+            resource_id=rid, owner_user_id=other, lifecycle_status="disabled"
+        )
+    )
+    svc = AuthorizationService(repo)
+    d = await svc.authorize(
+        user_id=user.id,
+        session_id=None,
+        action=Action.route_candidate_exclude_self,
+        request_id="r",
+        candidates=[RouteCandidate(rid, other, "active")],
+    )
+    assert d.code == "NO_ROUTE_CANDIDATE"

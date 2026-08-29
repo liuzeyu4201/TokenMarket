@@ -8,6 +8,7 @@ from typing import Any
 
 from app.domain.sellerkeys.codes import (
     CODE_CONFLICT,
+    CODE_ENCRYPTION,
     CODE_NOT_FOUND,
     CODE_UNAUTHORIZED,
     CODE_VALIDATION_FAILED,
@@ -99,10 +100,21 @@ class LifecycleService:
         row = self._owned(key_id, seller_id)
         if row.get("administrative_state") == "active":
             return _public_view(row)
+        expected_version = int(row.get("version") or 1)
         ct, nonce, tag = row.get("ciphertext"), row.get("nonce"), row.get("tag")
         if not ct or not nonce or not tag:
             raise OnboardingError(CODE_NOT_FOUND, MSG[CODE_NOT_FOUND], http_status=404)
-        plaintext = self._encryptor.decrypt(nonce, ct, tag).decode("utf-8")
+        try:
+            nonce, ct, tag, key_ver, _rotated = self._encryptor.reencrypt(
+                nonce, ct, tag, row.get("key_version")
+            )
+        except ValueError as exc:
+            raise OnboardingError(
+                CODE_ENCRYPTION, MSG[CODE_ENCRYPTION], http_status=503
+            ) from exc
+        plaintext = self._encryptor.decrypt(
+            nonce, ct, tag, key_ver
+        ).decode("utf-8")
         snap = self._validator.validate(
             platform=str(row["platform"]), api_key=plaintext, request_id=request_id
         )
@@ -122,17 +134,31 @@ class LifecycleService:
             raise OnboardingError(
                 CODE_VALIDATION_FAILED, MSG[CODE_VALIDATION_FAILED], http_status=409
             )
-        row["administrative_state"] = transition(
-            str(row["administrative_state"]), "active"
+        current = self._owned(key_id, seller_id)
+        if str(current.get("administrative_state")) == "revoked":
+            raise OnboardingError(CODE_CONFLICT, MSG[CODE_CONFLICT], http_status=409)
+        if int(current.get("version") or 1) != expected_version:
+            raise OnboardingError(CODE_CONFLICT, MSG[CODE_CONFLICT], http_status=409)
+        current["administrative_state"] = transition(
+            str(current["administrative_state"]), "active"
         )
-        row["health_state"] = "healthy"
-        row["remaining_quota"] = snap.remaining_quota
-        row["quota_unit"] = snap.quota_unit
-        row["last_validated_at"] = datetime.now(timezone.utc)
-        row["version"] = int(row.get("version") or 1) + 1
-        row["updated_at"] = datetime.now(timezone.utc)
-        self._store.save(row)
-        return _public_view(row)
+        current["health_state"] = "healthy"
+        current["remaining_quota"] = snap.remaining_quota
+        current["quota_unit"] = snap.quota_unit
+        current["last_validated_at"] = datetime.now(timezone.utc)
+        current["ciphertext"] = ct
+        current["nonce"] = nonce
+        current["tag"] = tag
+        current["key_version"] = key_ver
+        current["version"] = expected_version + 1
+        current["updated_at"] = datetime.now(timezone.utc)
+        saver = getattr(self._store, "save_if_unmodified", None)
+        if callable(saver):
+            if not saver(current, expected_version):
+                raise OnboardingError(CODE_CONFLICT, MSG[CODE_CONFLICT], http_status=409)
+        else:
+            self._store.save(current)
+        return _public_view(current)
 
     def revoke(
         self, key_id: uuid.UUID, seller_id: uuid.UUID, role: str

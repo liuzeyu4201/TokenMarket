@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -27,10 +28,13 @@ type Config struct {
 
 // Server wraps the Gin engine and configuration.
 type Server struct {
-	config       Config
-	engine       *gin.Engine
-	validateDeps *ValidateDeps
-	proxyEnabled bool
+	config         Config
+	engine         *gin.Engine
+	validateDeps   *ValidateDeps
+	proxyEnabled   bool
+	metricsHandler http.Handler
+	metricsReg     prometheus.Registerer
+	registerCount  atomic.Int32
 }
 
 // NewServer creates an operational scaffold server (health/metrics + optional validate).
@@ -44,6 +48,7 @@ func NewServer(cfg Config) (*Server, error) {
 	r.Use(gin.Recovery())
 
 	s := &Server{config: cfg, engine: r}
+	s.initMetrics()
 	r.GET("/health/live", s.liveness)
 	r.GET("/health/ready", s.readiness)
 	r.GET("/metrics", s.metrics)
@@ -110,7 +115,8 @@ func (s *Server) readiness(c *gin.Context) {
 	s.healthResponse(c, "ready")
 }
 
-func (s *Server) metrics(c *gin.Context) {
+func (s *Server) initMetrics() {
+	reg := prometheus.NewRegistry()
 	info := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "service_build_info",
@@ -118,10 +124,19 @@ func (s *Server) metrics(c *gin.Context) {
 		},
 		[]string{"service", "version"},
 	)
+	reg.MustRegister(info)
+	s.registerCount.Add(1)
 	info.WithLabelValues(s.config.Service, s.config.Version).Set(1)
-	prometheus.MustRegister(info)
-	defer prometheus.Unregister(info)
-	promhttp.Handler().ServeHTTP(c.Writer, c.Request)
+	s.metricsReg = reg
+	s.metricsHandler = promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+}
+
+func (s *Server) MetricsRegisterCount() int {
+	return int(s.registerCount.Load())
+}
+
+func (s *Server) metrics(c *gin.Context) {
+	s.metricsHandler.ServeHTTP(c.Writer, c.Request)
 }
 
 func (s *Server) notFound(c *gin.Context) {

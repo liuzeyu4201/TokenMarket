@@ -157,11 +157,12 @@ class AuthorizationService:
             )
 
         if act is Action.route_candidate_exclude_self:
+            resolved = await self._resolve_route_candidates(candidates or ())
             return await self._authorize_route(
                 user_id=user_id,
                 session_id=session_id,
                 request_id=request_id,
-                candidates=candidates or (),
+                candidates=resolved,
                 start=start,
             )
 
@@ -355,6 +356,34 @@ class AuthorizationService:
             resource_type=row.resource_type,
             resource_id=row.resource_id,
         )
+
+    async def _resolve_route_candidates(
+        self, candidates: Sequence[RouteCandidate]
+    ) -> list[RouteCandidate]:
+        """Ignore caller-supplied owner/lifecycle; load current rows by resource_id."""
+        resolved: list[RouteCandidate] = []
+        getter = getattr(self._repo, "get_ownership", None)
+        for c in candidates:
+            row = None
+            if callable(getter):
+                row = await getter("seller_key", c.resource_id)
+            if row is None:
+                resolved.append(
+                    RouteCandidate(
+                        resource_id=c.resource_id,
+                        owner_user_id=uuid.UUID(int=0),
+                        lifecycle_status="disabled",
+                    )
+                )
+                continue
+            resolved.append(
+                RouteCandidate(
+                    resource_id=row.resource_id,
+                    owner_user_id=row.owner_user_id,
+                    lifecycle_status=str(row.lifecycle_status),
+                )
+            )
+        return resolved
 
     async def _authorize_route(
         self,

@@ -64,6 +64,12 @@ class SessionedSQLKeyStore:
     def save(self, record: dict[str, Any]) -> None:
         self._run(lambda s: s.save(record))
 
+    def save_if_unmodified(self, record: dict[str, Any], expected_version: int) -> bool:
+        return self._run(lambda s: s.save_if_unmodified(record, expected_version))
+
+    def persisted_key_versions(self) -> set[str]:
+        return self._run(lambda s: s.persisted_key_versions())
+
     def list_routable(self) -> list[dict[str, Any]]:
         return self._run(lambda s: s.list_routable())
 

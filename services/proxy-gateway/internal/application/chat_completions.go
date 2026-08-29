@@ -31,9 +31,13 @@ type ChatService struct {
 }
 
 func NewChatService(cfg chatcompat.Config) *ChatService {
+	client := volcano.NewChatClient(cfg.BaseURL)
+	if cfg.MaxResponseBytes > 0 {
+		client.MaxResponseBytes = int64(cfg.MaxResponseBytes)
+	}
 	return &ChatService{
 		Cfg:     cfg,
-		Client:  volcano.NewChatClient(cfg.BaseURL),
+		Client:  client,
 		Now:     func() time.Time { return time.Now().UTC() },
 		Metrics: observability.DefaultChatMetrics(),
 		Logger:  slog.Default(),
@@ -104,6 +108,12 @@ func (s *ChatService) Complete(ctx context.Context, req chatcompat.ChatAdaptRequ
 
 	res := s.Client.PostJSON(ctx, req.APIKey, body, false)
 	if res.Err != nil {
+		if errors.Is(res.Err, volcano.ErrResponseTooLarge) {
+			return s.finishNonStream(start, req, chatcompat.ChatAdaptResult{
+				ErrorCategory: chatcompat.CategoryInvalidResponse,
+				UsageStatus:   chatcompat.UsageNotApplicable,
+			}), nil
+		}
 		if chatcompat.IsCallerCancel(res.Err) || errors.Is(ctx.Err(), context.Canceled) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			r := s.finishNonStream(start, req, chatcompat.ChatAdaptResult{
 				ErrorCategory: chatcompat.CategoryTimeout,
@@ -217,7 +227,9 @@ func (s *ChatService) consumeSSE(ctx context.Context, req chatcompat.ChatAdaptRe
 			)
 		}
 	}
-	parser := volcano.NewSSEParser(body)
+	maxEvent := volcano.DefaultMaxSSEEventBytes
+	maxLine := volcano.DefaultMaxSSELineBytes
+	parser := volcano.NewSSEParserLimited(body, maxEvent, maxLine)
 	yielded := 0
 	sentDone := false
 	public := req.Model
@@ -226,6 +238,18 @@ func (s *ChatService) consumeSSE(ctx context.Context, req chatcompat.ChatAdaptRe
 	for {
 		ev, err := parser.Next()
 		if err != nil {
+			if errors.Is(err, volcano.ErrSSEEventTooLarge) || errors.Is(err, volcano.ErrSSELineTooLarge) {
+				_ = body.Close()
+				cat := chatcompat.CategoryInvalidResponse
+				if yielded == 0 {
+					emit(chatcompat.StreamEvent{Kind: chatcompat.KindError, ErrorCategory: cat})
+					finish(cat)
+					return
+				}
+				emit(chatcompat.StreamEvent{Kind: chatcompat.KindTruncated, ErrorCategory: chatcompat.CategoryTruncatedStream})
+				finish(chatcompat.CategoryTruncatedStream)
+				return
+			}
 			if yielded == 0 {
 				cat := chatcompat.ClassifyTransport(err)
 				if errors.Is(err, io.EOF) {

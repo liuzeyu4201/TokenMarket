@@ -68,3 +68,20 @@ func TestSSEParserIsIncremental(t *testing.T) {
 		t.Fatal("must be incremental")
 	}
 }
+
+func TestSSEEventOneByteOverCapRejected(t *testing.T) {
+	p := volcano.NewSSEParserLimited(strings.NewReader("data: "+strings.Repeat("x", 8)+"\n\n"), 8, 64)
+	_, err := p.Next()
+	if err != volcano.ErrSSEEventTooLarge {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestSSEUnterminatedEventBounded(t *testing.T) {
+	r := strings.NewReader("data: " + strings.Repeat("y", 32))
+	p := volcano.NewSSEParserLimited(r, 16, 64)
+	_, err := p.Next()
+	if err != volcano.ErrSSEEventTooLarge && err != io.EOF {
+		t.Fatalf("got %v", err)
+	}
+}

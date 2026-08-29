@@ -3,12 +3,17 @@ package volcano
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/chatcompat"
 )
+
+const DefaultMaxResponseBytes int64 = 2 << 20
+
+var ErrResponseTooLarge = errors.New("provider response exceeds configured limit")
 
 // ChatCallResult 一次非流式出站。
 type ChatCallResult struct {
@@ -21,9 +26,17 @@ type ChatCallResult struct {
 
 // ChatClient 火山 Chat Completions。生成路径 MaxAttempts=1。
 type ChatClient struct {
-	BaseURL     string
-	HTTPClient  *http.Client
-	MaxAttempts int
+	BaseURL          string
+	HTTPClient       *http.Client
+	MaxAttempts      int
+	MaxResponseBytes int64
+}
+
+func (c *ChatClient) maxResponse() int64 {
+	if c != nil && c.MaxResponseBytes > 0 {
+		return c.MaxResponseBytes
+	}
+	return DefaultMaxResponseBytes
 }
 
 func NewChatClient(baseURL string) *ChatClient {
@@ -56,9 +69,13 @@ func (c *ChatClient) PostJSON(ctx context.Context, apiKey string, body []byte, s
 		return ChatCallResult{Err: err}
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
+	limit := c.maxResponse()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return ChatCallResult{Status: resp.StatusCode, Err: err, Headers: resp.Header}
+	}
+	if int64(len(b)) > limit {
+		return ChatCallResult{Status: resp.StatusCode, Err: ErrResponseTooLarge, Headers: resp.Header}
 	}
 	return ChatCallResult{
 		Status:     resp.StatusCode,

@@ -15,10 +15,14 @@ import pytest
 from workflow.deploy_env.lifecycle import (
     REQUIRED_AUTH_EVIDENCE_KEYS,
     DeployError,
+    auth_release_companion_path,
     auth_release_manifest_from_env,
+    sign_auth_release_payload,
     verify_auth_activation,
     verify_auth_release_manifest,
 )
+
+_RELEASE_KEY = b"v" * 32
 
 from .helpers import find_repo_root
 
@@ -61,13 +65,88 @@ def test_tests_do_not_read_real_evidence_tree() -> None:
             assert "sk-" not in text
 
 
-def test_valid_manifest_passes() -> None:
-    report = verify_auth_release_manifest(_fixture("valid"), target_mode="test")
+def _materialize_signed(
+    tmp_path: Path,
+    source: Path,
+    *,
+    key: bytes = _RELEASE_KEY,
+    tamper_evidence: bool = False,
+) -> Path:
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    evidence = payload["evidence"]
+    for name, entry in evidence.items():
+        rel = f"synthetic/{name}.md"
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        body = f"evidence-{name}\n"
+        if tamper_evidence and name == "browser":
+            body = "tampered\n"
+        path.write_text(body, encoding="utf-8")
+        entry["path"] = rel
+        entry["sha256"] = __import__("hashlib").sha256(body.encode("utf-8")).hexdigest()
+    payload.pop("signature", None)
+    payload["signature"] = sign_auth_release_payload(payload, key)
+    dest = tmp_path / "candidate.json"
+    dest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    digest = __import__("hashlib").sha256(dest.read_bytes()).hexdigest()
+    auth_release_companion_path(dest).write_text(digest + "  candidate.json\n", encoding="utf-8")
+    return dest
+
+
+def test_valid_manifest_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTH_RELEASE_VERIFY_KEY", _RELEASE_KEY.decode("utf-8"))
+    monkeypatch.delenv("AUTH_RELEASE_ISSUE_KEY", raising=False)
+    dest = _materialize_signed(tmp_path, _fixture("valid"))
+    report = verify_auth_release_manifest(dest, repo_root=tmp_path, target_mode="test")
     assert report["ok"] is True
     assert report["manifest_sha256"]
     assert set(report["evidence_keys"]) == set(REQUIRED_AUTH_EVIDENCE_KEYS)
     assert report["activation"]["ok"] is True
     assert report["activation"]["tls_ready"] is True
+
+
+def test_fabricated_digest_matching_checksum_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """tm-release-manifest-auth: local checksum is not authority."""
+    monkeypatch.setenv("AUTH_RELEASE_VERIFY_KEY", _RELEASE_KEY.decode("utf-8"))
+    dest = _materialize_signed(tmp_path, _fixture("valid"))
+    payload = json.loads(dest.read_text(encoding="utf-8"))
+    payload["signature"] = "00" * 32
+    dest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    digest = __import__("hashlib").sha256(dest.read_bytes()).hexdigest()
+    auth_release_companion_path(dest).write_text(digest + "  candidate.json\n", encoding="utf-8")
+    with pytest.raises(DeployError) as exc:
+        verify_auth_release_manifest(dest, repo_root=tmp_path, require_activation=False)
+    assert exc.value.code == "AUTH_SIGNATURE_INVALID"
+
+
+def test_changed_evidence_after_signing_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUTH_RELEASE_VERIFY_KEY", _RELEASE_KEY.decode("utf-8"))
+    dest = _materialize_signed(tmp_path, _fixture("valid"))
+    (tmp_path / "synthetic" / "browser.md").write_text("changed-after-sign\n", encoding="utf-8")
+    with pytest.raises(DeployError) as exc:
+        verify_auth_release_manifest(dest, repo_root=tmp_path, require_activation=False)
+    assert exc.value.code == "AUTH_EVIDENCE_TAMPERED"
+
+
+def test_changed_commit_after_signing_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUTH_RELEASE_VERIFY_KEY", _RELEASE_KEY.decode("utf-8"))
+    dest = _materialize_signed(tmp_path, _fixture("valid"))
+    payload = json.loads(dest.read_text(encoding="utf-8"))
+    with pytest.raises(DeployError) as exc:
+        verify_auth_release_manifest(
+            dest,
+            repo_root=tmp_path,
+            require_activation=False,
+            expected_commit_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
+    assert exc.value.code == "AUTH_COMMIT_MISMATCH"
+    _ = payload
 
 
 def test_missing_manifest_fails_closed(tmp_path: Path) -> None:
@@ -96,9 +175,13 @@ def test_digest_mismatch_fails_closed() -> None:
     assert exc.value.code == "AUTH_DIGEST_MISMATCH"
 
 
-def test_synthetic_prod_activation_fails_closed() -> None:
+def test_synthetic_prod_activation_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AUTH_RELEASE_VERIFY_KEY", _RELEASE_KEY.decode("utf-8"))
+    dest = _materialize_signed(tmp_path, _fixture("synthetic-prod"))
     with pytest.raises(DeployError) as exc:
-        verify_auth_release_manifest(_fixture("synthetic-prod"), target_mode="prod")
+        verify_auth_release_manifest(dest, repo_root=tmp_path, target_mode="prod")
     assert exc.value.code in {"AUTH_ACTIVATION_TLS", "AUTH_ACTIVATION_SMS"}
 
 

@@ -42,6 +42,9 @@ def test_scanner_failure_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
     # Simulate a host where every required scanner binary is absent.
     monkeypatch.setattr(shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        "workflow.dependency_policy.validate_auth_dev_dependencies", lambda _root: None
+    )
     with pytest.raises(RuntimeError) as excinfo:
         security_module.run_security_checks(tmp_path, max_retries=0)
     message = str(excinfo.value).lower()
@@ -58,6 +61,64 @@ def test_runtime_must_not_rewrite_service_or_workflow_locks() -> None:
         text = path.read_text(encoding="utf-8")
         for token in forbidden:
             assert token not in text, f"{path} must not reference lock mutation ({token})"
+
+
+def test_python_lock_audit_covers_all_four_projects() -> None:
+    """tm-python-audit-coverage: every committed Python lock is audited independently."""
+    from workflow.security import PYTHON_LOCK_PROJECTS, python_lock_audit_plan
+
+    root = find_repo_root()
+    plan = python_lock_audit_plan(root)
+    projects = {item["project"] for item in plan}
+    assert projects == set(PYTHON_LOCK_PROJECTS)
+    assert len(plan) == 4
+    for item in plan:
+        export = item["export_cmd"]
+        assert "uv" in export and "export" in export and "--frozen" in export
+        assert str(root / item["project"]) in export or item["project"] in " ".join(export)
+        prefix = item["audit_cmd_prefix"]
+        assert prefix[-1] == "pip-audit"
+
+
+def test_fixture_vulnerability_in_each_omitted_lock_fails_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from workflow.security import PYTHON_LOCK_PROJECTS, audit_python_locks
+
+    for rel in PYTHON_LOCK_PROJECTS:
+        (tmp_path / rel).mkdir(parents=True)
+        (tmp_path / rel / "uv.lock").write_text("lock\n", encoding="utf-8")
+
+    calls: list[list[str]] = []
+
+    current: dict[str, str] = {"project": ""}
+
+    def fake_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        from types import SimpleNamespace
+
+        calls.append(list(cmd))
+        if "export" in cmd:
+            idx = cmd.index("--project")
+            current["project"] = str(cmd[idx + 1])
+            return SimpleNamespace(returncode=0, stdout="pkg==1.0.0\n", stderr="")
+        if "pip-audit" in cmd:
+            proj = current["project"]
+            # Previously omitted locks (billing, admin, workflow) fail the gate.
+            if "api-service" in proj and "billing" not in proj:
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return SimpleNamespace(returncode=1, stdout="", stderr="CVE-TEST")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    with pytest.raises(RuntimeError) as exc:
+        audit_python_locks(tmp_path, max_retries=0)
+    assert "pip-audit" in str(exc.value)
+    exported = [c for c in calls if "export" in c]
+    audited = [c for c in calls if "pip-audit" in c]
+    assert exported, "expected uv export of python locks"
+    assert audited, "expected pip-audit of python locks"
+    # Fail-closed on the first omitted lock (billing-service) after api-service succeeds.
+    assert any("billing-service" in " ".join(str(x) for x in c) for c in exported)
 
 
 def test_package_discovery_includes_local_env() -> None:

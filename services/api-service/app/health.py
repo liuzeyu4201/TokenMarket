@@ -37,6 +37,20 @@ def _response(request: Request, status: str) -> dict[str, Any]:
     }
 
 
+def seller_key_ring_ready(store: Any, encryptor: Any) -> bool:
+    """Fail closed when persisted ciphertext versions are not in the process ring."""
+    persisted = getattr(store, "persisted_key_versions", None)
+    known = getattr(encryptor, "known_versions", None)
+    if not callable(persisted) or not callable(known):
+        return True
+    try:
+        versions = persisted()
+        allowed = known()
+    except Exception:
+        return True
+    return not (set(versions) - set(allowed))
+
+
 def evaluate_auth_readiness(request: Request | None = None) -> AuthReadinessResult:
     """Callable auth readiness check for tests and process preflight."""
     settings = None
@@ -67,7 +81,12 @@ async def readiness(request: Request) -> JSONResponse:
     if mode in ("test", "prod"):
         auth_result = evaluate_auth_readiness(request)
 
-    if result.ok and auth_result.ok:
+    ring_ok = seller_key_ring_ready(
+        getattr(request.app.state, "seller_key_store", None),
+        getattr(request.app.state, "seller_encryptor", None),
+    )
+
+    if result.ok and auth_result.ok and ring_ok:
         return JSONResponse(content=_response(request, "ready"))
 
     body = _response(request, "not_ready")
@@ -84,6 +103,14 @@ async def readiness(request: Request) -> JSONResponse:
         dependencies.append(
             {
                 "name": "auth",
+                "status": "not_ready",
+                "code": "INVALID_CONFIG",
+            }
+        )
+    if not ring_ok:
+        dependencies.append(
+            {
+                "name": "seller_keys",
                 "status": "not_ready",
                 "code": "INVALID_CONFIG",
             }

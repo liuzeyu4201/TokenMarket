@@ -56,6 +56,38 @@ def test_disabled_and_soft_deleted_excluded() -> None:
     assert excluded == 2
 
 
+def test_forged_owner_on_self_owned_resource_still_excluded() -> None:
+    """Caller-supplied owner is not authority; the filter still drops self-owned IDs.
+
+    Service-layer tests resolve owner from storage; this covers the last-mile filter
+    once authoritative facts are loaded (forged labels never reach it as owner).
+    """
+    buyer = uuid.uuid4()
+    other = uuid.uuid4()
+    self_id = uuid.uuid4()
+    # Authoritative facts: self_id is owned by buyer even if a caller claimed otherwise.
+    authoritative = [
+        RouteCandidate(resource_id=self_id, owner_user_id=buyer, lifecycle_status="active"),
+        RouteCandidate(resource_id=uuid.uuid4(), owner_user_id=other, lifecycle_status="active"),
+    ]
+    filtered, excluded = exclude_self_owned_seller_keys(buyer, authoritative)
+    assert excluded == 1
+    assert all(c.resource_id != self_id for c in filtered)
+
+
+def test_relabel_disabled_as_active_loses_to_server_state() -> None:
+    buyer = uuid.uuid4()
+    other = uuid.uuid4()
+    # Server state is disabled regardless of a caller sending lifecycle_status=active.
+    pool = [
+        RouteCandidate(uuid.uuid4(), other, "disabled"),
+        RouteCandidate(uuid.uuid4(), other, "soft_deleted"),
+    ]
+    filtered, excluded = exclude_self_owned_seller_keys(buyer, pool)
+    assert filtered == []
+    assert excluded == 2
+
+
 def test_sc002_thousand_never_selects_self() -> None:
     rng = random.Random(42)
     buyer = uuid.uuid4()

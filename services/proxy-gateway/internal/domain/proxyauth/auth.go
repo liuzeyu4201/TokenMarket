@@ -75,38 +75,58 @@ func ParseBearer(header string) string {
 }
 
 func (a Authenticator) Authenticate(authorization string) (Record, bool) {
+	rec, st := a.AuthenticateStatus(authorization)
+	return rec, st == AuthOK
+}
+
+func (a Authenticator) AuthenticateStatus(authorization string) (Record, AuthStatus) {
 	sec := ParseBearer(authorization)
 	if sec == "" || !ValidProxySecret(sec) {
-		return Record{}, false
+		return Record{}, AuthInvalid
 	}
 	if a.Store == nil {
-		return Record{}, false
+		return Record{}, AuthInvalid
 	}
 	hash := HashSecret(a.Pepper, sec)
-	if a.Limiter != nil && a.Limiter.CachedMiss(hash) {
-		return Record{}, false
+	if a.Limiter != nil && a.Limiter.CachedHit(hash) {
+		rec, ok := a.lookup(hash)
+		if ok && rec.Status == "active" {
+			return rec, AuthOK
+		}
+		a.Limiter.RememberMiss(hash)
+		return Record{}, AuthInvalid
 	}
+	if a.Limiter != nil && a.Limiter.CachedMiss(hash) {
+		return Record{}, AuthInvalid
+	}
+
+	// Uncached secrets consume the miss bucket. Previously authenticated
+	// buyers are served from the positive cache and retain capacity.
 	if a.Limiter != nil && !a.Limiter.AllowLookup() {
-		return Record{}, false
+		return Record{}, AuthOverload
 	}
 	if a.Limiter != nil {
 		defer a.Limiter.FinishLookup()
 	}
+
 	if rs, ok := a.Store.(ResultStore); ok {
 		rec, st := rs.LookupResult(hash)
 		switch st {
 		case LookupUnavailable:
-			return Record{}, false
+			return Record{}, AuthInvalid
 		case LookupMiss:
 			if a.Limiter != nil {
 				a.Limiter.RememberMiss(hash)
 			}
-			return Record{}, false
+			return Record{}, AuthInvalid
 		default:
 			if rec.Status != "active" {
-				return Record{}, false
+				return Record{}, AuthInvalid
 			}
-			return rec, true
+			if a.Limiter != nil {
+				a.Limiter.RememberHit(hash)
+			}
+			return rec, AuthOK
 		}
 	}
 	rec, ok := a.Store.Lookup(hash)
@@ -114,7 +134,18 @@ func (a Authenticator) Authenticate(authorization string) (Record, bool) {
 		if a.Limiter != nil && !ok {
 			a.Limiter.RememberMiss(hash)
 		}
-		return Record{}, false
+		return Record{}, AuthInvalid
 	}
-	return rec, true
+	if a.Limiter != nil {
+		a.Limiter.RememberHit(hash)
+	}
+	return rec, AuthOK
+}
+
+func (a Authenticator) lookup(hash string) (Record, bool) {
+	if rs, ok := a.Store.(ResultStore); ok {
+		rec, st := rs.LookupResult(hash)
+		return rec, st == LookupHit
+	}
+	return a.Store.Lookup(hash)
 }

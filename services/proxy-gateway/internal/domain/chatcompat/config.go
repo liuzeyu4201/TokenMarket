@@ -15,6 +15,7 @@ type Config struct {
 	DefaultDeadlineSec int
 	MaxDeadlineSec     int
 	MaxBodyBytes       int
+	MaxResponseBytes   int
 	DefaultRetryAfter  int
 	MaxRetryAfter      int
 	HMACSecret         string
@@ -35,6 +36,7 @@ func LoadConfigFromEnv() (Config, error) {
 		DefaultDeadlineSec: envInt("VOLCANO_CHAT_DEFAULT_DEADLINE_SECONDS", 60),
 		MaxDeadlineSec:     envInt("VOLCANO_CHAT_MAX_DEADLINE_SECONDS", 300),
 		MaxBodyBytes:       envInt("VOLCANO_CHAT_MAX_BODY_BYTES", 2097152),
+		MaxResponseBytes:   envInt("VOLCANO_CHAT_MAX_RESPONSE_BYTES", 2097152),
 		DefaultRetryAfter:  envInt("VOLCANO_VALIDATE_DEFAULT_RETRY_AFTER_SECONDS", 5),
 		MaxRetryAfter:      envInt("VOLCANO_VALIDATE_MAX_RETRY_AFTER_SECONDS", 300),
 		HMACSecret:         firstNonEmpty(os.Getenv("VOLCANO_VALIDATE_GATE_HMAC_SECRET"), "providervalid-dev-only-gate-secret"),
@@ -55,6 +57,9 @@ func (c Config) Validate() error {
 	}
 	if c.MaxBodyBytes < 1 {
 		return fmt.Errorf("chatcompat: max body bytes must be >= 1")
+	}
+	if c.MaxResponseBytes < 0 {
+		return fmt.Errorf("chatcompat: max response bytes must be >= 0")
 	}
 	return nil
 }

@@ -75,6 +75,61 @@ func chatTestCfg() chatcompat.Config {
 	}
 }
 
+func TestCompleteRejectsOversizedProviderBody(t *testing.T) {
+	st := &stubPoster{err: volcano.ErrResponseTooLarge, status: 200, body: []byte("xxxxx")}
+	svc := &application.ChatService{Cfg: chatTestCfg(), Client: st}
+	res, err := svc.Complete(context.Background(), chatcompat.ChatAdaptRequest{
+		Platform: "volcano", Model: "doubao-pro-32k", APIKey: "sk-x",
+		Messages: []chatcompat.ChatMessage{{Role: "user", Content: json.RawMessage(`"hi"`)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ErrorCategory != chatcompat.CategoryInvalidResponse {
+		t.Fatalf("cat %s", res.ErrorCategory)
+	}
+	if st.n.Load() != 1 {
+		t.Fatal("must still call poster")
+	}
+}
+
+type closeTracker struct {
+	io.ReadCloser
+	closed atomic.Bool
+}
+
+func (c *closeTracker) Close() error {
+	c.closed.Store(true)
+	return c.ReadCloser.Close()
+}
+
+func TestStreamOversizedSSECancelsProvider(t *testing.T) {
+	raw := "data: " + strings.Repeat("z", volcano.DefaultMaxSSEEventBytes+2)
+	ct := &closeTracker{ReadCloser: io.NopCloser(strings.NewReader(raw))}
+	st := &stubPoster{status: 200, stream: ct}
+	svc := &application.ChatService{Cfg: chatTestCfg(), Client: st}
+	tru := true
+	ch, pre := svc.OpenStream(context.Background(), chatcompat.ChatAdaptRequest{
+		Platform: "volcano", Model: "doubao-pro-32k", APIKey: "sk-x", Stream: &tru,
+		Messages: []chatcompat.ChatMessage{{Role: "user", Content: json.RawMessage(`"hi"`)}},
+	})
+	if pre != nil {
+		t.Fatalf("pre %+v", pre)
+	}
+	ev := <-ch
+	if ev.ErrorCategory != chatcompat.CategoryInvalidResponse && ev.Kind != chatcompat.KindError && ev.Kind != chatcompat.KindTruncated {
+		t.Fatalf("%+v", ev)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if ct.closed.Load() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("provider body was not closed")
+}
+
 func TestCompleteSuccessOnePost(t *testing.T) {
 	body := []byte(`{"id":"1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
 	st := &stubPoster{body: body, status: 200}

@@ -302,6 +302,121 @@ def validate_config(schema: dict[str, Any], values: dict[str, str]) -> None:
             raise ValueError(f"configuration variable {name!r} uses a dangerous default value")
 
 
+PYTHON_LOCK_PROJECTS: tuple[str, ...] = (
+    "services/api-service",
+    "services/billing-service",
+    "services/admin-service",
+    "tools/workflow",
+)
+
+
+def iter_python_lock_projects(repo_root: Path) -> list[Path]:
+    """Return every committed Python lock environment; fail if any is missing."""
+    root = Path(repo_root)
+    found: list[Path] = []
+    missing: list[str] = []
+    for rel in PYTHON_LOCK_PROJECTS:
+        lock = root / rel / "uv.lock"
+        if not lock.is_file():
+            missing.append(rel)
+        else:
+            found.append(root / rel)
+    if missing:
+        raise RuntimeError(
+            "python lock missing for pip-audit: " + ", ".join(missing)
+        )
+    if len(found) != len(PYTHON_LOCK_PROJECTS):
+        raise RuntimeError("python lock audit coverage is incomplete")
+    return found
+
+
+def python_lock_audit_plan(repo_root: Path) -> list[dict[str, Any]]:
+    """Describe the independent export+audit commands for each Python lock."""
+    root = Path(repo_root)
+    workflow_project = str(root / "tools" / "workflow")
+    plan: list[dict[str, Any]] = []
+    for project in iter_python_lock_projects(root):
+        plan.append(
+            {
+                "project": str(project.relative_to(root)).replace("\\", "/"),
+                "export_cmd": [
+                    "uv",
+                    "export",
+                    "--frozen",
+                    "--project",
+                    str(project),
+                    "--no-hashes",
+                ],
+                "audit_cmd_prefix": [
+                    "uv",
+                    "run",
+                    "--project",
+                    workflow_project,
+                    "pip-audit",
+                ],
+            }
+        )
+    return plan
+
+
+def audit_python_locks(repo_root: Path, *, max_retries: int = 1) -> None:
+    """Export and pip-audit every committed Python lock independently."""
+    import subprocess
+    import tempfile
+
+    root = Path(repo_root)
+    for item in python_lock_audit_plan(root):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as req_file:
+            export_result = subprocess.run(
+                item["export_cmd"],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if export_result.returncode != 0:
+                raise RuntimeError(
+                    f"uv export failed for pip-audit ({item['project']}): "
+                    f"{export_result.stderr}"
+                )
+            req_file.write(export_result.stdout)
+            req_path = Path(req_file.name)
+        last_error: Exception | None = None
+        audit_cmd = item["audit_cmd_prefix"] + [
+            "-r",
+            str(req_path),
+            "--disable-pip",
+            "--no-deps",
+        ]
+        for attempt in range(max_retries + 1):
+            try:
+                result = subprocess.run(
+                    audit_cmd,
+                    cwd=str(root),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    last_error = None
+                    break
+                last_error = RuntimeError(
+                    f"pip-audit scan failed for {item['project']} "
+                    f"(exit {result.returncode})"
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+            if attempt == max_retries:
+                req_path.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"security scan 'pip-audit' failed for {item['project']} "
+                    f"after {attempt + 1} attempts"
+                )
+        req_path.unlink(missing_ok=True)
+        if last_error is not None:
+            raise last_error
+
+
 def run_security_checks(repo_root: Any, *, max_retries: int = 1) -> None:
     """Run fail-closed security scans with bounded retries.
 
@@ -389,56 +504,10 @@ def run_security_checks(repo_root: Any, *, max_retries: int = 1) -> None:
         if last_error is not None:
             raise last_error
 
-    # pip-audit against uv.lock via a temporary requirements export.
-    pip_audit_cmd = [
-        "uv",
-        "run",
-        "--project",
-        str(repo_root / "tools" / "workflow"),
-        "pip-audit",
-    ]
     if shutil.which("uv") is None:
         missing.append("uv (required for pip-audit)")
     else:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as req_file:
-            export_result = subprocess.run(
-                [
-                    "uv",
-                    "export",
-                    "--project",
-                    str(repo_root / "services" / "api-service"),
-                    "--no-hashes",
-                ],
-                cwd=str(repo_root),
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if export_result.returncode != 0:
-                raise RuntimeError(f"uv export failed for pip-audit: {export_result.stderr}")
-            req_file.write(export_result.stdout)
-            req_path = Path(req_file.name)
-
-        last_error = None
-        for attempt in range(max_retries + 1):
-            try:
-                result = subprocess.run(
-                    pip_audit_cmd + ["-r", str(req_path), "--disable-pip", "--no-deps"],
-                    cwd=str(repo_root),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if result.returncode == 0:
-                    break
-                last_error = RuntimeError(f"pip-audit scan failed (exit {result.returncode})")
-            except Exception as exc:  # noqa: BLE001
-                last_error = exc
-            if attempt == max_retries:
-                raise RuntimeError(f"security scan 'pip-audit' failed after {attempt + 1} attempts")
-        req_path.unlink(missing_ok=True)
-        if last_error is not None:
-            raise last_error
+        audit_python_locks(repo_root, max_retries=max_retries)
 
     if missing:
         raise RuntimeError(f"required security scanners are missing: {', '.join(missing)}")

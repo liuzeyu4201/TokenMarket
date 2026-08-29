@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -109,7 +110,53 @@ func TestPublicHTTPServerSetsHeaderTimeout(t *testing.T) {
 	if srv.IdleTimeout != httpserver.DefaultIdleTimeout {
 		t.Fatalf("idle %s", srv.IdleTimeout)
 	}
+	if srv.ReadTimeout != httpserver.DefaultReadTimeout {
+		t.Fatalf("read %s", srv.ReadTimeout)
+	}
 	if srv.MaxHeaderBytes != httpserver.DefaultMaxHeaderBytes {
 		t.Fatalf("max header %d", srv.MaxHeaderBytes)
+	}
+}
+
+func TestTrickleBodyBelowDeadlineIsTerminated(t *testing.T) {
+	var acceptedFull atomic.Bool
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, err := io.ReadAll(r.Body)
+		if err == nil && r.ContentLength > 1 && int64(len(b)) == r.ContentLength {
+			acceptedFull.Store(true)
+		}
+		w.WriteHeader(http.StatusRequestTimeout)
+	})
+	srv := httpserver.NewPublicHTTPServerReadTimeouts("127.0.0.1:0", h, 50*time.Millisecond, time.Second, 120*time.Millisecond)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if tc, ok := conn.(*net.TCPConn); ok {
+		_ = tc.SetNoDelay(true)
+	}
+	body := `{"model":"doubao-pro-32k","messages":[{"role":"user","content":"hi"}]}`
+	hdr := "POST /health/live HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: " + itoa(len(body)) + "\r\n\r\n"
+	if _, err := conn.Write([]byte(hdr)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write([]byte{body[0]}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(250 * time.Millisecond)
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	buf := make([]byte, 64)
+	_, _ = conn.Read(buf)
+	if acceptedFull.Load() {
+		t.Fatal("trickled body was accepted in full after the read deadline")
 	}
 }

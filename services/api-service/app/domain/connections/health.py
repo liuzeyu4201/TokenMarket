@@ -54,6 +54,8 @@ class HealthFact:
     checked_at: datetime | None
     capability_version: int
     routable: bool
+    lifecycle_state: str = "draft"
+    admits_new: bool = False
 
 
 class VendorProbe(Protocol):
@@ -266,6 +268,9 @@ class HealthService:
             rec.capability_version = ver
         rec.updated_at = utcnow()
         self._store.save_health(rec)
+        if outcome.category == "ok" and rec.lifecycle_state == "draft":
+            rec.lifecycle_state = "verified"
+            self._store.save_lifecycle(rec, "draft")
         detail = redact_detail(outcome.redacted_detail)
         self._store.audit(
             seller_id=seller_id,
@@ -318,6 +323,8 @@ class HealthService:
         if rec is None or rec.status == "deleted":
             return None
         routable = rec.health_state == "healthy" and rec.capability_version > 0
+        from app.domain.connections.lifecycle import admits_new
+
         return HealthFact(
             connection_id=rec.connection_id,
             health_state=rec.health_state,
@@ -325,6 +332,8 @@ class HealthService:
             checked_at=rec.health_checked_at,
             capability_version=rec.capability_version,
             routable=routable,
+            lifecycle_state=rec.lifecycle_state,
+            admits_new=admits_new(rec),
         )
 
     def public_health(
@@ -351,6 +360,8 @@ class HealthService:
             "checked_at": fact.checked_at.isoformat() if fact.checked_at else None,
             "capability_version": fact.capability_version,
             "routable": fact.routable,
+            "lifecycle_state": fact.lifecycle_state,
+            "admits_new": fact.admits_new,
         }
 
     def tick(self, now: datetime | None = None) -> int:

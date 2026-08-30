@@ -137,6 +137,15 @@ class MemoryBindingStore:
                     and other.status == "active"
                 ):
                     raise PublishConflict
+            if rec.supply_mode == "dedicated" and rec.connection_id is not None:
+                for other in self.by_id.values():
+                    if (
+                        other.binding_id != rec.binding_id
+                        and other.connection_id == rec.connection_id
+                        and other.supply_mode == "dedicated"
+                        and other.status in ("active", "degraded")
+                    ):
+                        raise PublishConflict
             self.by_id[rec.binding_id] = deepcopy(rec)
 
     def audit(
@@ -168,5 +177,14 @@ class MemoryBindingStore:
                 and other.project_id == rec.project_id
                 and other.protocol == rec.protocol
                 and other.status == "active"
+            ):
+                raise PublishConflict
+            if (
+                rec.supply_mode == "dedicated"
+                and rec.connection_id is not None
+                and other.binding_id != rec.binding_id
+                and other.connection_id == rec.connection_id
+                and other.supply_mode == "dedicated"
+                and other.status in ("active", "degraded")
             ):
                 raise PublishConflict

@@ -53,6 +53,7 @@ def _to_record(row: ProviderConnectionRow) -> ConnectionRecord:
         last_probe_at=row.last_probe_at,
         next_probe_at=row.next_probe_at,
         capability_version=row.capability_version,
+        lifecycle_state=row.lifecycle_state,
     )
 
 
@@ -91,6 +92,7 @@ class SQLConnectionStore:
                 last_probe_at=rec.last_probe_at,
                 next_probe_at=rec.next_probe_at,
                 capability_version=rec.capability_version,
+                lifecycle_state=rec.lifecycle_state,
             )
         )
         self._s.flush()
@@ -240,6 +242,37 @@ class SQLConnectionStore:
         )
         return int(val or 0)
 
+    def save_lifecycle(self, rec: ConnectionRecord, expected_state: str) -> None:
+        result = self._s.execute(
+            update(ProviderConnectionRow)
+            .where(
+                ProviderConnectionRow.id == rec.connection_id,
+                ProviderConnectionRow.lifecycle_state == expected_state,
+            )
+            .values(
+                lifecycle_state=rec.lifecycle_state,
+                supply_mode=rec.supply_mode,
+                updated_at=rec.updated_at or utcnow(),
+            )
+        )
+        if result.rowcount != 1:
+            exists = self._s.get(ProviderConnectionRow, rec.connection_id)
+            if exists is None:
+                raise KeyError(rec.connection_id)
+            raise VersionConflict
+        self._s.flush()
+
+    def list_all_active(self) -> list[ConnectionRecord]:
+        rows = list(
+            self._s.scalars(
+                select(ProviderConnectionRow).where(
+                    ProviderConnectionRow.status == "active",
+                    ProviderConnectionRow.deleted_at.is_(None),
+                )
+            )
+        )
+        return [_to_record(r) for r in rows]
+
 
 class SessionedConnectionStore:
     def __init__(self, maker: sessionmaker[Session]) -> None:
@@ -314,3 +347,9 @@ class SessionedConnectionStore:
 
     def max_snapshot_version(self, connection_id: uuid.UUID) -> int:
         return self._run(lambda s: s.max_snapshot_version(connection_id))
+
+    def save_lifecycle(self, rec: ConnectionRecord, expected_state: str) -> None:
+        self._run(lambda s: s.save_lifecycle(rec, expected_state))
+
+    def list_all_active(self) -> list[ConnectionRecord]:
+        return self._run(lambda s: s.list_all_active())

@@ -56,6 +56,7 @@ class ConnectionRecord:
     last_probe_at: datetime | None = None
     next_probe_at: datetime | None = None
     capability_version: int = 0
+    lifecycle_state: str = "draft"
 
     def usable(self) -> bool:
         return (
@@ -85,6 +86,7 @@ class ConnectionRecord:
             "health_state": self.health_state,
             "health_reason": self.health_reason,
             "capability_version": self.capability_version,
+            "lifecycle_state": self.lifecycle_state,
         }
 
 
@@ -141,6 +143,9 @@ class ProviderConnectionRow(Base):
         DateTime(timezone=True), nullable=True
     )
     capability_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="draft"
+    )
 
 
 class ConnectionCapabilitySnapshotRow(Base):

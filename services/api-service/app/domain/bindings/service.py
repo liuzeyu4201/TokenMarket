@@ -271,6 +271,10 @@ class BindingService:
                 "version": rec.version,
             },
         )
+        if rec.supply_mode == "dedicated" and rec.connection_id is not None:
+            marker = getattr(self._connections, "mark_bound", None)
+            if callable(marker):
+                marker(rec.connection_id, request_id)
         return rec
 
     def deactivate(
@@ -293,6 +297,10 @@ class BindingService:
         rec.status = "inactive"
         rec.updated_at = utcnow()
         self._store.save(rec)
+        if rec.supply_mode == "dedicated" and rec.connection_id is not None:
+            marker = getattr(self._connections, "mark_unbound", None)
+            if callable(marker):
+                marker(rec.connection_id, request_id)
         return rec
 
     def list_mine(

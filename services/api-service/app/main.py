@@ -33,6 +33,7 @@ from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
 from .domain.bindings.service import BindingService
 from .domain.connections.health import FailClosedProbe, HealthService
+from .domain.connections.lifecycle import BindingDependencies, LifecycleService
 from .domain.connections.service import ConnectionService, ServiceConnectionLookup
 from .domain.connections.store import MemoryConnectionStore
 from .domain.endpcatalog import CatalogError, must_load
@@ -114,6 +115,9 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
             application.state.health_service = HealthService(
                 conn_svc, FailClosedProbe()
             )
+            application.state.lifecycle_service = LifecycleService(
+                conn_svc, dependencies=BindingDependencies(bind_svc._store)
+            )
             application.state.binding_service = bind_svc
             application.state.project_service = ProjectService(
                 store=proj_store, binding=bind_svc
@@ -140,6 +144,9 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
             application.state.health_service = HealthService(
                 conn_svc, FailClosedProbe()
             )
+            application.state.lifecycle_service = LifecycleService(
+                conn_svc, dependencies=BindingDependencies(bind_svc._store)
+            )
             application.state.binding_service = bind_svc
             application.state.project_service = ProjectService(
                 store=mem_proj, binding=bind_svc
@@ -161,6 +168,9 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
         conn_svc.bind_bindings(bind_svc)
         application.state.connection_service = conn_svc
         application.state.health_service = HealthService(conn_svc, FailClosedProbe())
+        application.state.lifecycle_service = LifecycleService(
+            conn_svc, dependencies=BindingDependencies(bind_svc._store)
+        )
         application.state.binding_service = bind_svc
         application.state.project_service = ProjectService(
             store=mem_proj, binding=bind_svc

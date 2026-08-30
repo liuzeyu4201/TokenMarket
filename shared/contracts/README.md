@@ -36,7 +36,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.3.0 | OpenAPI |
 | `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.0.0 | JSON Schema |
 | `usage/v1/` | Billing Service (usage observation, SF26+) | 1.1.0 | JSON Schema |
-| `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.0.0 | JSON Schema |
+| `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.1.0 | JSON Schema |
 | `ledger/v1/` | Billing Service (immutable ledger, SF28+) | 1.0.0 | JSON Schema |
 | `audit/v1/` | Admin Service (audit events, SF30+) | 1.0.0 | JSON Schema |
 | `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
@@ -74,7 +74,8 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   stable data-plane catalog coverage (SF19); 1.3.0 adds Anthropic stable
   coverage (SF20); 1.4.0 adds Vertex publisher-model coverage (SF21).
   `usage/v1` 1.1.0 expands native spend and multi-dimension capture (SF26).
-  Route/pricing/ledger/audit writers land in later SFs.
+  `pricing/v1` 1.1.0 adds versioned rates, buyer multiplier, and seller quotes (SF27).
+  Route/ledger/audit writers land in later SFs.
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation

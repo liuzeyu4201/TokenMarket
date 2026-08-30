@@ -13,6 +13,7 @@ import (
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/affinity"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/endpcatalog"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/pricelock"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageobs"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageparse"
 )
@@ -55,6 +56,7 @@ type Kernel struct {
 	Affinity  affinity.Store
 	Usage     usageobs.Sink
 	Capture   usageparse.Recorder
+	PriceLock *pricelock.Locker
 }
 
 func (k *Kernel) selector() Selector {
@@ -118,6 +120,11 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 	}
 	isWS := transportName == "websocket"
 	projectID := r.Header.Get("X-TokenMarket-Project-ID")
+	if k.PriceLock != nil {
+		if reqID := r.Header.Get("X-Request-ID"); reqID != "" {
+			_, _ = k.PriceLock.Lock(reqID)
+		}
+	}
 
 	var pinConn string
 	if affinityKind == "resource_id" {

@@ -1,31 +1,60 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tokenmarket.local/contracts/pricing/v1/pricing.schema.json",
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "title": "VersionedRateCard",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "rate_version",
-    "provider",
+    "status",
     "scale",
     "buyer_multiplier_bps",
-    "seller_quote_multiplier_bps",
     "seller_quote_min_bps",
-    "seller_quote_max_bps"
+    "seller_quote_max_bps",
+    "rows"
   ],
   "properties": {
     "rate_version": { "type": "string", "minLength": 1 },
+    "status": {
+      "enum": ["draft", "previewed", "approved", "published", "superseded"]
+    },
     "provider": { "enum": ["openai", "anthropic", "vertex"] },
-    "model": { "type": "string" },
-    "endpoint_id": { "type": "string" },
     "scale": { "type": "integer", "minimum": 0, "maximum": 9 },
-    "input_rate_minor_units": { "type": "integer", "minimum": 0 },
-    "output_rate_minor_units": { "type": "integer", "minimum": 0 },
+    "currency": { "type": "string", "minLength": 1 },
     "buyer_multiplier_bps": { "type": "integer", "minimum": 0 },
-    "seller_quote_multiplier_bps": { "type": "integer", "minimum": 0 },
     "seller_quote_min_bps": { "type": "integer", "minimum": 0 },
-    "seller_quote_max_bps": { "type": "integer", "minimum": 0 }
+    "seller_quote_max_bps": { "type": "integer", "minimum": 0 },
+    "rows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rate_row" }
+    }
   },
-  "description": "金额为整数最小单位；bps 为万分比。禁止 IEEE754 金额字段。"
+  "$defs": {
+    "rate_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "dimension",
+        "rate_minor_units",
+        "unit",
+        "currency"
+      ],
+      "properties": {
+        "provider": { "enum": ["openai", "anthropic", "vertex"] },
+        "protocol": { "type": "string" },
+        "model": { "type": "string" },
+        "endpoint_id": { "type": "string" },
+        "dimension": { "type": "string", "minLength": 1 },
+        "region": { "type": "string" },
+        "currency": { "type": "string" },
+        "unit": { "type": "string" },
+        "rate_minor_units": { "type": "integer", "minimum": 0 },
+        "valid_from": { "type": ["string", "null"] },
+        "valid_to": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "description": "金额为整数微单位；bps 为万分比。禁止 IEEE754 金额字段。buyer_multiplier_bps 必须 ≥ seller_quote_max_bps。"
 }

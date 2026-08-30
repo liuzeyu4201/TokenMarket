@@ -6,8 +6,11 @@ import {
   createBinding,
   getSdkHint,
   listBindings,
+  previewReplace,
   publishBinding,
+  replaceBinding,
   type Binding,
+  type ReplacePreview,
   type SdkHint,
 } from '../api/v1/bindings'
 import { issueProjectKey, listProjectKeys, type ProxyKeyPublic } from '../api/v1/proxyKeys'
@@ -46,6 +49,11 @@ export function ProjectDetail() {
   const [keys, setKeys] = useState<ProxyKeyPublic[]>([])
   const [onceSecret, setOnceSecret] = useState<string | null>(null)
   const [keyName, setKeyName] = useState('dev')
+  const [replacePreview, setReplacePreview] = useState<ReplacePreview | null>(null)
+  const [newConnectionId, setNewConnectionId] = useState('')
+  const [replaceReason, setReplaceReason] = useState('')
+  const [buyerConfirmed, setBuyerConfirmed] = useState(false)
+  const [stepUp, setStepUp] = useState(false)
 
   useEffect(() => {
     if (auth.status !== 'authenticated' || !projectId) return
@@ -62,6 +70,14 @@ export function ProjectDetail() {
         setBindings(rows)
         setKeys(keyRows)
         setNotFound(false)
+        const dedicated = rows.find(
+          (b) => b.supply_mode === 'dedicated' && (b.status === 'active' || b.status === 'degraded'),
+        )
+        if (dedicated) {
+          void previewReplace(p.project_id, dedicated.binding_id)
+            .then(setReplacePreview)
+            .catch(() => setReplacePreview(null))
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -249,6 +265,78 @@ export function ProjectDetail() {
           </li>
         ))}
       </ul>
+      {item.mode === 'dedicated' ? (
+        <section data-testid="replace-panel">
+          <h3>人工更换专享连接</h3>
+          <p data-testid="replace-impact">
+            不会迁移：
+            {(replacePreview?.non_migrating ?? ['files', 'batches', 'caches', 'fine_tuning', 'operations']).join(
+              '、',
+            )}
+            。旧资源仍走旧连接或明确不可用。
+          </p>
+          <form
+            data-testid="replace-form"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const target = bindings.find(
+                (b) => b.supply_mode === 'dedicated' && (b.status === 'active' || b.status === 'degraded'),
+              )
+              if (!target) return
+              void run(async () => {
+                await replaceBinding(
+                  item.project_id,
+                  target.binding_id,
+                  {
+                    new_connection_id: newConnectionId,
+                    buyer_confirmed: buyerConfirmed,
+                    reason: replaceReason,
+                    step_up: stepUp,
+                  },
+                  auth.getCsrfToken(),
+                )
+                setBindings(await listBindings(item.project_id))
+              })
+            }}
+          >
+            <FormField
+              id="replace-conn"
+              label="新 Connection ID"
+              value={newConnectionId}
+              onChange={(ev) => setNewConnectionId(ev.target.value)}
+            />
+            <FormField
+              id="replace-reason"
+              label="原因"
+              value={replaceReason}
+              onChange={(ev) => setReplaceReason(ev.target.value)}
+            />
+            <label htmlFor="replace-confirm">
+              <input
+                id="replace-confirm"
+                type="checkbox"
+                checked={buyerConfirmed}
+                onChange={(ev) => setBuyerConfirmed(ev.target.checked)}
+                data-testid="replace-confirm"
+              />
+              我确认资源不会迁移
+            </label>
+            <label htmlFor="replace-step-up">
+              <input
+                id="replace-step-up"
+                type="checkbox"
+                checked={stepUp}
+                onChange={(ev) => setStepUp(ev.target.checked)}
+                data-testid="replace-step-up"
+              />
+              已完成 step-up
+            </label>
+            <Button type="submit" loading={busy}>
+              更换连接
+            </Button>
+          </form>
+        </section>
+      ) : null}
       <h2>代理 Key</h2>
       <p>明文只显示一次。列表仅前后缀，不能用于认证。</p>
       <form

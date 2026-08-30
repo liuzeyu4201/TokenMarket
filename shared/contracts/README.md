@@ -29,9 +29,9 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `volcano-key-validation/v1/` | Proxy Gateway (provider validation) | 1.0.0 | OpenAPI / Markdown |
 | `volcano-openai-compat/v1/` | Proxy Gateway (Chat Completions adapter) | 1.0.0 | OpenAPI / Markdown |
 | `endpoint-catalog/v1/` | Proxy Gateway (V0.2 Endpoint Catalog) | 1.0.0 | JSON Schema / JSON / Markdown |
-| `native-passthrough/v1/` | Proxy Gateway (native same-protocol kernel, SF18+) | 1.4.0 | Markdown |
+| `native-passthrough/v1/` | Proxy Gateway (native same-protocol kernel, SF18+) | 1.5.0 | Markdown |
 | `project/v1/` | API Service (Project domain, SF10+) | 1.1.0 | OpenAPI |
-| `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.0.0 | OpenAPI |
+| `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.1.0 | OpenAPI |
 | `project-proxy-key/v1/` | API Service (Project proxy Key, SF12+) | 1.0.0 | OpenAPI |
 | `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.3.0 | OpenAPI |
 | `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.2.0 | JSON Schema |
@@ -73,7 +73,10 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   `native-passthrough/v1` is the SF18 same-protocol kernel (no cross-protocol
   conversion); 1.1.0 adds SSE/WS/file affinity (SF22); 1.2.0 adds OpenAI
   stable data-plane catalog coverage (SF19); 1.3.0 adds Anthropic stable
-  coverage (SF20); 1.4.0 adds Vertex publisher-model coverage (SF21).
+  coverage (SF20); 1.4.0 adds Vertex publisher-model coverage (SF21);
+  1.5.0 adds dedicated fail-closed `DEDICATED_UNAVAILABLE` (SF25).
+  `provider-binding/v1` 1.1.0 adds replace-preview/replace with buyer
+  confirmation and draining (SF25).
   `usage/v1` 1.1.0 expands native spend and multi-dimension capture (SF26).
   `pricing/v1` 1.1.0 adds versioned rates, buyer multiplier, and seller quotes (SF27).
   `seller-workbench/v1` is the seller quote and supply console (SF17).

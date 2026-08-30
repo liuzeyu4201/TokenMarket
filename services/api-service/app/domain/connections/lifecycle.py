@@ -357,6 +357,16 @@ class LifecycleService:
             rec.seller_account_id = rec.seller_account_id
             self._persist(rec, expected, request_id)
 
+    def mark_draining(self, connection_id: uuid.UUID, request_id: str) -> None:
+        rec = self._store.get(connection_id)
+        if rec is None:
+            return
+        if rec.lifecycle_state not in ("bound", "listed", "paused"):
+            return
+        expected = rec.lifecycle_state
+        rec.lifecycle_state = transition(expected, "draining")
+        self._persist(rec, expected, request_id)
+
     def mark_unbound(self, connection_id: uuid.UUID, request_id: str) -> None:
         rec = self._store.get(connection_id)
         if rec is None or rec.lifecycle_state != "bound":

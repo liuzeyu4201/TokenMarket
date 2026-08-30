@@ -151,6 +151,10 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 		up, err = k.selector().Select(r.Context(), proto, endpointID)
 	}
 	if err != nil {
+		if err == errDedicatedUnavailable {
+			writePlatform(w, r, http.StatusServiceUnavailable, CodeDedicatedUnavailable, "专享连接不可用")
+			return
+		}
 		writePlatform(w, r, http.StatusServiceUnavailable, CodeNoUpstream, "暂无可用上游连接")
 		return
 	}

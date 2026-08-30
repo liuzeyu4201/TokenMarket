@@ -8,17 +8,18 @@ import (
 )
 
 const (
-	ProtocolOpenAI       = "openai"
-	ProtocolAnthropic    = "anthropic"
-	ProtocolVertex       = "vertex"
-	CodeUnresolved       = "PROTOCOL_UNRESOLVED"
-	CodeNoUpstream       = "NO_UPSTREAM"
-	CodeTooLarge         = "REQUEST_TOO_LARGE"
-	CodeTimeout          = "UPSTREAM_TIMEOUT"
-	CodeCanceled         = "CLIENT_CANCELED"
-	CodeAffinityNotFound = "AFFINITY_NOT_FOUND"
-	CodeAffinityConflict = "AFFINITY_CONFLICT"
-	CodeSlowConsumer     = "SLOW_CONSUMER"
+	ProtocolOpenAI           = "openai"
+	ProtocolAnthropic        = "anthropic"
+	ProtocolVertex           = "vertex"
+	CodeUnresolved           = "PROTOCOL_UNRESOLVED"
+	CodeNoUpstream           = "NO_UPSTREAM"
+	CodeDedicatedUnavailable = "DEDICATED_UNAVAILABLE"
+	CodeTooLarge             = "REQUEST_TOO_LARGE"
+	CodeTimeout              = "UPSTREAM_TIMEOUT"
+	CodeCanceled             = "CLIENT_CANCELED"
+	CodeAffinityNotFound     = "AFFINITY_NOT_FOUND"
+	CodeAffinityConflict     = "AFFINITY_CONFLICT"
+	CodeSlowConsumer         = "SLOW_CONSUMER"
 )
 
 func stripProtocolPrefix(path string) (protocol, rest string) {

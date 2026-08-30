@@ -13,6 +13,8 @@ const listBindings = vi.fn()
 const createBinding = vi.fn()
 const publishBinding = vi.fn()
 const getSdkHint = vi.fn()
+const previewReplace = vi.fn()
+const replaceBinding = vi.fn()
 const listProjectKeys = vi.fn()
 const issueProjectKey = vi.fn()
 
@@ -50,6 +52,8 @@ vi.mock('../api/v1/bindings', async () => {
     createBinding: (...args: unknown[]) => createBinding(...args),
     publishBinding: (...args: unknown[]) => publishBinding(...args),
     getSdkHint: (...args: unknown[]) => getSdkHint(...args),
+    previewReplace: (...args: unknown[]) => previewReplace(...args),
+    replaceBinding: (...args: unknown[]) => replaceBinding(...args),
   }
 })
 
@@ -72,6 +76,13 @@ describe('ProjectDetail', () => {
     createBinding.mockReset()
     publishBinding.mockReset()
     getSdkHint.mockReset()
+    previewReplace.mockReset()
+    previewReplace.mockResolvedValue({
+      old_connection_id: 'c-old',
+      non_migrating: ['files', 'batches', 'caches', 'fine_tuning', 'operations'],
+      migrates: false,
+    })
+    replaceBinding.mockReset()
     listProjectKeys.mockReset()
     listProjectKeys.mockResolvedValue([])
     issueProjectKey.mockReset()
@@ -104,6 +115,8 @@ describe('ProjectDetail', () => {
     expect(screen.getByText(/不会回退共享池/)).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: '模式' })).not.toBeInTheDocument()
     expect(screen.getByTestId('binding-form')).toBeInTheDocument()
+    expect(screen.getByTestId('replace-impact')).toHaveTextContent('files')
+    expect(screen.getByTestId('replace-impact')).toHaveTextContent('不会迁移')
     assertNoSeriousA11y(container)
   })
 

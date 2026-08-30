@@ -34,6 +34,7 @@ def _to_record(row: ProviderBindingRow) -> BindingRecord:
         allowed_models=list(row.allowed_models or []),
         allowed_regions=list(row.allowed_regions or []),
         connection_id=row.connection_id,
+        draining_connection_id=row.draining_connection_id,
         published_at=row.published_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -65,6 +66,7 @@ class SQLBindingStore:
                 allowed_models=rec.allowed_models,
                 allowed_regions=rec.allowed_regions,
                 connection_id=rec.connection_id,
+                draining_connection_id=rec.draining_connection_id,
                 published_at=rec.published_at,
                 created_at=rec.created_at or utcnow(),
                 updated_at=rec.updated_at or utcnow(),
@@ -108,6 +110,8 @@ class SQLBindingStore:
             raise KeyError(rec.binding_id)
         row.status = rec.status
         row.version = rec.version
+        row.connection_id = rec.connection_id
+        row.draining_connection_id = rec.draining_connection_id
         row.published_at = rec.published_at
         row.updated_at = rec.updated_at or utcnow()
         try:

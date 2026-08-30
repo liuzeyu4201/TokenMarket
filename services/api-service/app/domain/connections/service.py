@@ -61,6 +61,13 @@ class ServiceConnectionLookup:
             connection_id, request_id or "unbind"
         )
 
+    def mark_draining(self, connection_id: uuid.UUID, request_id: str = "") -> None:
+        from app.domain.connections.lifecycle import LifecycleService
+
+        LifecycleService(self._service).mark_draining(
+            connection_id, request_id or "drain"
+        )
+
 
 class ConnectionService:
     def __init__(

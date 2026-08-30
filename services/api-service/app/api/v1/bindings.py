@@ -44,6 +44,15 @@ class DegradeBody(BaseModel):
     connection_id: uuid.UUID
 
 
+class ReplaceBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_connection_id: uuid.UUID
+    buyer_confirmed: bool
+    reason: str
+    step_up: bool
+
+
 def _rid(request: Request) -> str:
     return str(getattr(request.state, "request_id", None) or uuid.uuid4())
 
@@ -74,6 +83,9 @@ def _payload(rec: BindingRecord) -> dict[str, Any]:
         "allowed_models": rec.allowed_models,
         "allowed_regions": rec.allowed_regions,
         "connection_id": str(rec.connection_id) if rec.connection_id else None,
+        "draining_connection_id": (
+            str(rec.draining_connection_id) if rec.draining_connection_id else None
+        ),
         "published_at": _iso(rec.published_at),
         "created_at": _iso(rec.created_at),
     }
@@ -309,6 +321,78 @@ async def deactivate_binding(
     project_id: uuid.UUID, binding_id: uuid.UUID, request: Request
 ) -> JSONResponse:
     return await _mutate(project_id, binding_id, request, "deactivate")
+
+
+@router.get("/{project_id}/bindings/{binding_id}/replace-preview")
+async def preview_replace(
+    project_id: uuid.UUID, binding_id: uuid.UUID, request: Request
+) -> JSONResponse:
+    rid = _rid(request)
+    actor = await resolve_actor(request)
+    if isinstance(actor, JSONResponse):
+        return actor
+    try:
+        rec = _svc(request).get(
+            binding_id=binding_id,
+            owner_id=actor.user_id,
+            role=actor.role,
+            workspace=actor.workspace,
+        )
+        if rec.project_id != project_id:
+            return JSONResponse(
+                status_code=404,
+                content=error_envelope("NOT_FOUND", "资源不存在", request_id=rid),
+            )
+        data = _svc(request).replace_preview(
+            binding_id=binding_id,
+            owner_id=actor.user_id,
+            role=actor.role,
+            workspace=actor.workspace,
+        )
+    except BindingError as exc:
+        return _fail(exc, rid)
+    return JSONResponse(status_code=200, content=success_envelope(data, request_id=rid))
+
+
+@router.post("/{project_id}/bindings/{binding_id}/replace")
+async def replace_binding(
+    project_id: uuid.UUID,
+    binding_id: uuid.UUID,
+    body: ReplaceBody,
+    request: Request,
+) -> JSONResponse:
+    guarded = await _guard_write(request)
+    if isinstance(guarded, JSONResponse):
+        return guarded
+    actor, rid = guarded
+    try:
+        rec = _svc(request).get(
+            binding_id=binding_id,
+            owner_id=actor.user_id,
+            role=actor.role,
+            workspace=actor.workspace,
+        )
+        if rec.project_id != project_id:
+            return JSONResponse(
+                status_code=404,
+                content=error_envelope("NOT_FOUND", "资源不存在", request_id=rid),
+            )
+        rec = _svc(request).replace(
+            binding_id=binding_id,
+            owner_id=actor.user_id,
+            role=actor.role,
+            workspace=actor.workspace,
+            request_id=rid,
+            new_connection_id=body.new_connection_id,
+            buyer_confirmed=body.buyer_confirmed,
+            reason=body.reason,
+            step_up=body.step_up,
+        )
+    except BindingError as exc:
+        return _fail(exc, rid)
+    return JSONResponse(
+        status_code=200, content=success_envelope(_payload(rec), request_id=rid)
+    )
 
 
 @internal_router.post("/degrade")

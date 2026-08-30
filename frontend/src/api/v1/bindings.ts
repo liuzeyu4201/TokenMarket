@@ -13,6 +13,14 @@ export interface Binding {
   version: number
   allowed_models: string[]
   allowed_providers: string[]
+  connection_id?: string | null
+  draining_connection_id?: string | null
+}
+
+export interface ReplacePreview {
+  old_connection_id: string | null
+  non_migrating: string[]
+  migrates: false
 }
 
 export interface SdkHint {
@@ -75,6 +83,40 @@ export async function publishBinding(
       sameOriginAuth: true,
       headers: csrfHeaders(csrfToken),
       body: JSON.stringify({}),
+    },
+  )
+  return unwrap(data, requestId)
+}
+
+export async function previewReplace(
+  projectId: string,
+  bindingId: string,
+): Promise<ReplacePreview> {
+  const { data, requestId } = await apiFetch<ApiEnvelope<ReplacePreview>>(
+    `/api/v1/projects/${projectId}/bindings/${bindingId}/replace-preview`,
+    { method: 'GET', sameOriginAuth: true },
+  )
+  return unwrap(data, requestId)
+}
+
+export async function replaceBinding(
+  projectId: string,
+  bindingId: string,
+  body: {
+    new_connection_id: string
+    buyer_confirmed: boolean
+    reason: string
+    step_up: boolean
+  },
+  csrfToken: string | null,
+): Promise<Binding> {
+  const { data, requestId } = await apiFetch<ApiEnvelope<Binding>>(
+    `/api/v1/projects/${projectId}/bindings/${bindingId}/replace`,
+    {
+      method: 'POST',
+      sameOriginAuth: true,
+      headers: csrfHeaders(csrfToken),
+      body: JSON.stringify(body),
     },
   )
   return unwrap(data, requestId)

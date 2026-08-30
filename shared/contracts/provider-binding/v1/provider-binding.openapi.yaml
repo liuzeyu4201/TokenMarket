@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
-  title: TokenMarket Provider Binding (SF11)
-  version: 1.0.0
+  title: TokenMarket Provider Binding (SF11/SF25)
+  version: 1.1.0
   description: |
     Project×protocol 供给配置。禁止跨协议。已发布 version 不可变。
     dedicated 失效只降级，不回退共享池。SDK 提示不含凭据。
+    1.1.0：人工更换需买家确认与不迁移资源清单；旧连接 draining。
 paths:
   /api/v1/projects/{project_id}/bindings:
     parameters:
@@ -94,6 +95,34 @@ paths:
           description: 当前生效或 degraded 快照
         "404":
           description: 无生效 Binding
+  /api/v1/projects/{project_id}/bindings/{binding_id}/replace-preview:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/BindingId"
+    get:
+      operationId: previewBindingReplace
+      responses:
+        "200":
+          description: 不迁移资源清单
+        "409":
+          description: 非专享 Binding
+  /api/v1/projects/{project_id}/bindings/{binding_id}/replace:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/BindingId"
+    post:
+      operationId: replaceDedicatedBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceBindingRequest"
+      responses:
+        "200":
+          description: 已原子切换到新 Connection
+        "409":
+          description: 未确认、step-up 缺失、连接不可用或非专享
   /api/v1/projects/{project_id}/bindings/admit:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
@@ -185,8 +214,30 @@ components:
           type: array
           items: { type: string }
         connection_id: { type: string, format: uuid, nullable: true }
+        draining_connection_id: { type: string, format: uuid, nullable: true }
         published_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
+    ReplaceBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [new_connection_id, buyer_confirmed, reason, step_up]
+      properties:
+        new_connection_id: { type: string, format: uuid }
+        buyer_confirmed: { type: boolean }
+        reason: { type: string, minLength: 1 }
+        step_up: { type: boolean }
+    ReplacePreview:
+      type: object
+      additionalProperties: false
+      required: [old_connection_id, non_migrating, migrates]
+      properties:
+        old_connection_id: { type: string, format: uuid, nullable: true }
+        non_migrating:
+          type: array
+          items:
+            type: string
+            enum: [files, batches, caches, fine_tuning, operations]
+        migrates: { type: boolean, const: false }
     SdkHint:
       type: object
       additionalProperties: false

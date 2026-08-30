@@ -15,6 +15,9 @@ export interface ProviderConnection {
   credential_fingerprint: string
   credential_version: number
   status: 'active' | 'deleted'
+  health_state?: 'unknown' | 'healthy' | 'degraded' | 'unhealthy'
+  health_reason?: string | null
+  capability_version?: number
 }
 
 export interface CreateConnectionBody {
@@ -80,6 +83,21 @@ export async function replaceConnectionCredential(
         credential: { secret: body.secret },
         expected_version: body.expected_version,
       }),
+    },
+  )
+  return unwrap(data, requestId)
+}
+
+export async function verifyConnection(
+  connectionId: string,
+  csrfToken: string | null,
+): Promise<ProviderConnection> {
+  const { data, requestId } = await apiFetch<ApiEnvelope<ProviderConnection>>(
+    `/api/v1/provider-connections/${connectionId}/verify`,
+    {
+      method: 'POST',
+      sameOriginAuth: true,
+      headers: csrfHeaders(csrfToken),
     },
   )
   return unwrap(data, requestId)

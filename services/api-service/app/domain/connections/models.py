@@ -19,6 +19,14 @@ def utcnow() -> datetime:
 
 
 @dataclass
+class CapabilitySnapshot:
+    connection_id: uuid.UUID
+    version: int
+    capabilities: list[dict[str, Any]]
+    created_at: datetime
+
+
+@dataclass
 class ConnectionRecord:
     connection_id: uuid.UUID
     seller_account_id: uuid.UUID
@@ -40,6 +48,14 @@ class ConnectionRecord:
     deleted_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    health_state: str = "unknown"
+    health_reason: str | None = None
+    health_checked_at: datetime | None = None
+    consecutive_successes: int = 0
+    consecutive_failures: int = 0
+    last_probe_at: datetime | None = None
+    next_probe_at: datetime | None = None
+    capability_version: int = 0
 
     def usable(self) -> bool:
         return (
@@ -66,6 +82,9 @@ class ConnectionRecord:
             "credential_fingerprint": self.credential_fingerprint,
             "credential_version": self.credential_version,
             "status": self.status,
+            "health_state": self.health_state,
+            "health_reason": self.health_reason,
+            "capability_version": self.capability_version,
         }
 
 
@@ -100,6 +119,42 @@ class ProviderConnectionRow(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    health_state: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unknown"
+    )
+    health_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    health_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    consecutive_successes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    last_probe_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    next_probe_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    capability_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ConnectionCapabilitySnapshotRow(Base):
+    __tablename__ = "connection_capability_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    capabilities: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
 

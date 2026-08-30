@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any, Mapping, TypeVar
 
-from sqlalchemy import select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.connections.models import (
+    CapabilitySnapshot,
+    ConnectionCapabilitySnapshotRow,
     ConnectionRecord,
     ProviderConnectionAuditRow,
     ProviderConnectionRow,
@@ -42,6 +45,14 @@ def _to_record(row: ProviderConnectionRow) -> ConnectionRecord:
         deleted_at=row.deleted_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        health_state=row.health_state,
+        health_reason=row.health_reason,
+        health_checked_at=row.health_checked_at,
+        consecutive_successes=row.consecutive_successes,
+        consecutive_failures=row.consecutive_failures,
+        last_probe_at=row.last_probe_at,
+        next_probe_at=row.next_probe_at,
+        capability_version=row.capability_version,
     )
 
 
@@ -72,6 +83,14 @@ class SQLConnectionStore:
                 deleted_at=rec.deleted_at,
                 created_at=rec.created_at or utcnow(),
                 updated_at=rec.updated_at or utcnow(),
+                health_state=rec.health_state,
+                health_reason=rec.health_reason,
+                health_checked_at=rec.health_checked_at,
+                consecutive_successes=rec.consecutive_successes,
+                consecutive_failures=rec.consecutive_failures,
+                last_probe_at=rec.last_probe_at,
+                next_probe_at=rec.next_probe_at,
+                capability_version=rec.capability_version,
             )
         )
         self._s.flush()
@@ -144,6 +163,83 @@ class SQLConnectionStore:
         )
         self._s.flush()
 
+    def save_health(self, rec: ConnectionRecord) -> None:
+        row = self._s.get(ProviderConnectionRow, rec.connection_id)
+        if row is None:
+            raise KeyError(rec.connection_id)
+        row.health_state = rec.health_state
+        row.health_reason = rec.health_reason
+        row.health_checked_at = rec.health_checked_at
+        row.consecutive_successes = rec.consecutive_successes
+        row.consecutive_failures = rec.consecutive_failures
+        row.last_probe_at = rec.last_probe_at
+        row.next_probe_at = rec.next_probe_at
+        row.capability_version = rec.capability_version
+        row.updated_at = rec.updated_at or utcnow()
+        self._s.flush()
+
+    def list_probe_due(self, now: datetime, limit: int) -> list[ConnectionRecord]:
+        rows = list(
+            self._s.scalars(
+                select(ProviderConnectionRow)
+                .where(
+                    ProviderConnectionRow.status == "active",
+                    ProviderConnectionRow.deleted_at.is_(None),
+                    or_(
+                        ProviderConnectionRow.next_probe_at.is_(None),
+                        ProviderConnectionRow.next_probe_at <= now,
+                    ),
+                )
+                .order_by(ProviderConnectionRow.next_probe_at.nullsfirst())
+                .limit(max(0, limit))
+            )
+        )
+        return [_to_record(r) for r in rows]
+
+    def save_snapshot(
+        self,
+        *,
+        connection_id: uuid.UUID,
+        version: int,
+        capabilities: list[Mapping[str, Any]] | list[dict[str, Any]],
+    ) -> None:
+        self._s.add(
+            ConnectionCapabilitySnapshotRow(
+                id=uuid.uuid4(),
+                connection_id=connection_id,
+                version=version,
+                capabilities=[dict(c) for c in capabilities],
+                created_at=utcnow(),
+            )
+        )
+        self._s.flush()
+
+    def list_snapshots(self, connection_id: uuid.UUID) -> list[CapabilitySnapshot]:
+        rows = list(
+            self._s.scalars(
+                select(ConnectionCapabilitySnapshotRow)
+                .where(ConnectionCapabilitySnapshotRow.connection_id == connection_id)
+                .order_by(ConnectionCapabilitySnapshotRow.version)
+            )
+        )
+        return [
+            CapabilitySnapshot(
+                connection_id=r.connection_id,
+                version=r.version,
+                capabilities=list(r.capabilities or []),
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+
+    def max_snapshot_version(self, connection_id: uuid.UUID) -> int:
+        val = self._s.scalar(
+            select(func.max(ConnectionCapabilitySnapshotRow.version)).where(
+                ConnectionCapabilitySnapshotRow.connection_id == connection_id
+            )
+        )
+        return int(val or 0)
+
 
 class SessionedConnectionStore:
     def __init__(self, maker: sessionmaker[Session]) -> None:
@@ -191,3 +287,30 @@ class SessionedConnectionStore:
                 payload=payload,
             )
         )
+
+    def save_health(self, rec: ConnectionRecord) -> None:
+        self._run(lambda s: s.save_health(rec))
+
+    def list_probe_due(self, now: datetime, limit: int) -> list[ConnectionRecord]:
+        return self._run(lambda s: s.list_probe_due(now, limit))
+
+    def save_snapshot(
+        self,
+        *,
+        connection_id: uuid.UUID,
+        version: int,
+        capabilities: list[Mapping[str, Any]] | list[dict[str, Any]],
+    ) -> None:
+        self._run(
+            lambda s: s.save_snapshot(
+                connection_id=connection_id,
+                version=version,
+                capabilities=capabilities,
+            )
+        )
+
+    def list_snapshots(self, connection_id: uuid.UUID) -> list[CapabilitySnapshot]:
+        return self._run(lambda s: s.list_snapshots(connection_id))
+
+    def max_snapshot_version(self, connection_id: uuid.UUID) -> int:
+        return self._run(lambda s: s.max_snapshot_version(connection_id))

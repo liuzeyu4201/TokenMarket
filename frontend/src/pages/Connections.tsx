@@ -6,6 +6,7 @@ import {
   deleteConnection,
   listConnections,
   replaceConnectionCredential,
+  verifyConnection,
   type ProviderConnection,
 } from '../api/v1/connections'
 import type { ProjectMode, ProtocolName } from '../api/v1/projects'
@@ -22,6 +23,13 @@ const PROVIDER_LABEL: Record<ProtocolName, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   vertex: 'Vertex',
+}
+
+const HEALTH_LABEL: Record<string, string> = {
+  unknown: '未知',
+  healthy: '健康',
+  degraded: '降级',
+  unhealthy: '不健康',
 }
 
 export function Connections() {
@@ -122,6 +130,20 @@ export function Connections() {
     }
   }
 
+  const onVerify = async (row: ProviderConnection) => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await verifyConnection(row.connection_id, auth.getCsrfToken())
+      await refresh()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '验证失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const onDelete = async (row: ProviderConnection) => {
     if (busy) return
     setBusy(true)
@@ -209,13 +231,16 @@ export function Connections() {
       ) : (
         <Table
           caption="已登记的提供商连接"
-          headers={['提供商', '模式', '指纹', '版本', '操作']}
+          headers={['提供商', '模式', '指纹', '健康', '版本', '操作']}
           empty="还没有连接。"
           rows={items.map((row) => [
             PROVIDER_LABEL[row.provider],
             row.supply_mode === 'shared' ? '共享' : '专享',
             <span key={row.connection_id} data-testid="connection-fingerprint">
               {row.credential_fingerprint}
+            </span>,
+            <span key={`${row.connection_id}-health`} data-testid="connection-health">
+              {HEALTH_LABEL[row.health_state || 'unknown'] ?? row.health_state}
             </span>,
             String(row.credential_version),
             <div key={`${row.connection_id}-ops`}>
@@ -232,6 +257,9 @@ export function Connections() {
                   }))
                 }
               />
+              <Button type="button" variant="secondary" onClick={() => void onVerify(row)}>
+                立即复验
+              </Button>
               <Button type="button" variant="secondary" onClick={() => void onReplace(row)}>
                 整体替换
               </Button>

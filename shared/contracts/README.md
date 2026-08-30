@@ -32,7 +32,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `project/v1/` | API Service (Project domain, SF10+) | 1.1.0 | OpenAPI |
 | `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.0.0 | OpenAPI |
 | `project-proxy-key/v1/` | API Service (Project proxy Key, SF12+) | 1.0.0 | OpenAPI |
-| `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.1.0 | OpenAPI |
+| `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.2.0 | OpenAPI |
 | `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.0.0 | JSON Schema |
 | `usage/v1/` | Billing Service (usage observation, SF26+) | 1.0.0 | JSON Schema |
 | `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.0.0 | JSON Schema |
@@ -66,7 +66,8 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   contracts stay independent. `project/v1` 1.1.0 is a backward-compatible expansion
   implemented by SF10 (lifecycle writers; PATCH still has no mode). `provider-connection/v1`
   1.1.0 is a backward-compatible expansion implemented by SF14 (encrypted credentials,
-  no plaintext read-back). Route/usage/pricing/ledger/audit writers land in later SFs.
+  no plaintext read-back). 1.2.0 adds verify, health, and capability snapshots (SF15).
+  Route/usage/pricing/ledger/audit writers land in later SFs.
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation
@@ -95,6 +96,6 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 - `project-proxy-key/v1/` owns Project-scoped buyer proxy keys, one-time secret
   delivery, HMAC-at-rest, and protocol/model/CIDR/quota/expiry intersection.
   Breaking changes require a new version.
-- `provider-connection/v1` 1.1.0 expands create with list/replace/delete/internal unwrap
-  while keeping no-plaintext-readback. Breaking credential-readback would require a new
-  major version.
+- `provider-connection/v1` 1.2.0 expands create with list/replace/delete/internal unwrap,
+  verify, health, and versioned capability snapshots, while keeping no-plaintext-readback.
+  Breaking credential-readback would require a new major version.

@@ -19,6 +19,7 @@ from app.errors import (
     MSG_SERVICE_UNAVAILABLE,
 )
 from app.repositories.authentication import AuthenticationRepository, utc_now
+from app.domain.authorization.workspace import default_workspace
 from app.security.csrf import issue_csrf_token
 from app.security.profile_token import parse_profile_cookie, profile_token_digest
 from app.security.reference import client_hint
@@ -133,6 +134,9 @@ class ProfileCompletionService:
         sdigest = token_digest(session_mat.current, token.opaque_secret)
         session_id = uuid.uuid4()
         try:
+            role_value = (
+                user.role.value if hasattr(user.role, "value") else str(user.role)
+            )
             auth_session = await self._repo.insert_session(
                 session_id=session_id,
                 user_id=user.id,
@@ -143,6 +147,7 @@ class ProfileCompletionService:
                 now=now,
                 session_generation=generation,
                 client_hint=hint,
+                workspace=default_workspace(role_value),
             )
         except IntegrityError:
             await self._repo.rollback()
@@ -187,6 +192,7 @@ class ProfileCompletionService:
                 "role": (
                     user.role.value if hasattr(user.role, "value") else str(user.role)
                 ),
+                "workspace": auth_session.workspace,
                 "expires_at": expires,
                 "csrf_token": csrf,
             },

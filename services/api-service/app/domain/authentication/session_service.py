@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AuthSettings
+from app.domain.authorization.workspace import default_workspace, workspace_allowed
 from app.domain.users.privacy import mask_phone
 from app.errors import (
     MSG_CHALLENGE_EXPIRED,
@@ -23,6 +24,7 @@ from app.errors import (
     MSG_UNAUTHENTICATED,
     MSG_VALIDATION,
     MSG_VERIFICATION_FAILED,
+    MSG_WORKSPACE_FORBIDDEN,
 )
 from app.observability import (
     emit_auth_event,
@@ -99,6 +101,21 @@ class SecuritySummaryResult:
     clear_cookie: bool = False
 
 
+@dataclass
+class WorkspaceSwitchResult:
+    kind: Literal[
+        "success",
+        "unauthenticated",
+        "forbidden",
+        "csrf_invalid",
+        "service_unavailable",
+    ]
+    http_status: int
+    code: str
+    message: str
+    data: Any = None
+
+
 def _ensure_aware(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
@@ -128,6 +145,7 @@ class SessionService:
         role: Any,
         expires_at: datetime,
         csrf_token: str,
+        workspace: str = "buyer",
     ) -> dict[str, Any]:
         role_value = role.value if hasattr(role, "value") else str(role)
         return {
@@ -135,6 +153,7 @@ class SessionService:
             "nickname": nickname,
             "phone_masked": mask_phone(phone_normalized),
             "role": role_value,
+            "workspace": workspace,
             "expires_at": _ensure_aware(expires_at),
             "csrf_token": csrf_token,
         }
@@ -316,6 +335,8 @@ class SessionService:
             role=user.role,
             expires_at=expires_at,
             csrf_token=csrf,
+            workspace=getattr(auth_session, "workspace", None)
+            or default_workspace(user.role),
         )
         duration = time.monotonic() - start
         record_auth_session_check(duration)
@@ -754,6 +775,157 @@ class SessionService:
             },
         )
 
+    async def switch_workspace(
+        self,
+        *,
+        cookie_value: str | None,
+        csrf_presented: str | None,
+        target: str,
+        request_id: str,
+    ) -> WorkspaceSwitchResult:
+        try:
+            return await self._switch_workspace_inner(
+                cookie_value=cookie_value,
+                csrf_presented=csrf_presented,
+                target=target,
+                request_id=request_id,
+            )
+        except (OperationalError, SQLAlchemyError):
+            logger.exception(
+                "workspace switch failed", extra={"request_id": request_id}
+            )
+            return WorkspaceSwitchResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+            )
+
+    async def _switch_workspace_inner(
+        self,
+        *,
+        cookie_value: str | None,
+        csrf_presented: str | None,
+        target: str,
+        request_id: str,
+    ) -> WorkspaceSwitchResult:
+        session_mat = self._settings.key_material("session")
+        csrf_mat = self._settings.key_material("csrf")
+        if not session_mat.current_usable() or not csrf_mat.current_usable():
+            return WorkspaceSwitchResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+            )
+        parsed = parse_session_cookie(cookie_value)
+        if parsed is None:
+            return WorkspaceSwitchResult(
+                kind="unauthenticated",
+                http_status=401,
+                code="UNAUTHENTICATED",
+                message=MSG_UNAUTHENTICATED,
+            )
+        key_version, opaque = parsed
+        session_key = session_mat.resolve(key_version)
+        if session_key is None:
+            return WorkspaceSwitchResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+            )
+        digest = token_digest(session_key, opaque)
+        auth_session = await self._repo.lock_session_by_token_digest(
+            token_key_version=key_version, token_digest=digest
+        )
+        if auth_session is None or auth_session.revoked_at is not None:
+            await self._repo.rollback()
+            return WorkspaceSwitchResult(
+                kind="unauthenticated",
+                http_status=401,
+                code="UNAUTHENTICATED",
+                message=MSG_UNAUTHENTICATED,
+            )
+        csrf_ok = self._verify_csrf_for_session(
+            csrf_mat=csrf_mat,
+            session_id=auth_session.id,
+            presented=csrf_presented,
+        )
+        if csrf_ok is None:
+            await self._repo.rollback()
+            return WorkspaceSwitchResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+            )
+        if not csrf_ok:
+            await self._repo.rollback()
+            return WorkspaceSwitchResult(
+                kind="csrf_invalid",
+                http_status=403,
+                code="CSRF_INVALID",
+                message=MSG_CSRF_INVALID,
+            )
+        user = await self._repo.lock_user_by_id(auth_session.user_id)
+        if user is None:
+            await self._repo.rollback()
+            return WorkspaceSwitchResult(
+                kind="unauthenticated",
+                http_status=401,
+                code="UNAUTHENTICATED",
+                message=MSG_UNAUTHENTICATED,
+            )
+        role_value = user.role.value if hasattr(user.role, "value") else str(user.role)
+        now = utc_now()
+        if not workspace_allowed(role_value, target):
+            await self._repo.append_security_event(
+                event_type="workspace_switch_denied",
+                outcome="rejected",
+                reason_code="unauthorized_workspace",
+                request_id=request_id,
+                user_id=user.id,
+                session_id=auth_session.id,
+                safe_metadata={"target": target},
+                now=now,
+            )
+            await self._repo.commit()
+            return WorkspaceSwitchResult(
+                kind="forbidden",
+                http_status=403,
+                code="FORBIDDEN_ROLE",
+                message=MSG_WORKSPACE_FORBIDDEN,
+            )
+        auth_session.workspace = target
+        csrf = issue_csrf_token(csrf_mat.current, csrf_mat.version, auth_session.id)
+        await self._repo.append_security_event(
+            event_type="workspace_switched",
+            outcome="success",
+            reason_code="switch",
+            request_id=request_id,
+            user_id=user.id,
+            session_id=auth_session.id,
+            safe_metadata={"workspace": target},
+            now=now,
+        )
+        await self._repo.commit()
+        return WorkspaceSwitchResult(
+            kind="success",
+            http_status=200,
+            code="0",
+            message="success",
+            data=self._session_summary(
+                user_id=user.id,
+                nickname=user.nickname,
+                phone_normalized=user.phone_normalized,
+                role=user.role,
+                expires_at=_ensure_aware(auth_session.expires_at),
+                csrf_token=csrf,
+                workspace=target,
+            ),
+        )
+
     async def create_session(
         self,
         *,
@@ -1010,6 +1182,9 @@ class SessionService:
         digest = token_digest(session_mat.current, token.opaque_secret)
 
         try:
+            role_value = (
+                user.role.value if hasattr(user.role, "value") else str(user.role)
+            )
             auth_session = await self._repo.insert_session(
                 session_id=session_id,
                 user_id=user.id,
@@ -1020,6 +1195,7 @@ class SessionService:
                 now=now,
                 session_generation=generation,
                 client_hint=hint,
+                workspace=default_workspace(role_value),
             )
         except IntegrityError:
             await self._repo.rollback()
@@ -1076,6 +1252,7 @@ class SessionService:
                 "nickname": user.nickname,
                 "phone_masked": phone_masked,
                 "role": role_value,
+                "workspace": auth_session.workspace,
                 "expires_at": _ensure_aware(auth_session.expires_at),
                 "csrf_token": csrf,
             },

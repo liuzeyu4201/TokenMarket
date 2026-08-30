@@ -9,6 +9,7 @@ import type { SessionData } from '../types/auth'
 
 const bootstrapSession = vi.fn()
 const logoutSession = vi.fn()
+const switchWorkspace = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
   const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
@@ -16,6 +17,7 @@ vi.mock('../api/v1/phoneAuth', async () => {
     ...actual,
     bootstrapSession: (...args: unknown[]) => bootstrapSession(...args),
     logoutSession: (...args: unknown[]) => logoutSession(...args),
+    switchWorkspace: (...args: unknown[]) => switchWorkspace(...args),
   }
 })
 
@@ -68,11 +70,26 @@ describe('AppShell', () => {
     })
     expect(screen.getByTestId('shell-identity')).toHaveTextContent('买家与卖家')
     expect(screen.getByRole('link', { name: '工作台' })).toHaveAttribute('href', '/dashboard')
-    expect(screen.getByTestId('workspace-identity')).toHaveTextContent('工作区：买家与卖家')
-    expect(screen.getByRole('button', { name: '切换工作区（即将开放）' })).toBeDisabled()
+    expect(screen.getByTestId('workspace-identity')).toHaveTextContent('工作区：买家')
+    expect(screen.getByTestId('workspace-switch')).toBeEnabled()
+    expect(screen.queryByRole('link', { name: /管理员/ })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '跳到主要内容' })).toHaveAttribute('href', '#main-content')
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument()
+  })
+
+  it('lets dual-role users switch workspace', async () => {
+    bootstrapSession.mockResolvedValue({ ...SESSION, role: 'both', workspace: 'buyer' })
+    switchWorkspace.mockResolvedValue({ ...SESSION, workspace: 'seller' })
+    const user = userEvent.setup()
+    renderShell()
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-switch')).toBeInTheDocument()
+    })
+    await user.click(screen.getByTestId('workspace-switch'))
+    await waitFor(() => {
+      expect(switchWorkspace).toHaveBeenCalledWith('seller', 'csrf-shell-token')
+    })
   })
 
   it('logout invokes API with CSRF and returns to anonymous nav', async () => {
@@ -110,7 +127,7 @@ describe('AppShell', () => {
     })
     for (const msg of received) {
       expect(typeof msg).toBe('string')
-      expect(['login', 'logout', 'session-invalidated']).toContain(msg)
+      expect(['login', 'logout', 'session-invalidated', 'workspace-switched']).toContain(msg)
       expect(JSON.stringify(msg)).not.toContain('csrf')
       expect(JSON.stringify(msg)).not.toContain('shell-user')
     }

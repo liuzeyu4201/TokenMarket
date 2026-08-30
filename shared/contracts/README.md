@@ -40,6 +40,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `unified-phone-auth/v1/` | API Service (unified phone auth, SF06) | 1.0.0 | OpenAPI |
 | `single-session-auth/v1/` | API Service (single-session hardening, SF07) | 1.0.0 | OpenAPI |
 | `web-design-system/v1/` | Frontend (design system and app shell, SF08) | 1.0.0 | Markdown |
+| `workspace-switch/v1/` | API Service (workspace switch, SF09) | 1.0.0 | OpenAPI |
 
 ## Compatibility and deprecation status
 
@@ -81,3 +82,6 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 - `web-design-system/v1/` owns the SF08 foundation component state catalog (button,
   field, notice, dialog, table, page states). Breaking visual/interaction changes
   require a new version and synchronized frontend pages.
+- `workspace-switch/v1/` owns session workspace (`buyer`/`seller`) and the rule
+  that authorization uses the session workspace only. Breaking changes require a
+  new version and synchronized API Service + frontend consumers.

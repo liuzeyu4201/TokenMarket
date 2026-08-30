@@ -195,6 +195,8 @@ async def evaluate_authorization(
             resource_id=body.resource_id,
             client_user_id=body.user_id,
             client_role=body.role,
+            client_workspace=body.workspace,
+            workspace=identity.workspace,
             apply_mutation=False,
         )
         return _decision_response(decision, rid)
@@ -226,6 +228,7 @@ async def exclude_self_route_candidates(
             action=Action.route_candidate_exclude_self,
             request_id=rid,
             candidates=candidates,
+            workspace=identity.workspace,
             apply_mutation=False,
         )
         return _decision_response(decision, rid)

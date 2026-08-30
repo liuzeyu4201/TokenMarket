@@ -29,6 +29,7 @@ class EvaluateRequest(BaseModel):
     # Accepted only to prove ignore behavior in tests
     user_id: UUID | None = None
     role: str | None = None
+    workspace: str | None = None
 
 
 class RouteCandidateIn(BaseModel):

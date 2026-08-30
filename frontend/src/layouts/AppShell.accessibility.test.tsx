@@ -17,6 +17,7 @@ vi.mock('../api/v1/phoneAuth', async () => {
     ...actual,
     bootstrapSession: (...args: unknown[]) => bootstrapSession(...args),
     logoutSession: (...args: unknown[]) => logoutSession(...args),
+    switchWorkspace: vi.fn(),
   }
 })
 

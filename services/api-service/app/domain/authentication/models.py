@@ -281,6 +281,10 @@ class AuthSession(Base):
             ")",
             name="ck_as_revocation_reason",
         ),
+        CheckConstraint(
+            "workspace IN ('buyer', 'seller')",
+            name="ck_as_workspace",
+        ),
         Index(
             "uq_as_token_digest",
             "token_key_version",
@@ -310,6 +314,9 @@ class AuthSession(Base):
         Integer, nullable=False, default=1, server_default=text("1")
     )
     client_hint: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    workspace: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="buyer", server_default=text("'buyer'")
+    )
     role_snapshot: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole, name="user_role", values_callable=lambda x: [e.value for e in x]

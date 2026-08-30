@@ -34,6 +34,7 @@ class AuthIdentity:
 
     user_id: uuid.UUID
     session_id: uuid.UUID | None
+    workspace: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,7 @@ async def resolve_authenticated_identity(
 
     user_id = uuid.UUID(str(result.data["user_id"]))
     session_id: uuid.UUID | None = None
+    workspace: str | None = None
     parsed = parse_session_cookie(cookie)
     if parsed is not None:
         key_version, opaque = parsed
@@ -170,4 +172,5 @@ async def resolve_authenticated_identity(
             )
             if row is not None:
                 session_id = row.id
-    return AuthIdentity(user_id=user_id, session_id=session_id)
+                workspace = getattr(row, "workspace", None)
+    return AuthIdentity(user_id=user_id, session_id=session_id, workspace=workspace)

@@ -43,6 +43,7 @@ from app.schemas.authentication import (
     CreateSessionRequest,
     RequestChallengeRequest,
     SessionRevokeRequest,
+    SwitchWorkspaceRequest,
 )
 from app.schemas.envelope import error_envelope, success_envelope
 from app.security.origin import origin_allowed
@@ -626,3 +627,47 @@ async def get_security_summary(
     if result.clear_cookie:
         clear_session_cookie(response)
     return response
+
+
+@router.post("/workspace")
+async def switch_workspace(
+    body: SwitchWorkspaceRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    settings: AuthSettings = Depends(get_auth_settings),
+    origin: str | None = Header(default=None, alias="Origin"),
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    if _origin_rejected(origin, settings):
+        return JSONResponse(
+            status_code=403,
+            content=error_envelope(
+                "ORIGIN_REJECTED",
+                MSG_ORIGIN_REJECTED,
+                request_id=request_id,
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+    service = SessionService(session, settings)
+    result = await service.switch_workspace(
+        cookie_value=request.cookies.get(SESSION_COOKIE_NAME),
+        csrf_presented=csrf_token,
+        target=body.workspace,
+        request_id=request_id,
+    )
+    if result.kind == "success":
+        return JSONResponse(
+            status_code=200,
+            content=success_envelope(
+                _serialize_data(result.data), request_id=request_id
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+    if result.kind == "csrf_invalid":
+        record_auth_csrf_rejected("csrf")
+    return JSONResponse(
+        status_code=result.http_status,
+        content=error_envelope(result.code, result.message, request_id=request_id),
+        headers={"Cache-Control": "no-store"},
+    )

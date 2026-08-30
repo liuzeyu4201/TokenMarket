@@ -17,13 +17,19 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { PhoneAuthClientError, bootstrapSession, logoutSession } from '../api/v1/phoneAuth'
-import type { AuthStatus, SessionData, SessionSummary } from '../types/auth'
+import {
+  PhoneAuthClientError,
+  bootstrapSession,
+  clearWorkspaceUiState,
+  logoutSession,
+  switchWorkspace as switchWorkspaceApi,
+} from '../api/v1/phoneAuth'
+import type { AuthStatus, SessionData, SessionSummary, Workspace } from '../types/auth'
 import { toSessionSummary } from '../types/auth'
 import { clearChallenge } from './challengeState'
 
 /** Safe cross-tab event names only — never payloads with tokens/PII. */
-export type AuthBroadcastEvent = 'login' | 'logout' | 'session-invalidated'
+export type AuthBroadcastEvent = 'login' | 'logout' | 'session-invalidated' | 'workspace-switched'
 
 export const AUTH_BROADCAST_CHANNEL = 'tokenmarket-auth'
 
@@ -40,6 +46,8 @@ export interface AuthContextValue {
   revalidate: () => Promise<void>
   /** Logout with CSRF; idempotent when already anonymous. */
   logout: () => Promise<void>
+  /** Dual-role workspace switch; server enforces role ceiling. */
+  switchWorkspace: (workspace: Workspace) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -208,6 +216,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [postBroadcast, revalidate])
 
+  const switchWorkspace = useCallback(
+    async (workspace: Workspace) => {
+      const data = await switchWorkspaceApi(workspace, csrfRef.current)
+      clearWorkspaceUiState()
+      csrfRef.current = data.csrf_token
+      hadSessionRef.current = true
+      setSession(toSessionSummary(data))
+      setStatus('authenticated')
+      postBroadcast('workspace-switched')
+    },
+    [postBroadcast],
+  )
+
   // Initial bootstrap + focus revalidation + BroadcastChannel.
   useEffect(() => {
     let cancelled = false
@@ -228,7 +249,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         broadcastRef.current = channel
         channel.onmessage = (ev: MessageEvent) => {
           const name = ev.data
-          if (name === 'login' || name === 'logout' || name === 'session-invalidated') {
+          if (
+            name === 'login' ||
+            name === 'logout' ||
+            name === 'session-invalidated' ||
+            name === 'workspace-switched'
+          ) {
             void revalidate()
           }
         }
@@ -256,8 +282,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearSession,
       revalidate,
       logout,
+      switchWorkspace,
     }),
-    [status, session, getCsrfToken, establishSession, clearSession, revalidate, logout],
+    [
+      status,
+      session,
+      getCsrfToken,
+      establishSession,
+      clearSession,
+      revalidate,
+      logout,
+      switchWorkspace,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

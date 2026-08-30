@@ -1,0 +1,42 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket workspace switch (SF09)
+  version: 1.0.0
+  description: |
+    Session workspace is buyer|seller. Switch cannot elevate account role.
+    Authorization uses session workspace only.
+paths:
+  /api/v1/auth/workspace:
+    post:
+      operationId: switchWorkspace
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace]
+              properties:
+                workspace: { type: string, enum: [buyer, seller] }
+      responses:
+        "200":
+          description: Workspace updated; session summary includes workspace
+        "401":
+          description: Unauthenticated
+        "403":
+          description: CSRF, origin, or unauthorized workspace
+  /api/v1/authorization/evaluate:
+    post:
+      operationId: evaluateWithWorkspace
+      description: Identity and workspace from session cookie only.
+      responses:
+        "200":
+          description: Allowed
+        "403":
+          description: FORBIDDEN_ROLE when workspace lens denies the action

@@ -402,6 +402,10 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
         "Frontend (design system and app shell, SF08)",
         "1.0.0",
     ),
+    "workspace-switch/v1/": (
+        "API Service (workspace switch, SF09)",
+        "1.0.0",
+    ),
 }
 
 

@@ -24,6 +24,7 @@ from app.domain.authorization.matrix import (
     Action,
     is_action_allowed,
 )
+from app.domain.authorization.workspace import effective_role
 from app.domain.authorization.route_exclude import (
     RouteCandidate,
     exclude_self_owned_seller_keys,
@@ -88,6 +89,8 @@ class AuthorizationService:
         # Ignored identity fields (must not affect decision)
         client_user_id: uuid.UUID | None = None,  # noqa: ARG002
         client_role: str | None = None,  # noqa: ARG002
+        client_workspace: str | None = None,  # noqa: ARG002
+        workspace: str | None = None,
         apply_mutation: bool = False,
         lifecycle_status: str | None = None,
     ) -> Decision:
@@ -144,7 +147,8 @@ class AuthorizationService:
             )
 
         role = user.role.value if hasattr(user.role, "value") else str(user.role)
-        if not is_action_allowed(role, act):
+        lens = effective_role(role, workspace)
+        if not lens or not is_action_allowed(lens, act):
             return await self._denied(
                 reason=ReasonCode.ROLE_DENIED,
                 action=act,

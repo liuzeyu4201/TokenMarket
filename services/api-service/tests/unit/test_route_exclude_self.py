@@ -67,8 +67,12 @@ def test_forged_owner_on_self_owned_resource_still_excluded() -> None:
     self_id = uuid.uuid4()
     # Authoritative facts: self_id is owned by buyer even if a caller claimed otherwise.
     authoritative = [
-        RouteCandidate(resource_id=self_id, owner_user_id=buyer, lifecycle_status="active"),
-        RouteCandidate(resource_id=uuid.uuid4(), owner_user_id=other, lifecycle_status="active"),
+        RouteCandidate(
+            resource_id=self_id, owner_user_id=buyer, lifecycle_status="active"
+        ),
+        RouteCandidate(
+            resource_id=uuid.uuid4(), owner_user_id=other, lifecycle_status="active"
+        ),
     ]
     filtered, excluded = exclude_self_owned_seller_keys(buyer, authoritative)
     assert excluded == 1
@@ -88,10 +92,10 @@ def test_relabel_disabled_as_active_loses_to_server_state() -> None:
     assert excluded == 2
 
 
-def test_sc002_thousand_never_selects_self() -> None:
+def test_sc005_hundred_thousand_never_selects_self() -> None:
     rng = random.Random(42)
     buyer = uuid.uuid4()
-    for _ in range(1000):
+    for _ in range(100_000):
         pool = []
         for _j in range(rng.randint(1, 8)):
             owner = buyer if rng.random() < 0.4 else uuid.uuid4()

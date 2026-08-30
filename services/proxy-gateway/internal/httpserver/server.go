@@ -26,6 +26,7 @@ type Config struct {
 	// MountValidate 为 true 时才在本 Server 上挂载 validate 路由（C1：公网 listener 可关掉）
 	MountValidate bool
 	Proxy         *ProxyDeps
+	Passthrough   *PassthroughDeps
 	// CatalogReady 非 nil 且为 false 时 readiness 失败关闭（目录未锁定）。
 	CatalogReady *bool
 }
@@ -36,6 +37,7 @@ type Server struct {
 	engine         *gin.Engine
 	validateDeps   *ValidateDeps
 	proxyEnabled   bool
+	passthrough    *PassthroughDeps
 	metricsHandler http.Handler
 	metricsReg     prometheus.Registerer
 	registerCount  atomic.Int32
@@ -66,7 +68,12 @@ func NewServer(cfg Config) (*Server, error) {
 		s.proxyEnabled = true
 		s.registerProxy(*cfg.Proxy)
 	}
-	r.NoRoute(s.notFound)
+	if cfg.Passthrough != nil && cfg.Passthrough.Kernel != nil {
+		s.registerPassthrough(*cfg.Passthrough)
+		r.NoRoute(nativeOrNotFound(s))
+	} else {
+		r.NoRoute(s.notFound)
+	}
 	return s, nil
 }
 

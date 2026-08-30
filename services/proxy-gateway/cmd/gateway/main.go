@@ -14,6 +14,7 @@ import (
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/endpcatalog"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keyhealth"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keypool"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/passthrough"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/providervalid"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/proxyauth"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/runtimesnap"
@@ -138,6 +139,10 @@ func main() {
 		}
 	}
 
+	nativeKernel := &passthrough.Kernel{
+		Catalog:  catalog,
+		Selector: passthrough.FailClosedSelector{},
+	}
 	publicSrv, err := httpserver.NewServer(httpserver.Config{
 		Service:       "proxy-gateway",
 		Version:       "0.1.0",
@@ -145,6 +150,7 @@ func main() {
 		Validate:      validateDeps,
 		MountValidate: mountOnPublic,
 		Proxy:         proxyDeps,
+		Passthrough:   &httpserver.PassthroughDeps{Kernel: nativeKernel},
 		CatalogReady:  &catalogReady,
 	})
 	if err != nil {

@@ -384,6 +384,10 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
         "API Service (Provider Binding, SF11+)",
         "1.0.0",
     ),
+    "project-proxy-key/v1/": (
+        "API Service (Project proxy Key, SF12+)",
+        "1.0.0",
+    ),
     "provider-connection/v1/": (
         "API Service (Provider Connection, SF14+)",
         "1.0.0",

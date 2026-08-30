@@ -122,6 +122,20 @@ class SessionedProxyStore:
     ) -> None:
         self._run(lambda s: s.put_idempotency(key, buyer_id, digest, key_id))
 
+    def list_by_project(self, project_id: uuid.UUID) -> list[IssuedProxyKey]:
+        return self._run(lambda s: s.list_by_project(project_id))
+
+    def replace_hash(self, rec: IssuedProxyKey, secret_hash: str) -> None:
+        self._run(lambda s: s.replace_hash(rec, secret_hash))
+
+    def stored_hash(self, key_id: uuid.UUID) -> str | None:
+        return self._run(lambda s: s.stored_hash(key_id))
+
+    def consume_quota(
+        self, key_id: uuid.UUID, period_start: datetime, limit: int
+    ) -> bool:
+        return self._run(lambda s: s.consume_quota(key_id, period_start, limit))
+
 
 class SessionedUsageStore:
     def __init__(self, maker: sessionmaker[Session]) -> None:

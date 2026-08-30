@@ -33,7 +33,11 @@ export function Dashboard() {
       ) : (
         <p>当前为卖家工作区，买家 Project 入口不可用。</p>
       )}
-      <UnavailableAction label="创建代理 Key" />
+      {session.workspace === 'buyer' ? (
+        <p className="hint">在 Project 详情中签发受限代理 Key；明文只展示一次。</p>
+      ) : (
+        <UnavailableAction label="创建代理 Key" />
+      )}
       <dl className="session-summary" aria-label="当前会话摘要">
         <div>
           <dt>昵称</dt>

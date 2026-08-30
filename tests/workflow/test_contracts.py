@@ -398,7 +398,7 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
     ),
     "route-decision/v1/": ("Proxy Gateway (routing decision, SF23+)", "1.0.0"),
     "usage/v1/": ("Billing Service (usage observation, SF26+)", "1.1.0"),
-    "pricing/v1/": ("Billing Service (versioned rates, SF27+)", "1.0.0"),
+    "pricing/v1/": ("Billing Service (versioned rates, SF27+)", "1.1.0"),
     "ledger/v1/": ("Billing Service (immutable ledger, SF28+)", "1.0.0"),
     "audit/v1/": ("Admin Service (audit events, SF30+)", "1.0.0"),
     "usage-outbox/v1/": ("Proxy Gateway (usage outbox, SF04)", "1.0.0"),

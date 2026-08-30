@@ -70,6 +70,8 @@ def test_route_self_trade_excluded() -> None:
     )
     assert '"self_trade_excluded"' in text
     assert '"const": true' in text
+    assert '"scores"' in text
+    assert "1.2.0" in text
 
 
 def test_no_cross_protocol_conversion_contract() -> None:

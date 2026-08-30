@@ -34,7 +34,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.0.0 | OpenAPI |
 | `project-proxy-key/v1/` | API Service (Project proxy Key, SF12+) | 1.0.0 | OpenAPI |
 | `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.3.0 | OpenAPI |
-| `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.1.0 | JSON Schema |
+| `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.2.0 | JSON Schema |
 | `usage/v1/` | Billing Service (usage observation, SF26+) | 1.1.0 | JSON Schema |
 | `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.1.0 | JSON Schema |
 | `seller-workbench/v1/` | API Service + Frontend (seller quote workbench, SF17) | 1.0.0 | Markdown |
@@ -77,7 +77,9 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   `usage/v1` 1.1.0 expands native spend and multi-dimension capture (SF26).
   `pricing/v1` 1.1.0 adds versioned rates, buyer multiplier, and seller quotes (SF27).
   `seller-workbench/v1` is the seller quote and supply console (SF17).
-  Route/ledger/audit writers land in later SFs.
+  `route-decision/v1` 1.1.0 is shared-pool hard qualification (SF23);
+  1.2.0 adds composite health/latency/capacity/price scoring on that set (SF24).
+  Ledger/audit writers land in later SFs.
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation

@@ -49,6 +49,18 @@ class ServiceConnectionLookup:
     def get(self, connection_id: uuid.UUID) -> ConnectionFact | None:
         return self._service.get_fact(connection_id)
 
+    def mark_bound(self, connection_id: uuid.UUID, request_id: str = "") -> None:
+        from app.domain.connections.lifecycle import LifecycleService
+
+        LifecycleService(self._service).mark_bound(connection_id, request_id or "bind")
+
+    def mark_unbound(self, connection_id: uuid.UUID, request_id: str = "") -> None:
+        from app.domain.connections.lifecycle import LifecycleService
+
+        LifecycleService(self._service).mark_unbound(
+            connection_id, request_id or "unbind"
+        )
+
 
 class ConnectionService:
     def __init__(
@@ -95,11 +107,15 @@ class ConnectionService:
         rec = self._store.get(connection_id)
         if rec is None or not rec.usable():
             return None
+        from app.domain.connections.lifecycle import admits_new
+
         return ConnectionFact(
             connection_id=rec.connection_id,
             provider=rec.provider,
             supply_mode=rec.supply_mode,
             usable=True,
+            lifecycle_state=rec.lifecycle_state,
+            admits_new=admits_new(rec),
         )
 
     def create(

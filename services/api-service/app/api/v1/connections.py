@@ -6,13 +6,14 @@ import os
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.v1.actors import resolve_actor
 from app.api.v1.mutation_guard import guard_cookie_mutation
 from app.domain.connections.health import HealthService
+from app.domain.connections.lifecycle import LifecycleService
 from app.domain.connections.models import ConnectionRecord
 from app.domain.connections.service import ConnectionError, ConnectionService
 from app.schemas.envelope import error_envelope, success_envelope
@@ -50,6 +51,12 @@ class ReplaceBody(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class SupplyModeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    supply_mode: str
+
+
 class UnwrapBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -71,6 +78,15 @@ def _health(request: Request) -> HealthService:
     svc = getattr(request.app.state, "health_service", None)
     if not isinstance(svc, HealthService):
         raise ConnectionError("SERVICE_UNAVAILABLE", "健康服务未就绪", http_status=503)
+    return svc
+
+
+def _life(request: Request) -> LifecycleService:
+    svc = getattr(request.app.state, "lifecycle_service", None)
+    if not isinstance(svc, LifecycleService):
+        raise ConnectionError(
+            "SERVICE_UNAVAILABLE", "生命周期服务未就绪", http_status=503
+        )
     return svc
 
 
@@ -324,6 +340,7 @@ async def delete_connection(connection_id: uuid.UUID, request: Request) -> JSONR
             workspace=actor.workspace,
         )
         fingerprint = rec.credential_fingerprint
+        _life(request).ensure_deletable(connection_id)
         _svc(request).delete(
             connection_id=connection_id,
             seller_id=actor.user_id,
@@ -343,6 +360,137 @@ async def delete_connection(connection_id: uuid.UUID, request: Request) -> JSONR
             },
             request_id=rid,
         ),
+    )
+
+
+async def _lifecycle_action(
+    connection_id: uuid.UUID,
+    request: Request,
+    action: str,
+) -> JSONResponse:
+    guarded = await _guard_write(request)
+    if isinstance(guarded, JSONResponse):
+        return guarded
+    actor, rid = guarded
+    life = _life(request)
+    try:
+        if action == "list":
+            rec = life.list_supply(
+                connection_id=connection_id,
+                seller_id=actor.user_id,
+                role=actor.role,
+                workspace=actor.workspace,
+                request_id=rid,
+            )
+        elif action == "pause":
+            rec = life.pause(
+                connection_id=connection_id,
+                seller_id=actor.user_id,
+                role=actor.role,
+                workspace=actor.workspace,
+                request_id=rid,
+            )
+        elif action == "resume":
+            rec = life.resume(
+                connection_id=connection_id,
+                seller_id=actor.user_id,
+                role=actor.role,
+                workspace=actor.workspace,
+                request_id=rid,
+            )
+        elif action == "drain":
+            rec = life.drain(
+                connection_id=connection_id,
+                seller_id=actor.user_id,
+                role=actor.role,
+                workspace=actor.workspace,
+                request_id=rid,
+            )
+        else:
+            rec = life.retire(
+                connection_id=connection_id,
+                seller_id=actor.user_id,
+                role=actor.role,
+                workspace=actor.workspace,
+                request_id=rid,
+            )
+    except ConnectionError as exc:
+        return _fail(exc, rid)
+    return JSONResponse(
+        status_code=200, content=success_envelope(_payload(rec), request_id=rid)
+    )
+
+
+@router.post("/{connection_id}/list")
+async def list_supply(connection_id: uuid.UUID, request: Request) -> JSONResponse:
+    return await _lifecycle_action(connection_id, request, "list")
+
+
+@router.post("/{connection_id}/pause")
+async def pause_connection(connection_id: uuid.UUID, request: Request) -> JSONResponse:
+    return await _lifecycle_action(connection_id, request, "pause")
+
+
+@router.post("/{connection_id}/resume")
+async def resume_connection(connection_id: uuid.UUID, request: Request) -> JSONResponse:
+    return await _lifecycle_action(connection_id, request, "resume")
+
+
+@router.post("/{connection_id}/drain")
+async def drain_connection(connection_id: uuid.UUID, request: Request) -> JSONResponse:
+    return await _lifecycle_action(connection_id, request, "drain")
+
+
+@router.post("/{connection_id}/retire")
+async def retire_connection(connection_id: uuid.UUID, request: Request) -> JSONResponse:
+    return await _lifecycle_action(connection_id, request, "retire")
+
+
+@router.patch("/{connection_id}/supply-mode")
+async def patch_supply_mode(
+    connection_id: uuid.UUID, body: SupplyModeBody, request: Request
+) -> JSONResponse:
+    guarded = await _guard_write(request)
+    if isinstance(guarded, JSONResponse):
+        return guarded
+    actor, rid = guarded
+    try:
+        rec = _life(request).set_mode(
+            connection_id=connection_id,
+            seller_id=actor.user_id,
+            supply_mode=body.supply_mode,
+            role=actor.role,
+            workspace=actor.workspace,
+            request_id=rid,
+        )
+    except ConnectionError as exc:
+        return _fail(exc, rid)
+    return JSONResponse(
+        status_code=200, content=success_envelope(_payload(rec), request_id=rid)
+    )
+
+
+@internal_router.get("/routable")
+async def list_routable(
+    request: Request,
+    supply_mode: str = Query(default="shared"),
+    x_internal_token: str | None = Header(default=None, alias="X-Internal-Token"),
+) -> JSONResponse:
+    denied = _internal_ok(request, x_internal_token)
+    if denied is not None:
+        return denied
+    rid = _rid(request)
+    items = [
+        {
+            "connection_id": str(r.connection_id),
+            "provider": r.provider,
+            "supply_mode": r.supply_mode,
+            "lifecycle_state": r.lifecycle_state,
+        }
+        for r in _life(request).list_routable(supply_mode)
+    ]
+    return JSONResponse(
+        status_code=200, content=success_envelope({"items": items}, request_id=rid)
     )
 
 

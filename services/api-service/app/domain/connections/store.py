@@ -54,6 +54,10 @@ class ConnectionStore(Protocol):
 
     def max_snapshot_version(self, connection_id: uuid.UUID) -> int: ...
 
+    def save_lifecycle(self, rec: ConnectionRecord, expected_state: str) -> None: ...
+
+    def list_all_active(self) -> list[ConnectionRecord]: ...
+
 
 class MemoryConnectionStore:
     def __init__(self) -> None:
@@ -173,3 +177,22 @@ class MemoryConnectionStore:
             if not rows:
                 return 0
             return max(int(r["version"]) for r in rows)
+
+    def save_lifecycle(self, rec: ConnectionRecord, expected_state: str) -> None:
+        with self._lock:
+            cur = self.by_id.get(rec.connection_id)
+            if cur is None:
+                raise KeyError(rec.connection_id)
+            if cur.lifecycle_state != expected_state:
+                raise VersionConflict
+            cur.lifecycle_state = rec.lifecycle_state
+            cur.supply_mode = rec.supply_mode
+            cur.updated_at = rec.updated_at or utcnow()
+
+    def list_all_active(self) -> list[ConnectionRecord]:
+        with self._lock:
+            return [
+                deepcopy(r)
+                for r in self.by_id.values()
+                if r.status == "active" and r.deleted_at is None
+            ]

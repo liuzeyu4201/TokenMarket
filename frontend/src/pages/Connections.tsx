@@ -6,6 +6,7 @@ import {
   deleteConnection,
   listConnections,
   replaceConnectionCredential,
+  lifecycleAction,
   verifyConnection,
   type ProviderConnection,
 } from '../api/v1/connections'
@@ -30,6 +31,16 @@ const HEALTH_LABEL: Record<string, string> = {
   healthy: '健康',
   degraded: '降级',
   unhealthy: '不健康',
+}
+
+const LIFE_LABEL: Record<string, string> = {
+  draft: '草稿',
+  verified: '已验证',
+  listed: '已上架',
+  bound: '已绑定',
+  paused: '已暂停',
+  draining: '排空中',
+  retired: '已退役',
 }
 
 export function Connections() {
@@ -125,6 +136,23 @@ export function Connections() {
       } else {
         setError(err instanceof Error ? err.message : '替换失败')
       }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onLife = async (
+    row: ProviderConnection,
+    action: 'list' | 'pause' | 'resume' | 'drain' | 'retire',
+  ) => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await lifecycleAction(row.connection_id, action, auth.getCsrfToken())
+      await refresh()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '操作失败')
     } finally {
       setBusy(false)
     }
@@ -231,7 +259,7 @@ export function Connections() {
       ) : (
         <Table
           caption="已登记的提供商连接"
-          headers={['提供商', '模式', '指纹', '健康', '版本', '操作']}
+          headers={['提供商', '模式', '指纹', '健康', '生命周期', '版本', '操作']}
           empty="还没有连接。"
           rows={items.map((row) => [
             PROVIDER_LABEL[row.provider],
@@ -241,6 +269,9 @@ export function Connections() {
             </span>,
             <span key={`${row.connection_id}-health`} data-testid="connection-health">
               {HEALTH_LABEL[row.health_state || 'unknown'] ?? row.health_state}
+            </span>,
+            <span key={`${row.connection_id}-life`} data-testid="connection-lifecycle">
+              {LIFE_LABEL[row.lifecycle_state || 'draft'] ?? row.lifecycle_state}
             </span>,
             String(row.credential_version),
             <div key={`${row.connection_id}-ops`}>
@@ -257,6 +288,25 @@ export function Connections() {
                   }))
                 }
               />
+              {row.lifecycle_state === 'verified' ? (
+                <Button type="button" variant="secondary" onClick={() => void onLife(row, 'list')}>
+                  上架
+                </Button>
+              ) : null}
+              {row.lifecycle_state === 'listed' || row.lifecycle_state === 'bound' ? (
+                <Button type="button" variant="secondary" onClick={() => void onLife(row, 'pause')}>
+                  暂停
+                </Button>
+              ) : null}
+              {row.lifecycle_state === 'paused' ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void onLife(row, 'resume')}
+                >
+                  恢复
+                </Button>
+              ) : null}
               <Button type="button" variant="secondary" onClick={() => void onVerify(row)}>
                 立即复验
               </Button>

@@ -15,6 +15,8 @@ class ConnectionFact:
     provider: str
     supply_mode: str
     usable: bool
+    lifecycle_state: str = "listed"
+    admits_new: bool = True
 
 
 class ConnectionLookup(Protocol):
@@ -41,6 +43,8 @@ class DictConnectionLookup:
                 provider=cur.provider,
                 supply_mode=cur.supply_mode,
                 usable=False,
+                lifecycle_state=cur.lifecycle_state,
+                admits_new=False,
             )
 
     def get(self, connection_id: uuid.UUID) -> ConnectionFact | None:

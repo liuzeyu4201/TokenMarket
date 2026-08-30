@@ -14,6 +14,7 @@ import (
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/affinity"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/endpcatalog"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageobs"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageparse"
 )
 
 // Limits bound body size and upstream wait.
@@ -53,6 +54,7 @@ type Kernel struct {
 	Now       func() time.Time
 	Affinity  affinity.Store
 	Usage     usageobs.Sink
+	Capture   usageparse.Recorder
 }
 
 func (k *Kernel) selector() Selector {
@@ -107,10 +109,12 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 	endpointID := ""
 	transportName := ""
 	affinityKind := ""
+	metering := ""
 	if rec != nil {
 		endpointID = rec.ID
 		transportName = rec.Transport
 		affinityKind = rec.Affinity
+		metering = rec.MeteringSource
 	}
 	isWS := transportName == "websocket"
 	projectID := r.Header.Get("X-TokenMarket-Project-ID")
@@ -209,12 +213,13 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 			if cl := resp.ContentLength; cl > 0 && lim.MaxResponseBytes > 0 && cl > lim.MaxResponseBytes {
 				return errTooLarge
 			}
-			if register && resp.StatusCode < 300 && resp.Body != nil {
+			body := resp.Body
+			if register && resp.StatusCode < 300 && body != nil {
 				connID := up.ConnectionID
 				ep := endpointID
 				pr := proto
 				pj := projectID
-				resp.Body = newIDTee(resp.Body, func(id string) {
+				body = newIDTee(body, func(id string) {
 					_ = k.Affinity.Put(affinity.Binding{
 						Protocol:     pr,
 						ResourceID:   id,
@@ -224,6 +229,11 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 					})
 				})
 			}
+			if k.Capture != nil && resp.StatusCode < 300 && body != nil {
+				ct := resp.Header.Get("Content-Type")
+				body = newUsageTee(body, ct, proto, metering, rid, projectID, endpointID, k.Capture)
+			}
+			resp.Body = body
 			return nil
 		},
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, e error) {

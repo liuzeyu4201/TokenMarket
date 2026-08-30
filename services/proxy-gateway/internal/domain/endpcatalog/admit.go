@@ -82,7 +82,8 @@ func Admit(c *Catalog, in AdmitInput) Decision {
 	if mode == "" {
 		mode = "unknown"
 	}
-	if rec.Stateful && mode != "dedicated" {
+	needsDedicated := rec.Stateful || rec.Affinity == "resource_id" || rec.Affinity == "connection"
+	if needsDedicated && mode != "dedicated" {
 		return Decision{Allow: false, Code: CodeDedicatedRequired, Record: rec}
 	}
 	return Decision{Allow: true, Record: rec}

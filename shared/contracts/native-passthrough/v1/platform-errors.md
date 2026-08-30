@@ -14,6 +14,11 @@
 | `UPSTREAM_TIMEOUT` | 传输超时且无响应体 | 504 |
 | `CLIENT_CANCELED` | 客户端取消 | 499 语义（HTTP 499 或 400 信封） |
 | `NO_UPSTREAM` | Selector 无可用连接（SF23 前 fail-closed） | 503 |
+| `AFFINITY_NOT_FOUND` | 资源 ID 无 Connection 映射 | 404 |
+| `AFFINITY_CONFLICT` | 资源 ID 已绑定其它 Connection | 409 |
+| `SLOW_CONSUMER` | 客户端写 idle 超时 | 504 |
 
 平台信封字段：`code`, `message`, `data`, `request_id`, `timestamp`。  
 不得把上述 code 写成 OpenAI `error.type` 或 Anthropic `type=error` 形状。
+
+1.1.0 兼容扩展：亲和与慢消费者码。

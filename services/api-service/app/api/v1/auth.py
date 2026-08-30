@@ -42,6 +42,7 @@ from app.schemas.authentication import (
     CompleteProfileRequest,
     CreateSessionRequest,
     RequestChallengeRequest,
+    SessionRevokeRequest,
 )
 from app.schemas.envelope import error_envelope, success_envelope
 from app.security.origin import origin_allowed
@@ -164,6 +165,7 @@ async def complete_profile(
         role=body.role,
         idempotency_key=idempotency_key,
         request_id=request_id,
+        client_ip=client_ip(request),
     )
     if result.kind == "success":
         response = JSONResponse(
@@ -344,6 +346,7 @@ async def create_authenticated_session(
             challenge_id=body.challenge_id,
             code=body.code,
             request_id=request_id,
+            client_ip=client_ip(request),
         )
     except Exception:
         logger.exception("session create failed", extra={"request_id": request_id})
@@ -522,6 +525,102 @@ async def delete_current_session(
             _serialize_data(result.data) or {"logged_out": True},
             request_id=request_id,
         ),
+        headers={"Cache-Control": "no-store"},
+    )
+    if result.clear_cookie:
+        clear_session_cookie(response)
+    return response
+
+
+@router.post("/session-revocations")
+async def revoke_web_sessions(
+    body: SessionRevokeRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    settings: AuthSettings = Depends(get_auth_settings),
+    origin: str | None = Header(default=None, alias="Origin"),
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    cookie_value = request.cookies.get(SESSION_COOKIE_NAME)
+    if _origin_rejected(origin, settings):
+        return JSONResponse(
+            status_code=403,
+            content=error_envelope(
+                "ORIGIN_REJECTED",
+                MSG_ORIGIN_REJECTED,
+                request_id=request_id,
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+    service = SessionService(session, settings)
+    result = await service.revoke_all_sessions(
+        cookie_value=cookie_value,
+        csrf_presented=csrf_token,
+        request_id=request_id,
+    )
+    if result.kind == "csrf_invalid":
+        record_auth_csrf_rejected("csrf")
+        return JSONResponse(
+            status_code=403,
+            content=error_envelope(
+                "CSRF_INVALID",
+                MSG_CSRF_INVALID,
+                request_id=request_id,
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+    if result.kind == "unauthenticated":
+        response = JSONResponse(
+            status_code=401,
+            content=error_envelope(result.code, result.message, request_id=request_id),
+            headers={"Cache-Control": "no-store"},
+        )
+        if result.clear_cookie:
+            clear_session_cookie(response)
+        return response
+    if result.kind == "service_unavailable":
+        return JSONResponse(
+            status_code=503,
+            content=error_envelope(result.code, result.message, request_id=request_id),
+            headers={"Cache-Control": "no-store"},
+        )
+    response = JSONResponse(
+        status_code=200,
+        content=success_envelope(
+            _serialize_data(result.data) or {"logged_out": True, "scope": body.scope},
+            request_id=request_id,
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
+    if result.clear_cookie:
+        clear_session_cookie(response)
+    return response
+
+
+@router.get("/security-summary")
+async def get_security_summary(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    settings: AuthSettings = Depends(get_auth_settings),
+) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "unknown")
+    cookie_value = request.cookies.get(SESSION_COOKIE_NAME)
+    service = SessionService(session, settings)
+    result = await service.security_summary(
+        cookie_value=cookie_value, request_id=request_id
+    )
+    if result.kind == "success":
+        return JSONResponse(
+            status_code=200,
+            content=success_envelope(
+                _serialize_data(result.data), request_id=request_id
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+    response = JSONResponse(
+        status_code=result.http_status,
+        content=error_envelope(result.code, result.message, request_id=request_id),
         headers={"Cache-Control": "no-store"},
     )
     if result.clear_cookie:

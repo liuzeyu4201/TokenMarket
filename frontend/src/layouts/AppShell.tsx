@@ -78,6 +78,12 @@ export function AppShell() {
               >
                 工作台
               </Link>
+              <Link
+                to="/account/security"
+                aria-current={location.pathname === '/account/security' ? 'page' : undefined}
+              >
+                账户安全
+              </Link>
               <button
                 ref={logoutButtonRef}
                 type="button"

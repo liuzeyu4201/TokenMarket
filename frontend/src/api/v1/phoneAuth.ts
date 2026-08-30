@@ -270,6 +270,80 @@ export async function bootstrapSession(): Promise<SessionData> {
  * Idempotent logout. Requires memory CSRF when a valid session cookie is present.
  * Browser supplies Origin; credentials remain HttpOnly and unread.
  */
+export async function fetchSecuritySummary(): Promise<{
+  session: {
+    issued_at: string
+    expires_at: string
+    generation: number
+    client_hint: string | null
+  }
+  recent_events: Array<{
+    event_type: string
+    outcome: string
+    reason_code: string
+    request_id: string
+    occurred_at: string
+  }>
+}> {
+  try {
+    const { data, requestId } = await apiFetch<
+      ApiEnvelope<{
+        session: {
+          issued_at: string
+          expires_at: string
+          generation: number
+          client_hint: string | null
+        }
+        recent_events: Array<{
+          event_type: string
+          outcome: string
+          reason_code: string
+          request_id: string
+          occurred_at: string
+        }>
+      }>
+    >('/api/v1/auth/security-summary', {
+      method: 'GET',
+      sameOriginAuth: true,
+    })
+    return assertSuccessData(data, requestId)
+  } catch (err) {
+    throw mapPhoneAuthError(err)
+  }
+}
+
+export async function revokeAllSessions(csrfToken: string | null): Promise<void> {
+  try {
+    const headers: Record<string, string> = {}
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken
+    }
+    const { data, requestId } = await apiFetch<ApiEnvelope<{ logged_out?: boolean }>>(
+      '/api/v1/auth/session-revocations',
+      {
+        method: 'POST',
+        sameOriginAuth: true,
+        headers,
+        body: JSON.stringify({ scope: 'all' }),
+      },
+    )
+    const code = data.code ?? ''
+    if (code !== '0') {
+      throw mapPhoneAuthError(
+        new ApiError(
+          typeof data.message === 'string' ? data.message : '退出失败',
+          0,
+          data,
+          requestId,
+          code || 'INTERNAL_ERROR',
+        ),
+      )
+    }
+  } catch (err) {
+    throw mapPhoneAuthError(err)
+  }
+}
+
 export async function logoutSession(csrfToken: string | null): Promise<void> {
   try {
     const headers: Record<string, string> = {}

@@ -86,6 +86,9 @@ class User(Base):
     version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default=text("1")
     )
+    session_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
 
 
 class RegistrationIdempotencyRecord(Base):

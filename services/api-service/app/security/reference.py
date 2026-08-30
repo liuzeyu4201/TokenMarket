@@ -39,3 +39,13 @@ def ip_ref(key: bytes, client_ip: str) -> bytes:
         raise ValueError("client_ip must not be empty")
     msg = _IP_REF_DOMAIN + client_ip.encode("utf-8")
     return hmac.new(key, msg, hashlib.sha256).digest()
+
+
+def client_hint(key: bytes, client_ip: str | None) -> str | None:
+    """Truncated HMAC of client IP for security-summary display."""
+    if not client_ip:
+        return None
+    try:
+        return ip_ref(key, client_ip).hex()[:8]
+    except ValueError:
+        return None

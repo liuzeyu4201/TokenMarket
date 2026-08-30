@@ -394,6 +394,10 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
         "API Service (unified phone auth, SF06)",
         "1.0.0",
     ),
+    "single-session-auth/v1/": (
+        "API Service (single-session hardening, SF07)",
+        "1.0.0",
+    ),
 }
 
 

@@ -36,6 +36,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.0.0 | JSON Schema |
 | `ledger/v1/` | Billing Service (immutable ledger, SF28+) | 1.0.0 | JSON Schema |
 | `audit/v1/` | Admin Service (audit events, SF30+) | 1.0.0 | JSON Schema |
+| `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
 
 ## Compatibility and deprecation status
 

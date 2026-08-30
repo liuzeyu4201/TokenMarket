@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/usage-outbox/v1/usage-event.schema.json",
+  "schema_version": "1.0.0",
+  "title": "UsageOutboxEvent",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "event_id",
+    "request_id",
+    "seq",
+    "type",
+    "version",
+    "timestamp",
+    "producer",
+    "correlation_id",
+    "catalog_major",
+    "status"
+  ],
+  "properties": {
+    "event_id": { "type": "string", "minLength": 1 },
+    "request_id": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 1 },
+    "type": { "type": "string", "minLength": 1 },
+    "version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "producer": { "type": "string" },
+    "correlation_id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "connection_id": { "type": "string" },
+    "catalog_major": { "type": "integer", "minimum": 1 },
+    "pricing_version": { "type": "string" },
+    "route_decision_id": { "type": "string" },
+    "protocol": { "enum": ["openai", "anthropic", "vertex"] },
+    "endpoint_id": { "type": "string" },
+    "status": {
+      "enum": ["success", "upstream_4xx", "upstream_5xx", "timeout", "client_cancel"]
+    },
+    "evidence_digest": { "type": "string" }
+  }
+}

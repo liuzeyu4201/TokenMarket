@@ -27,12 +27,13 @@ def test_register_without_database_uses_envelope(
             json={"phone": unique_phone(), "nickname": "无库", "role": "buyer"},
             headers={"Idempotency-Key": str(uuid.uuid4())},
         )
-        assert r.status_code == 503
+        assert r.status_code == 403
         body = r.json()
-        assert body["code"] == "SERVICE_UNAVAILABLE"
+        assert body["code"] == "AUTH_VERIFICATION_REQUIRED"
         assert "request_id" in body
         assert "timestamp" in body
         assert "detail" not in body
+        assert "SERVICE_UNAVAILABLE" not in r.text
 
 
 def test_register_missing_idempotency_key(
@@ -45,5 +46,6 @@ def test_register_missing_idempotency_key(
             "/api/v1/auth/register",
             json={"phone": unique_phone(), "nickname": "无键", "role": "buyer"},
         )
-        assert r.status_code == 400
-        assert r.json()["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+        assert r.status_code == 403
+        assert r.json()["code"] == "AUTH_VERIFICATION_REQUIRED"
+        assert "IDEMPOTENCY_KEY_REQUIRED" not in r.text

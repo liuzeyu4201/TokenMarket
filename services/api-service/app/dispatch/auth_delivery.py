@@ -194,6 +194,12 @@ class AuthDeliveryDispatcher:
                         expected = phone_ref(ref_mat.current, user.phone_normalized)
                         if expected != ch.phone_ref:
                             destination = None
+            elif getattr(ch, "phone_normalized", None):
+                destination = ch.phone_normalized
+                ref_mat = self._settings.key_material("reference")
+                expected = phone_ref(ref_mat.current, ch.phone_normalized)
+                if expected != ch.phone_ref:
+                    destination = None
 
             async with self._session_factory() as session:
                 # Re-load challenge in this session

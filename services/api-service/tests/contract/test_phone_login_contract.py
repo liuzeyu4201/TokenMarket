@@ -164,7 +164,7 @@ def test_challenge_accepted_shape_and_idempotency_header(
     assert res2.json()["data"]["challenge_id"] == data["challenge_id"]
 
 
-def test_register_still_compatible(contract_client: TestClient) -> None:
+def test_register_requires_verification(contract_client: TestClient) -> None:
     phone = f"138{uuid.uuid4().int % 10**8:08d}"[:11]
     phone = "138" + phone[3:]
     res = contract_client.post(
@@ -172,8 +172,8 @@ def test_register_still_compatible(contract_client: TestClient) -> None:
         json={"phone": phone, "nickname": "契约用户", "role": "buyer"},
         headers={"Idempotency-Key": str(uuid.uuid4())},
     )
-    assert res.status_code == 200, res.text
-    assert res.json()["code"] == "0"
+    assert res.status_code == 403, res.text
+    assert res.json()["code"] == "AUTH_VERIFICATION_REQUIRED"
 
 
 def test_session_set_cookie_attributes_and_no_credential_in_body(

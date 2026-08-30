@@ -107,6 +107,9 @@ function actionFor(code: string, verificationAction?: VerificationFailureAction)
       return 'security_block'
     case 'UNAUTHENTICATED':
       return 'clear_session'
+    case 'PROFILE_COMPLETION_REQUIRED':
+    case 'AUTH_VERIFICATION_REQUIRED':
+      return 'complete_profile'
     default:
       return 'unknown'
   }
@@ -186,12 +189,61 @@ export async function requestChallenge(
  * Session credential is set only via HttpOnly cookie (not in body).
  */
 export async function createSession(body: CreateSessionRequest): Promise<SessionData> {
+  const result = await verifyChallenge(body)
+  if (result.status !== 'authenticated') {
+    throw new PhoneAuthClientError(
+      '请补充昵称和角色以完成注册',
+      'PROFILE_COMPLETION_REQUIRED',
+      'complete_profile',
+    )
+  }
+  return result.session
+}
+
+export type VerifyChallengeResult =
+  | { status: 'authenticated'; session: SessionData }
+  | { status: 'complete_profile'; phoneMasked: string }
+
+/** Unified verify: existing users get a session; new users must complete profile. */
+export async function verifyChallenge(
+  body: CreateSessionRequest,
+): Promise<VerifyChallengeResult> {
   try {
     const { data, requestId } = await apiFetch<SessionEnvelope>(SESSIONS_PATH, {
       method: 'POST',
       body: JSON.stringify(body),
       sameOriginAuth: true,
     })
+    if (data.code === 'PROFILE_COMPLETION_REQUIRED') {
+      const phoneMasked =
+        data.data && typeof data.data === 'object' && 'phone_masked' in data.data
+          ? String((data.data as { phone_masked?: string }).phone_masked ?? '')
+          : ''
+      return { status: 'complete_profile', phoneMasked }
+    }
+    return {
+      status: 'authenticated',
+      session: assertSuccessData<SessionData>(data, requestId),
+    }
+  } catch (err) {
+    throw mapPhoneAuthError(err)
+  }
+}
+
+export async function completeProfile(
+  body: { nickname: string; role: 'buyer' | 'seller' | 'both' },
+  idempotencyKey: string,
+): Promise<SessionData> {
+  try {
+    const { data, requestId } = await apiFetch<SessionEnvelope>(
+      '/api/v1/auth/profile-completions',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        sameOriginAuth: true,
+        headers: { 'Idempotency-Key': idempotencyKey },
+      },
+    )
     return assertSuccessData<SessionData>(data, requestId)
   } catch (err) {
     throw mapPhoneAuthError(err)

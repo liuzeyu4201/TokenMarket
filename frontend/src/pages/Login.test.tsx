@@ -8,6 +8,7 @@ import { Dashboard } from './Dashboard'
 
 const requestChallenge = vi.fn()
 const createSession = vi.fn()
+const completeProfile = vi.fn()
 const bootstrapSession = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
@@ -16,6 +17,7 @@ vi.mock('../api/v1/phoneAuth', async () => {
     ...actual,
     requestChallenge: (...args: unknown[]) => requestChallenge(...args),
     createSession: (...args: unknown[]) => createSession(...args),
+    completeProfile: (...args: unknown[]) => completeProfile(...args),
     bootstrapSession: (...args: unknown[]) => bootstrapSession(...args),
     logoutSession: vi.fn(),
   }
@@ -58,6 +60,7 @@ describe('Login page', () => {
   beforeEach(async () => {
     requestChallenge.mockReset()
     createSession.mockReset()
+    completeProfile.mockReset()
     bootstrapSession.mockReset()
     const { PhoneAuthClientError } = await import('../api/v1/phoneAuth')
     bootstrapSession.mockRejectedValue(
@@ -163,6 +166,52 @@ describe('Login page', () => {
       code: '012345',
     })
     expect(screen.getByText('*******8000')).toBeInTheDocument()
+  })
+
+  it('completes nickname and role after new-number OTP then auto-logs in', async () => {
+    const user = userEvent.setup()
+    const { PhoneAuthClientError } = await import('../api/v1/phoneAuth')
+    requestChallenge.mockResolvedValue({
+      challenge_id: '11111111-1111-1111-1111-111111111111',
+      phone_masked: '*******8000',
+      expires_at: new Date(Date.now() + 300_000).toISOString(),
+      resend_available_at: new Date(Date.now() + 60_000).toISOString(),
+    })
+    createSession.mockRejectedValue(
+      new PhoneAuthClientError(
+        '请补充昵称和角色以完成注册',
+        'PROFILE_COMPLETION_REQUIRED',
+        'complete_profile',
+        200,
+      ),
+    )
+    completeProfile.mockResolvedValue({
+      user_id: 'user-new',
+      nickname: '新买家',
+      phone_masked: '*******8000',
+      role: 'buyer',
+      expires_at: new Date(Date.now() + 3600_000).toISOString(),
+      csrf_token: 'csrf-token-value',
+    })
+    renderLogin()
+    await user.type(screen.getByLabelText('手机号'), '13800138000')
+    await user.click(screen.getByRole('button', { name: '获取验证码' }))
+    await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument())
+    await user.type(screen.getByLabelText('验证码'), '012345')
+    await user.click(screen.getByRole('button', { name: '登录' }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '完成注册' })).toBeInTheDocument()
+    })
+    await user.type(screen.getByLabelText('昵称'), '新买家')
+    await user.selectOptions(screen.getByLabelText('角色'), 'buyer')
+    await user.click(screen.getByRole('button', { name: '完成并登录' }))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '工作台' })).toBeInTheDocument()
+    })
+    expect(completeProfile).toHaveBeenCalledWith(
+      { nickname: '新买家', role: 'buyer' },
+      expect.any(String),
+    )
   })
 
   it('restores safe in-app target from router state after login', async () => {

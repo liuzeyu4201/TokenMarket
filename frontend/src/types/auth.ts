@@ -84,6 +84,7 @@ export type PhoneAuthAction =
   | 'new_idempotency_key'
   | 'security_block'
   | 'clear_session'
+  | 'complete_profile'
   | 'unknown'
 
 export type VerificationFailureAction = 'retry_code' | 'request_new_code'

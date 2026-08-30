@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.dependencies import create_session_engine
 from app.domain.users.models import User
+from app.domain.users.service import RegistrationService
 from app.rate_limit import MemoryRateLimiter
 from tests.integration.conftest_register import unique_phone
 
@@ -28,7 +29,7 @@ def client(migrated_postgres: str, monkeypatch: pytest.MonkeyPatch) -> TestClien
         yield c
 
 
-def test_http_phone_already_registered(client: TestClient) -> None:
+def test_http_register_does_not_enumerate_occupied_phone(client: TestClient) -> None:
     phone = unique_phone()
     headers = {"Idempotency-Key": str(uuid.uuid4())}
     r1 = client.post(
@@ -36,17 +37,17 @@ def test_http_phone_already_registered(client: TestClient) -> None:
         json={"phone": phone, "nickname": "一", "role": "buyer"},
         headers=headers,
     )
-    assert r1.status_code == 200
     r2 = client.post(
         "/api/v1/auth/register",
         json={"phone": phone, "nickname": "二", "role": "seller"},
         headers={"Idempotency-Key": str(uuid.uuid4())},
     )
-    assert r2.status_code == 409
-    body = r2.json()
-    assert body["code"] == "PHONE_ALREADY_REGISTERED"
+    assert r1.status_code == r2.status_code == 403
+    assert r1.json()["code"] == r2.json()["code"] == "AUTH_VERIFICATION_REQUIRED"
+    assert "PHONE_ALREADY_REGISTERED" not in r1.text
+    assert "PHONE_ALREADY_REGISTERED" not in r2.text
     assert "一" not in r2.text
-    assert "request_id" in body
+    assert "request_id" in r2.json()
 
 
 @pytest.mark.asyncio
@@ -58,18 +59,16 @@ async def test_http_soft_deleted_unavailable(
     monkeypatch.setenv("DATABASE_URL", migrated_postgres)
     monkeypatch.delenv("REDIS_URL", raising=False)
     phone = unique_phone()
-    with TestClient(app) as client:
-        client.app.state.rate_limiter = MemoryRateLimiter()
-        r1 = client.post(
-            "/api/v1/auth/register",
-            json={"phone": phone, "nickname": "软删", "role": "buyer"},
-            headers={"Idempotency-Key": str(uuid.uuid4())},
-        )
-        assert r1.status_code == 200
-
     engine = create_session_engine(migrated_postgres)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
+        created = await RegistrationService(session).register(
+            phone=phone,
+            nickname="软删",
+            role="buyer",
+            idempotency_key=str(uuid.uuid4()),
+        )
+        assert created.code == "0"
         await session.execute(
             update(User).where(User.phone_normalized == phone).values(is_deleted=True)
         )
@@ -83,6 +82,7 @@ async def test_http_soft_deleted_unavailable(
             json={"phone": phone, "nickname": "再来", "role": "buyer"},
             headers={"Idempotency-Key": str(uuid.uuid4())},
         )
-        assert r2.status_code == 409
-        assert r2.json()["code"] == "ACCOUNT_UNAVAILABLE"
+        assert r2.status_code == 403
+        assert r2.json()["code"] == "AUTH_VERIFICATION_REQUIRED"
+        assert "ACCOUNT_UNAVAILABLE" not in r2.text
         assert "软删" not in r2.text

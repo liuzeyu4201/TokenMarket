@@ -71,6 +71,7 @@ def _challenge(
     ch = MagicMock()
     ch.id = cid
     ch.user_id = user_id
+    ch.phone_normalized = None
     ch.state = state
     ch.attempt_count = attempt_count
     ch.expires_at = expires_at if expires_at is not None else now + expires_delta

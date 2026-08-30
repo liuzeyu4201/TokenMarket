@@ -41,6 +41,9 @@ class AuthBusinessError(Exception):
 
 # Stable message catalogue (clients must key off ``code``, not free text).
 MSG_CHALLENGE_ACCEPTED = "若账户可用，验证码请求已受理"
+MSG_PROFILE_COMPLETION_REQUIRED = "请补充昵称和角色以完成注册"
+MSG_AUTH_VERIFICATION_REQUIRED = "请先完成手机号验证"
+MSG_PROFILE_EXPIRED = "补全凭证无效或已过期，请重新获取验证码"
 MSG_VALIDATION = "请求参数不合法"
 MSG_ORIGIN_REJECTED = "来源不被允许"
 MSG_CSRF_INVALID = "安全校验失败，请刷新后重试"

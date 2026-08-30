@@ -40,10 +40,8 @@ def test_register_success(register_client: TestClient) -> None:
         json={"phone": phone, "nickname": "集成用户", "role": "buyer"},
         headers={"Idempotency-Key": key},
     )
-    assert res.status_code == 200, res.text
+    assert res.status_code == 403, res.text
     body = res.json()
-    assert body["code"] == "0"
-    assert body["data"]["role"] == "buyer"
-    assert body["data"]["status"] == "active"
-    assert "user_id" in body["data"]
-    assert "138" not in res.text or body["data"].get("phone_masked", "").startswith("*")
+    assert body["code"] == "AUTH_VERIFICATION_REQUIRED"
+    assert "PHONE_ALREADY_REGISTERED" not in res.text
+    assert phone not in res.text

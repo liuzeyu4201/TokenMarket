@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.authentication.models import (
     AuthenticationSecurityEvent,
     AuthSession,
+    ProfileCompletionIntent,
     VerificationChallenge,
     VerificationRequestIdempotencyRecord,
 )
@@ -28,6 +29,7 @@ RESEND_COOLDOWN = timedelta(seconds=60)
 IDEMPOTENCY_REPLAY = timedelta(seconds=60)
 IDEMPOTENCY_DELETE_BUFFER = timedelta(hours=22)
 SESSION_TTL = timedelta(minutes=60)
+PROFILE_TTL = timedelta(minutes=10)
 SESSION_RETENTION = timedelta(days=90)
 AUDIT_RETENTION = timedelta(days=180)
 CHALLENGE_DELETE_BUFFER = timedelta(hours=22)
@@ -236,6 +238,7 @@ class AuthenticationRepository:
         code_key_version: int,
         provider_request_ref: uuid.UUID,
         now: datetime | None = None,
+        phone_normalized: str | None = None,
     ) -> VerificationChallenge:
         ts = now or utc_now()
         expires = ts + CHALLENGE_TTL
@@ -244,6 +247,7 @@ class AuthenticationRepository:
             user_id=user_id,
             idempotency_record_id=idempotency_record_id,
             phone_ref=phone_ref,
+            phone_normalized=phone_normalized,
             code_digest=code_digest,
             code_salt=code_salt,
             code_key_version=code_key_version,
@@ -579,6 +583,57 @@ class AuthenticationRepository:
             )
         )
         return len(list(result.scalars().all()))
+
+    async def insert_profile_intent(
+        self,
+        *,
+        intent_id: uuid.UUID,
+        phone_normalized: str,
+        challenge_id: uuid.UUID,
+        token_digest: bytes,
+        token_key_version: int,
+        now: datetime | None = None,
+    ) -> ProfileCompletionIntent:
+        ts = now or utc_now()
+        # 同一未消费号码只保留最新 intent。
+        open_rows = await self._session.execute(
+            select(ProfileCompletionIntent).where(
+                ProfileCompletionIntent.phone_normalized == phone_normalized,
+                ProfileCompletionIntent.consumed_at.is_(None),
+            )
+        )
+        for row in open_rows.scalars():
+            row.consumed_at = ts
+        intent = ProfileCompletionIntent(
+            id=intent_id,
+            phone_normalized=phone_normalized,
+            challenge_id=challenge_id,
+            token_digest=token_digest,
+            token_key_version=token_key_version,
+            expires_at=ts + PROFILE_TTL,
+            created_at=ts,
+        )
+        self._session.add(intent)
+        await self._session.flush()
+        return intent
+
+    async def get_open_intent_by_digest(
+        self, token_digest: bytes, *, now: datetime | None = None
+    ) -> ProfileCompletionIntent | None:
+        ts = now or utc_now()
+        result = await self._session.execute(
+            select(ProfileCompletionIntent)
+            .where(ProfileCompletionIntent.token_digest == token_digest)
+            .with_for_update()
+        )
+        intent = result.scalar_one_or_none()
+        if intent is None:
+            return None
+        if intent.consumed_at is not None:
+            return None
+        if intent.expires_at <= ts:
+            return None
+        return intent
 
     async def commit(self) -> None:
         await self._session.commit()

@@ -1,6 +1,11 @@
 import { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { PhoneAuthClientError, createSession, requestChallenge } from '../api/v1/phoneAuth'
+import {
+  PhoneAuthClientError,
+  completeProfile,
+  createSession,
+  requestChallenge,
+} from '../api/v1/phoneAuth'
 import { useAuth } from '../auth/AuthContext'
 import {
   clearChallenge,
@@ -8,7 +13,7 @@ import {
   saveChallenge,
   secondsUntilDeadline,
 } from '../auth/challengeState'
-import type { ChallengeAcceptedData } from '../types/auth'
+import type { ChallengeAcceptedData, UserRole } from '../types/auth'
 
 type FieldKey = 'phone' | 'code'
 
@@ -76,6 +81,10 @@ export function Login() {
 
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
+  const [profileStep, setProfileStep] = useState(false)
+  const [nickname, setNickname] = useState('')
+  const [role, setRole] = useState<UserRole | ''>('')
+  const profileKeyRef = useRef<string>(crypto.randomUUID())
   const [challenge, setChallenge] = useState<ChallengeAcceptedData | null>(() => loadChallenge())
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -283,6 +292,14 @@ export function Login() {
       const target = safeInternalPath(locationState?.from)
       navigate(target, { replace: true })
     } catch (err) {
+      if (err instanceof PhoneAuthClientError && err.action === 'complete_profile') {
+        clearChallenge()
+        setChallenge(null)
+        setProfileStep(true)
+        setFormError(null)
+        setErrorKind(null)
+        return
+      }
       if (err instanceof PhoneAuthClientError) {
         setRequestId(err.requestId ?? null)
         if (err.action === 'fix_fields' && err.fieldErrors) {
@@ -361,9 +378,67 @@ export function Login() {
 
   return (
     <div className="card" data-login-state={loginState} data-testid="login-page">
-      <h1>登录</h1>
-      <p id={`${phoneId}-intro`}>使用手机号验证码登录。不会在此页面保存登录凭证。</p>
+      <h1>{profileStep ? '完成注册' : '登录'}</h1>
+      <p id={`${phoneId}-intro`}>
+        {profileStep
+          ? '手机号已验证。请填写昵称和角色，完成后将自动登录。'
+          : '使用手机号验证码登录或注册。验证前不会提示该号码是否已注册。'}
+      </p>
 
+      {profileStep ? (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            if (!nickname.trim() || !role) {
+              setFormError('请填写昵称并选择角色')
+              setErrorKind('field-error')
+              return
+            }
+            try {
+              const sessionData = await completeProfile(
+                { nickname: nickname.trim(), role },
+                profileKeyRef.current,
+              )
+              setSuccess(true)
+              auth.establishSession(sessionData)
+              navigate(safeInternalPath(locationState?.from), { replace: true })
+            } catch (err) {
+              const message =
+                err instanceof PhoneAuthClientError ? err.message : '完成注册失败'
+              setFormError(message)
+              setErrorKind('unavailable')
+            }
+          }}
+        >
+          <label htmlFor={`${phoneId}-nick`}>昵称</label>
+          <input
+            id={`${phoneId}-nick`}
+            value={nickname}
+            onChange={(ev) => setNickname(ev.target.value)}
+            autoComplete="nickname"
+          />
+          <label htmlFor={`${phoneId}-role`}>角色</label>
+          <select
+            id={`${phoneId}-role`}
+            value={role}
+            onChange={(ev) => setRole(ev.target.value as UserRole)}
+          >
+            <option value="">请选择</option>
+            <option value="buyer">买家</option>
+            <option value="seller">卖家</option>
+            <option value="both">买家与卖家</option>
+          </select>
+          {formError ? (
+            <div className="form-error" role="alert">
+              {formError}
+            </div>
+          ) : null}
+          <button type="submit">完成并登录</button>
+        </form>
+      ) : null}
+
+      {!profileStep ? (
+      <>
       {/* Low-noise live region: state transitions only, not ticking seconds.
           No role="status" here so the challenge accept status remains the sole status. */}
       <div id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
@@ -489,8 +564,10 @@ export function Login() {
       </form>
 
       <p className="auth-footer">
-        还没有账户？<Link to="/register">前往注册</Link>
+        还没有账户？<Link to="/register">前往注册</Link>（同一验证码流程）
       </p>
+      </>
+      ) : null}
     </div>
   )
 }

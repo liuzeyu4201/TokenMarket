@@ -25,6 +25,7 @@ from app.domain.users.models import UserRole
 __all__ = [
     "VerificationRequestIdempotencyRecord",
     "VerificationChallenge",
+    "ProfileCompletionIntent",
     "AuthSession",
     "AuthenticationSecurityEvent",
 ]
@@ -174,6 +175,7 @@ class VerificationChallenge(Base):
         unique=True,
     )
     phone_ref: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
+    phone_normalized: Mapped[str | None] = mapped_column(String(11), nullable=True)
     code_digest: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
     code_salt: Mapped[bytes | None] = mapped_column(BYTEA, nullable=True)
     code_key_version: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
@@ -216,6 +218,44 @@ class VerificationChallenge(Base):
     )
     delete_after: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+
+
+class ProfileCompletionIntent(Base):
+    """短时补全凭证；用户行仅在 consumed 事务中创建。"""
+
+    __tablename__ = "profile_completion_intents"
+    __table_args__ = (
+        CheckConstraint("expires_at > created_at", name="ck_pci_expires_at"),
+        Index("uq_pci_token_digest", "token_digest", unique=True),
+        Index(
+            "uq_pci_open_phone",
+            "phone_normalized",
+            unique=True,
+            postgresql_where=text("consumed_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    phone_normalized: Mapped[str] = mapped_column(String(11), nullable=False)
+    challenge_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("verification_challenges.id"), nullable=False
+    )
+    token_digest: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
+    token_key_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        server_default=text("NOW()"),
     )
 
 

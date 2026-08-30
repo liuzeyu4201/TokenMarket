@@ -37,6 +37,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `ledger/v1/` | Billing Service (immutable ledger, SF28+) | 1.0.0 | JSON Schema |
 | `audit/v1/` | Admin Service (audit events, SF30+) | 1.0.0 | JSON Schema |
 | `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
+| `unified-phone-auth/v1/` | API Service (unified phone auth, SF06) | 1.0.0 | OpenAPI |
 
 ## Compatibility and deprecation status
 
@@ -63,9 +64,10 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation
   is independent of SF02 public `dev` activation.
-- `user-registration/v1/` owns `POST /api/v1/auth/register`, unified business envelope codes,
-  CN mobile normalization rules, and privacy constraints for registration; breaking changes
-  require a new version and synchronized API Service + frontend consumers.
+- `user-registration/v1/` owns historical `POST /api/v1/auth/register` envelope codes,
+  CN mobile normalization, and privacy constraints. SF06 (`unified-phone-auth/v1`)
+  requires the public register path to reject without occupancy enumeration
+  (`AUTH_VERIFICATION_REQUIRED`); new accounts are created only via OTP + profile completion.
 - `phone-auth-session/v1/` owns phone OTP challenge, single active browser session, cookie/CSRF,
   SMS delivery port, and the four authentication operations
   (`POST /verification-challenges`, `POST /sessions`, `GET /session`, `DELETE /session`).

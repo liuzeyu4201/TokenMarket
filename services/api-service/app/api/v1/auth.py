@@ -21,10 +21,14 @@ from app.dependencies import (
     get_rate_limiter,
 )
 from app.domain.authentication.challenge_service import ChallengeService
+from app.domain.authentication.profile_service import ProfileCompletionService
 from app.domain.authentication.session_service import SessionService
-from app.domain.users.phone import PhoneValidationError, normalize_cn_mobile
-from app.domain.users.service import RegistrationService
-from app.errors import MSG_CSRF_INVALID, MSG_ORIGIN_REJECTED, MSG_RATE_LIMITED
+from app.errors import (
+    MSG_AUTH_VERIFICATION_REQUIRED,
+    MSG_CSRF_INVALID,
+    MSG_ORIGIN_REJECTED,
+    MSG_RATE_LIMITED,
+)
 from app.observability import (
     emit_auth_event,
     record_auth_challenge,
@@ -32,13 +36,20 @@ from app.observability import (
     record_rate_limit_backend_unavailable,
     record_rate_limited,
     record_registration_attempt,
-    record_registration_duration,
 )
 from app.rate_limit import RateLimitBackendUnavailable, RateLimiter
-from app.schemas.authentication import CreateSessionRequest, RequestChallengeRequest
+from app.schemas.authentication import (
+    CompleteProfileRequest,
+    CreateSessionRequest,
+    RequestChallengeRequest,
+)
 from app.schemas.envelope import error_envelope, success_envelope
-from app.schemas.register import RegisterRequest
 from app.security.origin import origin_allowed
+from app.security.profile_token import (
+    PROFILE_COOKIE_NAME,
+    clear_profile_cookie,
+    set_profile_cookie,
+)
 from app.security.session import (
     SESSION_COOKIE_NAME,
     clear_session_cookie,
@@ -87,28 +98,47 @@ def _serialize_data(data: Any) -> Any:
 
 @router.post("/register")
 async def register_user(
-    body: RegisterRequest,
+    request: Request,
+) -> JSONResponse:
+    """V0.2：无 OTP 补全凭证的公开注册一律拒绝，避免占用冲突枚举。"""
+    request_id = getattr(request.state, "request_id", "unknown")
+    record_registration_attempt("verification_required")
+    return JSONResponse(
+        status_code=403,
+        content=error_envelope(
+            "AUTH_VERIFICATION_REQUIRED",
+            MSG_AUTH_VERIFICATION_REQUIRED,
+            request_id=request_id,
+        ),
+    )
+
+
+@router.post("/profile-completions")
+async def complete_profile(
+    body: CompleteProfileRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     limiter: RateLimiter = Depends(get_rate_limiter),
+    settings: AuthSettings = Depends(get_auth_settings),
+    origin: str | None = Header(default=None, alias="Origin"),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> JSONResponse:
     request_id = getattr(request.state, "request_id", "unknown")
-    start = time.monotonic()
+    if _origin_rejected(origin, settings):
+        return JSONResponse(
+            status_code=403,
+            content=error_envelope(
+                "ORIGIN_REJECTED",
+                MSG_ORIGIN_REJECTED,
+                request_id=request_id,
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
     ip = client_ip(request)
-
-    # Rate limit: IP always; phone only after successful normalize (FR-020a)
-    phone_norm: str | None = None
-    norm = normalize_cn_mobile(body.phone)
-    if not isinstance(norm, PhoneValidationError):
-        phone_norm = norm
-
     try:
-        decision = await limiter.check_and_increment(ip=ip, phone_normalized=phone_norm)
+        decision = await limiter.check_and_increment(ip=ip, phone_normalized=None)
     except RateLimitBackendUnavailable:
         record_rate_limit_backend_unavailable()
-        record_registration_attempt("service_unavailable")
-        record_registration_duration(time.monotonic() - start)
         return JSONResponse(
             status_code=503,
             content=error_envelope(
@@ -117,63 +147,45 @@ async def register_user(
                 request_id=request_id,
             ),
         )
-
     if not decision.allowed:
         record_rate_limited()
-        record_registration_attempt("rate_limited")
-        record_registration_duration(time.monotonic() - start)
         return JSONResponse(
             status_code=429,
             content=error_envelope(
                 "RATE_LIMITED",
-                "请求过于频繁，请稍后再试",
+                MSG_RATE_LIMITED,
                 request_id=request_id,
             ),
         )
-
-    try:
-        service = RegistrationService(session)
-        result = await service.register(
-            phone=body.phone,
-            nickname=body.nickname,
-            role=body.role,
-            idempotency_key=idempotency_key,
-        )
-    except Exception:
-        logger.exception(
-            "registration failed",
-            extra={"request_id": request_id},
-        )
-        record_registration_attempt("internal_error")
-        record_registration_duration(time.monotonic() - start)
-        return JSONResponse(
-            status_code=500,
-            content=error_envelope(
-                "INTERNAL_ERROR",
-                "内部错误",
-                request_id=request_id,
-            ),
-        )
-
-    record_registration_attempt(
-        result.code.lower() if result.code != "0" else "success"
+    service = ProfileCompletionService(session, settings)
+    result = await service.complete(
+        cookie_value=request.cookies.get(PROFILE_COOKIE_NAME),
+        nickname=body.nickname,
+        role=body.role,
+        idempotency_key=idempotency_key,
+        request_id=request_id,
     )
-    record_registration_duration(time.monotonic() - start)
-
     if result.kind == "success":
-        return JSONResponse(
+        response = JSONResponse(
             status_code=200,
-            content=success_envelope(result.data, request_id=request_id),
+            content=success_envelope(
+                _serialize_data(result.data), request_id=request_id
+            ),
+            headers={"Cache-Control": "no-store"},
         )
-
+        if result.cookie_value:
+            set_session_cookie(response, result.cookie_value)
+        clear_profile_cookie(response)
+        return response
     return JSONResponse(
         status_code=result.http_status,
         content=error_envelope(
             result.code,
             result.message,
             request_id=request_id,
-            data=result.data,
+            data=_serialize_data(result.data),
         ),
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -356,6 +368,21 @@ async def create_authenticated_session(
         )
         if result.cookie_value:
             set_session_cookie(response, result.cookie_value)
+        return response
+
+    if result.kind == "profile_completion":
+        response = JSONResponse(
+            status_code=200,
+            content=error_envelope(
+                result.code,
+                result.message,
+                request_id=request_id,
+                data=_serialize_data(result.data),
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+        if result.profile_cookie_value:
+            set_profile_cookie(response, result.profile_cookie_value)
         return response
 
     return JSONResponse(

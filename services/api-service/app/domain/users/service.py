@@ -80,6 +80,7 @@ class RegistrationService:
         nickname: str,
         role: str,
         idempotency_key: str | None,
+        commit: bool = True,
     ) -> RegisterResult:
         key_or_err = _validate_idempotency_key(idempotency_key)
         if isinstance(key_or_err, RegisterResult):
@@ -183,7 +184,8 @@ class RegistrationService:
                 result_code="0",
                 result_payload=payload,
             )
-            await self._session.commit()
+            if commit:
+                await self._session.commit()
         except IntegrityError:
             await self._session.rollback()
             # Concurrent create or unique race

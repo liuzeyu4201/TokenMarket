@@ -8,6 +8,8 @@ import { DesignSystem } from './pages/DesignSystem'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
 import { NotFound } from './pages/NotFound'
+import { ProjectDetail } from './pages/ProjectDetail'
+import { Projects } from './pages/Projects'
 import { Register } from './pages/Register'
 import './styles/globals.css'
 
@@ -34,6 +36,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AccountSecurity />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="projects"
+              element={
+                <ProtectedRoute>
+                  <Projects />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="projects/:projectId"
+              element={
+                <ProtectedRoute>
+                  <ProjectDetail />
                 </ProtectedRoute>
               }
             />

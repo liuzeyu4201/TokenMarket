@@ -17,6 +17,12 @@ class Action(str, enum.Enum):
     seller_key_update = "seller_key.update"
     seller_key_disable = "seller_key.disable"
     route_candidate_exclude_self = "route_candidate_exclude_self"
+    project_create = "project.create"
+    project_read = "project.read"
+    project_update = "project.update"
+    project_archive = "project.archive"
+    project_delete = "project.delete"
+    project_enable_protocol = "project.enable_protocol"
 
 
 # role -> frozenset of allowed actions
@@ -27,6 +33,12 @@ _MATRIX: dict[str, frozenset[Action]] = {
             Action.proxy_key_revoke,
             Action.proxy_key_use,
             Action.route_candidate_exclude_self,
+            Action.project_create,
+            Action.project_read,
+            Action.project_update,
+            Action.project_archive,
+            Action.project_delete,
+            Action.project_enable_protocol,
         }
     ),
     "seller": frozenset(
@@ -47,6 +59,12 @@ _MATRIX: dict[str, frozenset[Action]] = {
             Action.seller_key_update,
             Action.seller_key_disable,
             Action.route_candidate_exclude_self,
+            Action.project_create,
+            Action.project_read,
+            Action.project_update,
+            Action.project_archive,
+            Action.project_delete,
+            Action.project_enable_protocol,
         }
     ),
 }

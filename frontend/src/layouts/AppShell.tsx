@@ -18,6 +18,14 @@ const TITLE: Record<string, string> = {
   '/dashboard': '工作台',
   '/account/security': '账户安全',
   '/design-system': '组件目录',
+  '/projects': '我的 Project',
+}
+
+function pageTitle(pathname: string): string {
+  if (pathname.startsWith('/projects/') && pathname !== '/projects') {
+    return 'Project 详情'
+  }
+  return TITLE[pathname] ?? '当前页'
 }
 
 export function AppShell() {
@@ -25,9 +33,7 @@ export function AppShell() {
   const location = useLocation()
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutStatus, setLogoutStatus] = useState<string | null>(null)
-  const [online, setOnline] = useState(
-    typeof navigator === 'undefined' ? true : navigator.onLine,
-  )
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   const loginLinkRef = useRef<HTMLAnchorElement>(null)
   const logoutButtonRef = useRef<HTMLButtonElement>(null)
   const focusLoginAfterLogout = useRef(false)
@@ -73,11 +79,8 @@ export function AppShell() {
   const showAnonymousActions = auth.status === 'anonymous' || auth.status === 'unavailable'
   const crumbs = useMemo(() => {
     if (location.pathname === '/') return [{ label: '首页' }]
-    const here = TITLE[location.pathname] ?? '当前页'
-    return [
-      { label: '首页', to: '/' },
-      { label: here },
-    ]
+    const here = pageTitle(location.pathname)
+    return [{ label: '首页', to: '/' }, { label: here }]
   }, [location.pathname])
 
   return (
@@ -140,6 +143,14 @@ export function AppShell() {
               >
                 工作台
               </Link>
+              {auth.session!.workspace === 'buyer' ? (
+                <Link
+                  to="/projects"
+                  aria-current={location.pathname.startsWith('/projects') ? 'page' : undefined}
+                >
+                  我的 Project
+                </Link>
+              ) : null}
               <Link
                 to="/account/security"
                 aria-current={location.pathname === '/account/security' ? 'page' : undefined}

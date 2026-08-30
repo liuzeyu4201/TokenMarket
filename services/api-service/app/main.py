@@ -19,6 +19,7 @@ from . import database
 from .api.v1.auth import router as auth_router
 from .api.v1.authorization import router as authorization_router
 from .api.v1.internal import router as internal_router
+from .api.v1.projects import router as projects_router
 from .api.v1.proxy_keys import router as proxy_keys_router
 from .api.v1.seller_keys import router as seller_keys_router
 from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
@@ -26,6 +27,7 @@ from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
 from .domain.endpcatalog import CatalogError, must_load
+from .domain.projects.service import ProjectService
 from .domain.proxykeys.service import ProxyKeyService
 from .domain.sellerkeys.crypto import CredentialEncryptor
 from .domain.sellerkeys.memory_store import MemoryKeyStore
@@ -86,13 +88,20 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
             application.state.usage_recorder = UsageRecorder(
                 store=SessionedUsageStore(maker)
             )
+            from app.repositories.projects import SessionedProjectStore
+
+            application.state.project_service = ProjectService(
+                store=SessionedProjectStore(maker)
+            )
         except Exception:
             logger.warning("seller key SQL store disabled; using memory")
             application.state.proxy_key_service = ProxyKeyService(pepper)
             application.state.usage_recorder = UsageRecorder()
+            application.state.project_service = ProjectService()
     else:
         application.state.proxy_key_service = ProxyKeyService(pepper)
         application.state.usage_recorder = UsageRecorder()
+        application.state.project_service = ProjectService()
     application.state.seller_key_store = store
     application.state.internal_token = os.environ.get("INTERNAL_GATEWAY_TOKEN") or ""
 
@@ -101,7 +110,7 @@ service_info = Info("app", "API service build information")
 service_info.info({"service": "api-service", "version": VERSION})
 
 _AUTH_PATH_PREFIX = "/api/v1/auth"
-_CORS_ALLOW_METHODS = ["GET", "POST", "DELETE", "OPTIONS"]
+_CORS_ALLOW_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
 _CORS_ALLOW_HEADERS = [
     "Content-Type",
     "X-Request-ID",
@@ -240,6 +249,7 @@ app.include_router(auth_router)
 app.include_router(authorization_router)
 app.include_router(seller_keys_router)
 app.include_router(proxy_keys_router)
+app.include_router(projects_router)
 app.include_router(internal_router)
 
 app.add_middleware(

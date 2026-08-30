@@ -55,6 +55,13 @@ test:
 		--cov-report=term-missing \
 		--cov-fail-under=80 \
 		tests/unit tests/integration -q
+	# Buyer Project domain must stay ≥80% (SF10)
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app.domain.projects \
+		--cov=app.api.v1.projects \
+		--cov-report=term-missing \
+		--cov-fail-under=80 \
+		tests/unit tests/integration -q
 
 build:
 	docker build -t $(IMAGE_TAG) .

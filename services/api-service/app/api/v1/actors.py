@@ -22,6 +22,7 @@ class Actor:
     role: str
     status: str
     session_id: uuid.UUID | None = None
+    workspace: str | None = None
 
 
 async def resolve_actor(request: Request) -> Actor | JSONResponse:
@@ -55,6 +56,7 @@ async def resolve_actor(request: Request) -> Actor | JSONResponse:
             role=user.role.value,
             status=user.status.value,
             session_id=ident.session_id,
+            workspace=ident.workspace,
         )
 
 

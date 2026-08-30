@@ -19,6 +19,8 @@ from . import database
 from .api.v1.auth import router as auth_router
 from .api.v1.authorization import router as authorization_router
 from .api.v1.internal import router as internal_router
+from .api.v1.bindings import internal_router as bindings_internal_router
+from .api.v1.bindings import router as bindings_router
 from .api.v1.projects import router as projects_router
 from .api.v1.proxy_keys import router as proxy_keys_router
 from .api.v1.seller_keys import router as seller_keys_router
@@ -27,6 +29,7 @@ from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
 from .domain.endpcatalog import CatalogError, must_load
+from .domain.bindings.service import BindingService
 from .domain.projects.service import ProjectService
 from .domain.proxykeys.service import ProxyKeyService
 from .domain.sellerkeys.crypto import CredentialEncryptor
@@ -88,20 +91,39 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
             application.state.usage_recorder = UsageRecorder(
                 store=SessionedUsageStore(maker)
             )
+            from app.repositories.bindings import SessionedBindingStore
             from app.repositories.projects import SessionedProjectStore
 
+            proj_store = SessionedProjectStore(maker)
+            bind_store = SessionedBindingStore(maker)
+            bind_svc = BindingService(store=bind_store, projects=proj_store)
+            application.state.binding_service = bind_svc
             application.state.project_service = ProjectService(
-                store=SessionedProjectStore(maker)
+                store=proj_store, binding=bind_svc
             )
         except Exception:
             logger.warning("seller key SQL store disabled; using memory")
+            from app.domain.projects.store import MemoryProjectStore
+
             application.state.proxy_key_service = ProxyKeyService(pepper)
             application.state.usage_recorder = UsageRecorder()
-            application.state.project_service = ProjectService()
+            mem_proj = MemoryProjectStore()
+            bind_svc = BindingService(projects=mem_proj)
+            application.state.binding_service = bind_svc
+            application.state.project_service = ProjectService(
+                store=mem_proj, binding=bind_svc
+            )
     else:
         application.state.proxy_key_service = ProxyKeyService(pepper)
         application.state.usage_recorder = UsageRecorder()
-        application.state.project_service = ProjectService()
+        from app.domain.projects.store import MemoryProjectStore
+
+        mem_proj = MemoryProjectStore()
+        bind_svc = BindingService(projects=mem_proj)
+        application.state.binding_service = bind_svc
+        application.state.project_service = ProjectService(
+            store=mem_proj, binding=bind_svc
+        )
     application.state.seller_key_store = store
     application.state.internal_token = os.environ.get("INTERNAL_GATEWAY_TOKEN") or ""
 
@@ -250,6 +272,8 @@ app.include_router(authorization_router)
 app.include_router(seller_keys_router)
 app.include_router(proxy_keys_router)
 app.include_router(projects_router)
+app.include_router(bindings_router)
+app.include_router(bindings_internal_router)
 app.include_router(internal_router)
 
 app.add_middleware(

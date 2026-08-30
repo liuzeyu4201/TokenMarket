@@ -22,6 +22,10 @@
 | `project.archive` | `project` | yes | 归档后禁止新代理请求 |
 | `project.delete` | `project` | yes | 有阻塞项则拒绝 |
 | `project.enable_protocol` | `project` | yes | 创建后启用须 Binding |
+| `binding.create` | `binding` | no | 买家工作区草稿 |
+| `binding.read` | `binding` | yes | 仅所有者 |
+| `binding.publish` | `binding` | yes | 单 active version |
+| `binding.deactivate` | `binding` | yes | 停用不改历史 version 行 |
 
 ## Role matrix
 
@@ -41,6 +45,10 @@
 | `project.archive` | allow | deny | allow |
 | `project.delete` | allow | deny | allow |
 | `project.enable_protocol` | allow | deny | allow |
+| `binding.create` | allow | deny | allow |
+| `binding.read` | allow | deny | allow |
+| `binding.publish` | allow | deny | allow |
+| `binding.deactivate` | allow | deny | allow |
 
 `allow` 仍须通过账户 eligible 与（若适用）所有权/生命周期检查。
 

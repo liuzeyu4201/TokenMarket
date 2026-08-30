@@ -3,6 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
 import {
+  createBinding,
+  getSdkHint,
+  listBindings,
+  publishBinding,
+  type Binding,
+  type SdkHint,
+} from '../api/v1/bindings'
+import {
   MODE_CONSEQUENCE,
   deleteProject,
   getProject,
@@ -30,15 +38,20 @@ export function ProjectDetail() {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [bindings, setBindings] = useState<Binding[]>([])
+  const [hint, setHint] = useState<SdkHint | null>(null)
+  const [bindProtocol, setBindProtocol] = useState<ProtocolName>('openai')
+  const [bindModels, setBindModels] = useState('gpt-test')
 
   useEffect(() => {
     if (auth.status !== 'authenticated' || !projectId) return
     let cancelled = false
-    void getProject(projectId)
-      .then((p) => {
+    void Promise.all([getProject(projectId), listBindings(projectId)])
+      .then(([p, rows]) => {
         if (cancelled) return
         setItem(p)
         setName(p.display_name)
+        setBindings(rows)
         setNotFound(false)
       })
       .catch((err: unknown) => {
@@ -154,6 +167,79 @@ export function ProjectDetail() {
           删除
         </Button>
       </div>
+      <h2>Provider Binding</h2>
+      <p>每个协议一份生效配置。模式必须与 Project 一致。不会显示上游凭据。</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void run(async () => {
+            const models = bindModels
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+            const created = await createBinding(
+              item.project_id,
+              {
+                protocol: bindProtocol,
+                supply_mode: item.mode,
+                allowed_models: item.mode === 'shared' ? models : undefined,
+              },
+              auth.getCsrfToken(),
+            )
+            const published = await publishBinding(
+              item.project_id,
+              created.binding_id,
+              auth.getCsrfToken(),
+            )
+            const sdk = await getSdkHint(item.project_id, published.binding_id)
+            setHint(sdk)
+            setBindings(await listBindings(item.project_id))
+          })
+        }}
+        data-testid="binding-form"
+      >
+        <FormField
+          id="bind-protocol"
+          as="select"
+          label="协议"
+          value={bindProtocol}
+          onChange={(ev) => setBindProtocol(ev.target.value as ProtocolName)}
+        >
+          {PROTOCOLS.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </FormField>
+        {item.mode === 'shared' ? (
+          <FormField
+            id="bind-models"
+            label="允许的模型"
+            value={bindModels}
+            onChange={(ev) => setBindModels(ev.target.value)}
+            hint="逗号分隔。创建后不可跨协议映射。"
+          />
+        ) : (
+          <p>专享 Binding 需可用 Connection，本页不回显凭据。</p>
+        )}
+        <Button type="submit" loading={busy}>
+          发布 Binding
+        </Button>
+      </form>
+      {hint ? (
+        <Notice tone="info" data-testid="sdk-hint">
+          <p>
+            SDK：{hint.protocol} {hint.base_url}（{hint.auth_scheme} / {hint.protocol_version}）
+          </p>
+        </Notice>
+      ) : null}
+      <ul data-testid="binding-list">
+        {bindings.map((b) => (
+          <li key={b.binding_id}>
+            {b.protocol} · {b.status} · v{b.version}
+          </li>
+        ))}
+      </ul>
       <h2>协议</h2>
       <ul>
         {PROTOCOLS.map((p) => {

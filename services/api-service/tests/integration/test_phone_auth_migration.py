@@ -299,6 +299,6 @@ def test_phone_auth_migration_upgrade_downgrade_retry_head(
             rev = conn.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            assert rev == "0011_buyer_projects"
+            assert rev == "0012_provider_bindings"
     finally:
         engine.dispose()

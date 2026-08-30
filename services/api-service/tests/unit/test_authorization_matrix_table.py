@@ -25,6 +25,10 @@ _EXPECTED: dict[str, set[Action]] = {
         Action.project_archive,
         Action.project_delete,
         Action.project_enable_protocol,
+        Action.binding_create,
+        Action.binding_read,
+        Action.binding_publish,
+        Action.binding_deactivate,
     },
     "seller": {
         Action.seller_key_register,

@@ -9,6 +9,7 @@ TokenMarket is a contract-first monorepo: the Go gateway owns proxied traffic, P
 | Document | Contents |
 |----------|----------|
 | [overview.en.md](overview.en.md) | **As-built** V0.1 data flow (matches the code; no undeployed local Kafka) |
+| [`项目开发/技术架构/`](../../项目开发/技术架构/README.md) | As-built briefing PDF (detailed) and ~2h PPT |
 | [`项目开发/1-项目架构与目录结构.md`](../../项目开发/1-项目架构与目录结构.md) | Target architecture, service duties, layout (includes later-version capabilities) |
 | [`项目开发/2-Go代理网关开发规范.md`](../../项目开发/2-Go代理网关开发规范.md) | Gateway implementation constraints |
 | [`项目开发/3-Python后端与数据库设计规范.md`](../../项目开发/3-Python后端与数据库设计规范.md) | FastAPI / PostgreSQL / migrations |

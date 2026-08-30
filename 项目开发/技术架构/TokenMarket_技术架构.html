@@ -1,0 +1,1678 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TokenMarket 技术架构分享 · V0.1 现码</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ===========================================================
+       Deck framework — DO NOT EDIT the rules in this <style> block.
+       Edit only inside the second <style> block below (per-deck
+       styles) and inside <section class="slide"> bodies.
+
+       Contract this framework provides:
+         - 1920×1080 fixed canvas, scaled to fit the viewport
+         - Only .slide.active is visible at a time
+         - Programmatic prev/next + counter elements kept outside the scaled
+           stage but hidden by default so the host can render the UI chrome
+         - Keyboard (← → space PgUp PgDn Home End R), half-slide click, and stored
+           position survive iframe focus quirks
+         - "Save as PDF" produces a multi-page vertical PDF, one slide
+           per page, by toggling every slide visible under @media print
+       =========================================================== */
+    :root {
+      /* SLOT: theme tokens — the only top-level CSS the agent edits.
+         Add or override --bg / --fg / --accent / etc. here. */
+      --bg: #0A0F1A;
+      --fg: oklch(96.5% 0.012 240);
+      --muted: oklch(74% 0.018 240);
+      --accent: #0B57D0;
+      --surface: #121A28;
+      --shell: #070B12;
+      --gold: #D4B483;
+      --border: oklch(32% 0.03 250);
+      --danger: oklch(64% 0.21 18);
+      --magenta: oklch(62% 0.22 350);
+      --ok: oklch(72% 0.12 155);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--shell);
+      color: var(--fg);
+      font: 18px/1.5 -apple-system, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .deck-shell {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+    .deck-stage {
+      width: 1920px;
+      height: 1080px;
+      background: var(--bg);
+      position: relative;
+      transform-origin: top left;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+    }
+    .slide {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+    /* Visibility toggle hardened with :not(.active) + !important so cascade
+       order can't break it. The previous `.slide { display:none }` rule
+       lost the cascade whenever a per-slide variant class (e.g.
+       `.s-cold { display:grid }`) was declared after it on the same
+       element — every slide silently became visible at once. The
+       `!important` is a belt-and-suspenders against agent code that adds
+       `!important` on variant classes too. */
+    .slide:not(.active) { display: none !important; }
+    /* The active default uses :where() so it has zero specificity. Per-slide
+       variant classes like `.s-cold { display:grid }` or
+       `.s-magazine { display:block }` can override the default flex layout
+       just by declaring `display` — no need for the variant to be more
+       specific. The hide rule above still wins for inactive slides. */
+    :where(.slide.active) { display: flex; flex-direction: column; }
+
+    /* Programmatic chrome — counter + prev/next live outside the scaled
+       stage so the host bridge can read/update them, but they stay hidden
+       in preview, presentation, fullscreen, and new-tab modes. */
+    .deck-counter {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 4px;
+      background: rgba(10, 14, 26, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.18em;
+      z-index: 1000;
+    }
+    .deck-counter button {
+      width: 36px; height: 36px;
+      background: transparent;
+      color: #fff;
+      border: 0;
+      border-radius: 50%;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s;
+    }
+    .deck-counter button:hover { background: rgba(255, 255, 255, 0.12); }
+    .deck-counter button[disabled] { opacity: 0.3; cursor: default; }
+    .deck-counter .deck-count {
+      padding: 0 14px;
+      letter-spacing: 0.22em;
+    }
+    .deck-counter .deck-count .total { color: rgba(255, 255, 255, 0.5); }
+    .deck-hint {
+      position: fixed;
+      bottom: 26px;
+      right: 28px;
+      color: rgba(255, 255, 255, 0.4);
+      font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      z-index: 999;
+      pointer-events: none;
+      display: none;
+    }
+
+    /* Print / PDF stitching — every slide stacks top-to-bottom, one per
+       page. The viewer's "Share → PDF" relies on this; do not remove. */
+    @media print {
+      @page { size: 1920px 1080px; margin: 0; }
+      html, body {
+        width: 1920px !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: #fff !important;
+      }
+      .deck-shell {
+        position: static !important;
+        display: block !important;
+        inset: auto !important;
+      }
+      .deck-stage {
+        width: 1920px !important;
+        height: auto !important;
+        transform: none !important;
+        box-shadow: none !important;
+        position: static !important;
+      }
+      .slide {
+        display: flex !important;
+        position: relative !important;
+        inset: auto !important;
+        width: 1920px !important;
+        height: 1080px !important;
+        page-break-after: always;
+        break-after: page;
+      }
+      .slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-counter, .deck-hint { display: none !important; }
+    }
+  </style>
+  <style>
+    /* SLOT: per-deck styles */
+    html, body {
+      font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    .deck-stage {
+      color: var(--fg);
+      background: var(--bg);
+    }
+    .frame {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      padding: 56px 80px 112px;
+    }
+    .frame::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--accent);
+    }
+    .main {
+      height: 760px;
+    }
+    .kicker {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+    .h {
+      font-size: 42px;
+      font-weight: 600;
+      line-height: 1.35;
+      letter-spacing: 0;
+      color: var(--fg);
+      margin-bottom: 20px;
+    }
+    .h.lg { font-size: 52px; }
+    .lede {
+      font-size: 26px;
+      font-weight: 400;
+      line-height: 1.7;
+      color: var(--fg);
+      max-width: 58ch;
+    }
+    .muted { color: var(--muted); }
+    .mono {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .gold { color: var(--gold); }
+    .accent { color: var(--accent); }
+    .foot {
+      position: absolute;
+      left: 80px;
+      right: 80px;
+      bottom: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 16px;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    .foot b { color: var(--fg); font-weight: 500; }
+    .deck-fs {
+      position: absolute;
+      top: 18px;
+      right: 28px;
+      z-index: 20;
+      min-width: 88px;
+      height: 44px;
+      padding: 0 16px;
+      border: 1px solid var(--border);
+      background: color-mix(in oklch, var(--surface) 88%, black);
+      color: var(--fg);
+      font-family: "Noto Sans SC", sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .deck-fs:hover {
+      background: color-mix(in oklch, var(--surface) 70%, var(--accent));
+      border-color: color-mix(in oklch, var(--accent) 50%, var(--border));
+    }
+    .deck-fs:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in oklch, var(--accent) 45%, var(--border));
+      background: color-mix(in oklch, var(--accent) 16%, transparent);
+      color: var(--fg);
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+    .pill-goal {
+      opacity: 0.55;
+      border-style: dashed;
+      border-color: var(--muted);
+      background: transparent;
+      color: var(--muted);
+    }
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      height: 640px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 36px;
+    }
+    .card h3 {
+      font-size: 28px;
+      font-weight: 600;
+      line-height: 1.35;
+      margin-bottom: 18px;
+    }
+    .card.dim {
+      opacity: 0.48;
+      border-style: dashed;
+    }
+    .list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .list li {
+      font-size: 24px;
+      line-height: 1.55;
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+    .tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 22px 20px;
+      min-height: 148px;
+    }
+    .tile .code {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 16px;
+      color: var(--gold);
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+    }
+    .tile .name {
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .tile p {
+      margin-top: 8px;
+      font-size: 22px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .tile.goal {
+      opacity: 0.45;
+      border-style: dashed;
+    }
+    table.mat {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 24px;
+    }
+    table.mat th, table.mat td {
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      text-align: left;
+      line-height: 1.4;
+      vertical-align: middle;
+    }
+    table.mat th {
+      background: color-mix(in oklch, var(--surface) 80%, var(--accent));
+      font-weight: 600;
+      font-size: 22px;
+      letter-spacing: 0.04em;
+    }
+    table.mat td.mono, table.mat th.mono {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 20px;
+    }
+    table.mat .allow { color: var(--ok); font-weight: 600; }
+    table.mat .deny { color: var(--danger); font-weight: 600; }
+    table.mat .own { color: var(--gold); }
+    .flow-h {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      height: 100%;
+    }
+    .node {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid color-mix(in oklch, var(--accent) 42%, var(--border));
+      border-radius: 14px;
+      padding: 18px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+    }
+    .node .n {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 16px;
+      color: var(--gold);
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    .node .t {
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .node .s {
+      margin-top: 8px;
+      font-size: 20px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .node.core {
+      border-width: 2px;
+      border-color: var(--accent);
+      background: color-mix(in oklch, var(--accent) 14%, var(--surface));
+    }
+    .node.fail {
+      border-style: dashed;
+      border-color: var(--magenta);
+      background: color-mix(in oklch, var(--magenta) 10%, var(--surface));
+    }
+    .node.goal {
+      opacity: 0.42;
+      border-style: dashed;
+      border-color: var(--muted);
+    }
+    .arr {
+      flex: 0 0 34px;
+      position: relative;
+      align-self: center;
+      height: 2px;
+      background: color-mix(in oklch, var(--accent) 75%, white);
+    }
+    .arr::after {
+      content: "";
+      position: absolute;
+      right: -2px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 6px solid transparent;
+      border-left-color: color-mix(in oklch, var(--accent) 75%, white);
+    }
+    .arr.fail {
+      background: transparent;
+      border-top: 2px dashed var(--magenta);
+      height: 0;
+    }
+    .arr.fail::after {
+      border-left-color: var(--magenta);
+    }
+    .flow-v {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+    }
+    .arr-d {
+      width: 2px;
+      height: 22px;
+      margin: 0 auto;
+      background: color-mix(in oklch, var(--accent) 75%, white);
+      position: relative;
+    }
+    .arr-d::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -2px;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: color-mix(in oklch, var(--accent) 75%, white);
+    }
+    .arr-d.fail {
+      background: transparent;
+      border-left: 2px dashed var(--magenta);
+      width: 0;
+    }
+    .arr-d.fail::after { border-top-color: var(--magenta); }
+    .lane {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px 24px;
+      background: color-mix(in oklch, var(--surface) 86%, transparent);
+    }
+    .lane .lab {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 16px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 16px;
+    }
+    .svcs {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+    }
+    .svcs.n3 { grid-template-columns: repeat(3, 1fr); }
+    .svcs.n4 { grid-template-columns: repeat(4, 1fr); }
+    .svc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 14px;
+      min-height: 112px;
+    }
+    .svc .port {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 24px;
+      color: var(--gold);
+      letter-spacing: 0.04em;
+    }
+    .svc .who {
+      margin-top: 8px;
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .svc .role {
+      margin-top: 6px;
+      font-size: 20px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .timebox {
+      display: grid;
+      grid-template-columns: 1.1fr 1.1fr 1.6fr 1.6fr 2fr 1fr;
+      gap: 10px;
+      margin-top: 28px;
+    }
+    .tb {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 22px 16px 20px;
+      border-top: 4px solid var(--accent);
+      min-height: 220px;
+    }
+    .tb .when {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 16px;
+      color: var(--gold);
+      letter-spacing: 0.06em;
+      margin-bottom: 12px;
+    }
+    .tb .what {
+      font-size: 26px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .quote {
+      font-size: 40px;
+      font-weight: 600;
+      line-height: 1.4;
+      max-width: 18em;
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .rank {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 16px;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 24px;
+      min-height: 88px;
+    }
+    .rank .lv {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 22px;
+      color: var(--gold);
+    }
+    .rank .nm { font-size: 28px; font-weight: 600; line-height: 1.35; }
+    .sm { font-size: 22px; line-height: 1.55; color: var(--muted); }
+    .big {
+      font-size: 72px;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    .machine {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      height: 420px;
+    }
+    .st {
+      width: 280px;
+      height: 160px;
+      border-radius: 16px;
+      border: 2px solid var(--accent);
+      display: grid;
+      place-content: center;
+      text-align: center;
+      background: var(--surface);
+      font-size: 32px;
+      font-weight: 600;
+    }
+    .st.dead {
+      border-color: var(--danger);
+      border-style: dashed;
+      opacity: 0.95;
+    }
+    .st small {
+      display: block;
+      margin-top: 8px;
+      font-size: 16px;
+      font-weight: 400;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    }
+    .two-col-flow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      height: 620px;
+    }
+    .notes { display: none; }
+    .checks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .check {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+      min-height: 108px;
+    }
+    .check i {
+      flex: 0 0 36px;
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-style: normal;
+      font-size: 22px;
+      color: var(--gold);
+    }
+    .check b {
+      display: block;
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .check span {
+      display: block;
+      margin-top: 6px;
+      font-size: 20px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .rail {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 0 20px;
+    }
+    .rail .idx {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 28px;
+      color: var(--gold);
+      padding-top: 18px;
+    }
+    .rail .step {
+      border-left: 2px solid color-mix(in oklch, var(--accent) 55%, var(--border));
+      padding: 12px 0 12px 22px;
+    }
+    .rail .step .t { font-size: 26px; font-weight: 600; line-height: 1.35; }
+    .rail .step .s { margin-top: 4px; font-size: 20px; color: var(--muted); line-height: 1.45; }
+    .cover-mark {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 16px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    .cover-title {
+      margin-top: 28px;
+      font-size: 84px;
+      font-weight: 700;
+      line-height: 1.35;
+      max-width: 12em;
+    }
+    .fork {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      margin-top: 12px;
+    }
+    .fork-start {
+      margin-bottom: 8px;
+    }
+    .cover-sub {
+      margin-top: 28px;
+      font-size: 28px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .meta-row {
+      margin-top: 48px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .meta-row span {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 10px 18px;
+      font-size: 20px;
+      background: var(--surface);
+    }
+    .path-name {
+      font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+      font-size: 18px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 14px;
+    }
+    .tiny-ok { font-size: 18px; color: var(--ok); }
+    .tiny-no { font-size: 18px; color: var(--magenta); }
+  </style>
+</head>
+<body>
+  <div class="deck-shell">
+    <div class="deck-stage" id="deck-stage">
+      <button type="button" class="deck-fs" id="deck-fs" data-od-id="fullscreen-btn" aria-label="全屏">全屏</button>
+
+      <section class="slide active" data-screen-label="01 封面" data-od-id="slide-01-cover">
+        <div class="frame">
+          <div class="main" style="display:flex;flex-direction:column;justify-content:center;height:820px;">
+            <div class="cover-mark">Engineering share · V0.1</div>
+            <h1 class="cover-title" data-od-id="cover-title">TokenMarket<br>技术架构分享</h1>
+            <p class="cover-sub">面向工程师 · 只讲仓库里已经跑起来的路径</p>
+            <div class="meta-row">
+              <span>2 小时</span>
+              <span>现码</span>
+              <span class="mono">1920×1080</span>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>01 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="02 怎么听" data-od-id="slide-02-how">
+        <div class="frame">
+          <p class="kicker">How to listen</p>
+          <h2 class="h">左现状，右目标。目标一律灰显。</h2>
+          <div class="split">
+            <div class="card" data-od-id="now-card">
+              <h3>现状 · 现码</h3>
+              <ul class="list">
+                <li>火山 Chat Completions 单平台代理</li>
+                <li>网关转发；用户与密文在 api-service</li>
+                <li>本地 Compose 只有 PG / Redis / Grafana</li>
+                <li>用量观察，不扣费</li>
+              </ul>
+            </div>
+            <div class="card dim" data-od-id="goal-card">
+              <h3>目标 · 未落地 <span class="pill pill-goal">不得画进现状图</span></h3>
+              <ul class="list">
+                <li>Kafka · MinIO</li>
+                <li>扣费 · Escrow · TMP</li>
+                <li>加权路由</li>
+                <li>/seller /buyer /admin 业务页 · 多平台</li>
+              </ul>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>02 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="03 时间盒" data-od-id="slide-03-timebox">
+        <div class="frame">
+          <p class="kicker">120 minutes</p>
+          <h2 class="h">时间盒。超时就切，不在一页上补课。</h2>
+          <div class="timebox">
+            <div class="tb"><div class="when">00–15</div><div class="what">全景</div></div>
+            <div class="tb"><div class="when">15–30</div><div class="what">契约</div></div>
+            <div class="tb"><div class="when">30–55</div><div class="what">身份</div></div>
+            <div class="tb"><div class="when">55–80</div><div class="what">Key</div></div>
+            <div class="tb"><div class="when">80–110</div><div class="what">网关原理</div></div>
+            <div class="tb"><div class="when">110–120</div><div class="what">张力 Q&amp;A</div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>03 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="04 一句话" data-od-id="slide-04-one-liner">
+        <div class="frame">
+          <p class="kicker">One sentence</p>
+          <p class="quote" data-od-id="one-liner">网关是火山 Chat 的单进程适配器。用户表和密文在 api-service，网关不拥有。</p>
+          <p class="lede muted" style="margin-top:36px;">公开入口只有 <span class="mono gold">POST /v1/proxy/volcano/chat/completions</span></p>
+          <footer class="foot"><span>TokenMarket</span><span>04 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="05 文档优先级" data-od-id="slide-05-docs">
+        <div class="frame">
+          <p class="kicker">Source of truth</p>
+          <h2 class="h">冲突时只认这一条链。</h2>
+          <div class="stack" style="margin-top:12px;">
+            <div class="rank"><div class="lv">01</div><div class="nm">宪章 constitution.md</div></div>
+            <div class="rank"><div class="lv">02</div><div class="nm">ADR docs/decisions/</div></div>
+            <div class="rank"><div class="lv">03</div><div class="nm">contracts shared/contracts/</div></div>
+            <div class="rank"><div class="lv">04</div><div class="nm">Spec specs/ 与 V0.1_0712</div></div>
+          </div>
+          <p class="sm" style="margin-top:20px;">低优先级文档不得削弱高优先级约束。架构草图里的 Kafka / JWT / 三端页面，不是现码。</p>
+          <footer class="foot"><span>TokenMarket</span><span>05 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="06 仓库地图" data-od-id="slide-06-repo">
+        <div class="frame">
+          <p class="kicker">Monorepo</p>
+          <h2 class="h">八块。边界按目录，不按愿望。</h2>
+          <div class="grid-4" style="height:620px;">
+            <div class="tile"><div class="code">services/proxy-gateway</div><div class="name">gateway</div><p>Go · 认证、选路、转发、探活</p></div>
+            <div class="tile"><div class="code">services/api-service</div><div class="name">api</div><p>用户、会话、授权、Key、密文</p></div>
+            <div class="tile"><div class="code">services/billing-service</div><div class="name">billing</div><p>健康骨架 · 不扣费</p></div>
+            <div class="tile"><div class="code">services/admin-service</div><div class="name">admin</div><p>健康骨架 · 无管理业务</p></div>
+            <div class="tile"><div class="code">frontend/</div><div class="name">frontend</div><p>注册 / 登录 / 工作台占位</p></div>
+            <div class="tile"><div class="code">shared/contracts</div><div class="name">contracts</div><p>HTTP 契约先于消费者</p></div>
+            <div class="tile"><div class="code">infra/</div><div class="name">infra</div><p>分层 Compose 与镜像</p></div>
+            <div class="tile"><div class="code">ops/</div><div class="name">ops</div><p>runbook、告警、迁移所有者</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>06 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="07 运行时与端口" data-od-id="slide-07-runtime">
+        <div class="frame">
+          <p class="kicker">Runtime · make start</p>
+          <h2 class="h">现码进程与端口。Kafka 不在这张图里。</h2>
+          <div class="lane" data-od-id="runtime-apps">
+            <div class="lab">主机进程 · 永不进 compose.local.yml</div>
+            <div class="svcs">
+              <div class="svc"><div class="port">:5173</div><div class="who">frontend</div><div class="role">Vite SPA</div></div>
+              <div class="svc"><div class="port">:8000</div><div class="who">api-service</div><div class="role">用户 / Key / 授权</div></div>
+              <div class="svc"><div class="port">:8080</div><div class="who">gateway</div><div class="role">公开代理</div></div>
+              <div class="svc"><div class="port">:8001</div><div class="who">billing</div><div class="role">骨架</div></div>
+              <div class="svc"><div class="port">:8002</div><div class="who">admin</div><div class="role">骨架</div></div>
+            </div>
+          </div>
+          <div class="lane" style="margin-top:18px;" data-od-id="runtime-deps">
+            <div class="lab">Compose local · 仅中间件</div>
+            <div class="svcs n3">
+              <div class="svc"><div class="port">:5432</div><div class="who">PostgreSQL</div><div class="role">持久事实源</div></div>
+              <div class="svc"><div class="port">:6379</div><div class="who">Redis</div><div class="role">可重建状态</div></div>
+              <div class="svc"><div class="port">:3000</div><div class="who">Grafana</div><div class="role">V0.1 总览看板</div></div>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>07 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="08 两条请求路径" data-od-id="slide-08-paths">
+        <div class="frame">
+          <p class="kicker">Two paths</p>
+          <h2 class="h">浏览器走 api；模型客户端走网关。</h2>
+          <div class="two-col-flow" style="grid-template-columns:1fr;height:auto;gap:28px;">
+            <div>
+              <div class="path-name">路径 A · 浏览器</div>
+              <div class="flow-h" style="height:168px;">
+                <div class="node"><div class="n">01</div><div class="t">浏览器</div><div class="s">/register /login /dashboard</div></div>
+                <div class="arr"></div>
+                <div class="node"><div class="n">02</div><div class="t">frontend :5173</div><div class="s">Cookie 会话</div></div>
+                <div class="arr"></div>
+                <div class="node core"><div class="n">03</div><div class="t">api :8000</div><div class="s">/api/v1 · 统一包络</div></div>
+              </div>
+            </div>
+            <div>
+              <div class="path-name">路径 B · 客户端</div>
+              <div class="flow-h" style="height:168px;">
+                <div class="node"><div class="n">01</div><div class="t">OpenAI 客户端</div><div class="s">Bearer tmk-</div></div>
+                <div class="arr"></div>
+                <div class="node core"><div class="n">02</div><div class="t">gateway :8080</div><div class="s">/v1/proxy/volcano/chat/completions</div></div>
+                <div class="arr"></div>
+                <div class="node"><div class="n">03</div><div class="t">火山 Chat</div><div class="s">卖家原始 Key 注入后出站</div></div>
+              </div>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>08 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="09 所有权表" data-od-id="slide-09-ownership">
+        <div class="frame">
+          <p class="kicker">Ownership</p>
+          <h2 class="h">谁拥有什么。网关没有用户表。</h2>
+          <table class="mat" data-od-id="ownership-table">
+            <thead>
+              <tr><th>对象</th><th>所有者</th><th>网关</th><th>现码约束</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>users / 会话</td><td class="own">api-service</td><td>不拥有</td><td>启动不自动迁移</td></tr>
+              <tr><td>卖家 Key 密文</td><td class="own">api-service</td><td>只拿明文出站</td><td>nonce / ct / tag 分列</td></tr>
+              <tr><td>代理转发</td><td class="own">gateway</td><td>唯一公开入口</td><td>选路走 api 内部接口</td></tr>
+              <tr><td>用量观察</td><td class="own">gateway 观察 · api 落盘</td><td>不扣费</td><td>缺失不得填 0</td></tr>
+              <tr><td>账单 / Escrow</td><td class="muted">billing 骨架</td><td>不在链上</td><td><span class="pill pill-goal">目标 / 未落地</span></td></tr>
+            </tbody>
+          </table>
+          <footer class="foot"><span>TokenMarket</span><span>09 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="10 SF01–19" data-od-id="slide-10-sf">
+        <div class="frame">
+          <p class="kicker">SF01–19</p>
+          <h2 class="h">五组功能。今天按这条线讲。</h2>
+          <div class="grid-5" style="height:620px;">
+            <div class="tile"><div class="code">工程</div><div class="name">SF01 02 18</div><p>工作流 · 本地依赖 · 结构化日志</p></div>
+            <div class="tile"><div class="code">身份</div><div class="name">SF03 04 05</div><p>注册 · OTP 会话 · 角色隔离</p></div>
+            <div class="tile"><div class="code">凭证</div><div class="name">SF06 07 08 09</div><p>验证 · 兼容 · 接入 · 生命周期</p></div>
+            <div class="tile"><div class="code">代理</div><div class="name">SF10–15</div><p>签发 · 认证 · 轮询 · 容量 · 流/非流</p></div>
+            <div class="tile"><div class="code">运营</div><div class="name">SF16 17 19</div><p>健康 · 用量 · 指标看板</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>10 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="11 明确不做" data-od-id="slide-11-out">
+        <div class="frame">
+          <p class="kicker">V0.1 out of scope</p>
+          <h2 class="h">这六条今天不讲成「已经有」。</h2>
+          <div class="grid-3" style="height:560px;align-content:start;">
+            <div class="tile goal"><div class="code">目标 / 未落地</div><div class="name">Kafka</div><p>不是 SF02 依赖</p></div>
+            <div class="tile goal"><div class="code">目标 / 未落地</div><div class="name">MinIO</div><p>对象存储未接入</p></div>
+            <div class="tile goal"><div class="code">目标 / 未落地</div><div class="name">扣费 / Escrow / TMP</div><p>只观察用量</p></div>
+            <div class="tile goal"><div class="code">目标 / 未落地</div><div class="name">加权路由</div><p>现码是轮询</p></div>
+            <div class="tile goal"><div class="code">目标 / 未落地</div><div class="name">三端业务页</div><p>无 /seller /buyer /admin</p></div>
+            <div class="tile goal"><div class="code">目标 / 未落地</div><div class="name">多平台</div><p>仅 volcano Chat</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>11 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="12 Make 入口" data-od-id="slide-12-make">
+        <div class="frame">
+          <p class="kicker">Root Makefile</p>
+          <h2 class="h">公共入口只有这些。不要发明脚本。</h2>
+          <div class="grid-2" style="height:620px;">
+            <div class="tile"><div class="code">make start / stop</div><div class="name">中间件 + 五个主机进程</div><p>本地默认入口</p></div>
+            <div class="tile"><div class="code">make dev / dev-down</div><div class="name">仅 PG / Redis / Grafana</div><p>业务服务不进 Compose</p></div>
+            <div class="tile"><div class="code">make deploy mode=</div><div class="name">test | prod 显式必填</div><p>禁止 mode=local</p></div>
+            <div class="tile"><div class="code">make migrate / ci</div><div class="name">评审后的迁移 · 完整门禁</div><p>CI 只调 make ci</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>12 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="13 契约目录" data-od-id="slide-13-contracts">
+        <div class="frame">
+          <p class="kicker">shared/contracts</p>
+          <h2 class="h">契约先于代码。短名单。</h2>
+          <div class="grid-2">
+            <div class="tile"><div class="code">user-registration / phone-auth-session</div><div class="name">注册与 OTP 会话</div></div>
+            <div class="tile"><div class="code">role-access-isolation</div><div class="name">角色矩阵与自买自卖</div></div>
+            <div class="tile"><div class="code">volcano-key-validation</div><div class="name">GET /models 验证</div></div>
+            <div class="tile"><div class="code">volcano-openai-compat</div><div class="name">Chat 允许列表与 SSE</div></div>
+            <div class="tile"><div class="code">local-environment / deploy-environment</div><div class="name">分层 Compose</div></div>
+            <div class="tile"><div class="code">repository-workflow</div><div class="name">健康、事件、make ci</div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>13 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="14 两种 HTTP" data-od-id="slide-14-http">
+        <div class="frame">
+          <p class="kicker">Two HTTP shapes</p>
+          <h2 class="h">业务包络，和 OpenAI 成功形状，不要混。</h2>
+          <div class="split">
+            <div class="card">
+              <h3>统一包络</h3>
+              <p class="mono" style="font-size:22px;line-height:1.7;color:var(--gold);">{code, message, data,<br>request_id, timestamp}</p>
+              <p class="lede" style="margin-top:24px;font-size:22px;">注册、会话、授权、代理<strong>前置失败</strong>。</p>
+            </div>
+            <div class="card">
+              <h3>OpenAI 成功形状</h3>
+              <p class="mono" style="font-size:22px;line-height:1.7;color:var(--gold);">chat.completion<br>chat.completion.chunk + [DONE]</p>
+              <p class="lede" style="margin-top:24px;font-size:22px;">成功的非流响应，和<strong>已经开始的 SSE</strong>。</p>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>14 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="15 ADR 001–004" data-od-id="slide-15-adr">
+        <div class="frame">
+          <p class="kicker">ADR · Accepted</p>
+          <h2 class="h">四条决策，一行一条。</h2>
+          <div class="stack">
+            <div class="rank"><div class="lv">001</div><div class="nm">GitHub Actions 是 make ci 的只读薄适配层</div></div>
+            <div class="rank"><div class="lv">002</div><div class="nm">本地依赖走 Compose：仅 PG / Redis / Grafana</div></div>
+            <div class="rank"><div class="lv">003</div><div class="nm">分层 Compose：local 与 deploy 入口隔离</div></div>
+            <div class="rank"><div class="lv">004</div><div class="nm">托管工具链用显式 profile，不靠 CI 环境变量猜</div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>15 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="16 live ≠ ready" data-od-id="slide-16-ready">
+        <div class="frame">
+          <p class="kicker">Health</p>
+          <h2 class="h">活着不等于就绪。只有 API / Billing 探 PG。</h2>
+          <div class="split">
+            <div class="card">
+              <h3 class="mono">/health/live</h3>
+              <p class="lede">进程在就 200。不碰 PostgreSQL。</p>
+            </div>
+            <div class="card">
+              <h3 class="mono">/health/ready</h3>
+              <p class="lede">api-service、billing-service：一次有界 <span class="mono gold">SELECT 1</span>。失败 503，只点名 postgres。</p>
+            </div>
+          </div>
+          <p class="sm" style="margin-top:28px;">Gateway 与 Admin 不得领取未声明的依赖探针。</p>
+          <footer class="foot"><span>TokenMarket</span><span>16 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="17 前端路由" data-od-id="slide-17-frontend">
+        <div class="frame">
+          <p class="kicker">frontend/src/App.tsx</p>
+          <h2 class="h">真注册、真登录。工作台是占位。</h2>
+          <div class="grid-4" style="height:420px;">
+            <div class="tile"><div class="code">/register</div><div class="name">真</div><p>SF03</p></div>
+            <div class="tile"><div class="code">/login</div><div class="name">真</div><p>SF04</p></div>
+            <div class="tile"><div class="code">/dashboard</div><div class="name">占位</div><p>会话摘要，无业务</p></div>
+            <div class="tile goal"><div class="code">/seller /buyer /admin</div><div class="name">无</div><p>目标 / 未落地</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>17 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="18 注册流程" data-od-id="slide-18-register">
+        <div class="frame">
+          <p class="kicker">SF03</p>
+          <h2 class="h">注册写入 users。不发会话。</h2>
+          <div class="flow-h" style="height:280px;margin-top:40px;">
+            <div class="node"><div class="n">01</div><div class="t">POST /auth/register</div><div class="s">Idempotency-Key 必填</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">02</div><div class="t">规范化手机号</div><div class="s">buyer / seller / both</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">03</div><div class="t">写入 users</div><div class="s">24h 幂等可重放</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">04</div><div class="t">200 包络</div><div class="s">无 Cookie · 无 JWT</div></div>
+          </div>
+          <p class="sm" style="margin-top:36px;">要登录，走下一页 OTP。注册成功不等于已认证。</p>
+          <footer class="foot"><span>TokenMarket</span><span>18 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="19 202-before-dispatch" data-od-id="slide-19-otp">
+        <div class="frame">
+          <p class="kicker">SF04 · anti-enumeration</p>
+          <h2 class="h">先 202，再发短信。decoy 防枚举。</h2>
+          <div class="flow-h" style="height:240px;margin-top:12px;">
+            <div class="node"><div class="n">01</div><div class="t">POST /verification-challenges</div><div class="s">提交 pending</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">02</div><div class="t">提交 202</div><div class="s">先于任何收件人分支</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">03</div><div class="t">内部 dispatcher</div><div class="s">最多投递一次</div></div>
+          </div>
+          <div class="grid-2" style="margin-top:24px;">
+            <div class="tile"><div class="code">eligible</div><div class="name">发真实短信</div><p>OTP 只在进程内重算，库中无明文</p></div>
+            <div class="tile"><div class="code">ineligible</div><div class="name">decoy</div><p>不发真实目的地；对外文案相同</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>19 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="20 不是 JWT" data-od-id="slide-20-cookie">
+        <div class="frame">
+          <p class="kicker">Session</p>
+          <h2 class="h">不是 JWT。是 Cookie + CSRF。</h2>
+          <div class="grid-3" style="height:520px;">
+            <div class="tile"><div class="code">Cookie</div><div class="name">__Host-tokenmarket_session</div><p>Secure · HttpOnly · SameSite=Lax · Path=/ · 无 Domain</p></div>
+            <div class="tile"><div class="code">CSRF</div><div class="name">X-CSRF-Token</div><p>绑 session_id 的 HMAC；只放内存</p></div>
+            <div class="tile"><div class="code">Origin</div><div class="name">精确允许列表</div><p>禁止后缀匹配与 Origin: null</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>20 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="21 角色矩阵" data-od-id="slide-21-matrix">
+        <div class="frame">
+          <p class="kicker">SF05 · default deny</p>
+          <h2 class="h">3×3 不够，但先把角色钉死。</h2>
+          <table class="mat">
+            <thead>
+              <tr><th>动作</th><th>buyer</th><th>seller</th><th>both</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">proxy_key.create / revoke / use</td><td class="allow">allow</td><td class="deny">deny</td><td class="allow">allow</td></tr>
+              <tr><td class="mono">seller_key.register / read / update / disable</td><td class="deny">deny</td><td class="allow">allow</td><td class="allow">allow</td></tr>
+              <tr><td class="mono">route_candidate_exclude_self</td><td class="allow">allow</td><td class="deny">deny</td><td class="allow">allow</td></tr>
+            </tbody>
+          </table>
+          <p class="sm" style="margin-top:20px;">allow 仍要过账户 eligible 与资源所有权。会话里的角色快照不作数。</p>
+          <footer class="foot"><span>TokenMarket</span><span>21 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="22 自买自卖三条路径" data-od-id="slide-22-self">
+        <div class="frame">
+          <p class="kicker">Self-trade</p>
+          <h2 class="h">同一账户能买卖，但不能买自己。</h2>
+          <div class="flow-h" style="height:200px;">
+            <div class="node"><div class="n">01 矩阵</div><div class="t">both 两边 allow</div><div class="s">角色不互斥</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">02 Key 门禁</div><div class="t">所有权 = 会话用户</div><div class="s">忽略客户端 user_id / role</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">03 网关 Pick</div><div class="t">exclude SellerID == BuyerID</div><div class="s">不得把本人 Key 加回</div></div>
+          </div>
+          <div class="flow-h" style="height:168px;margin-top:28px;">
+            <div class="node"><div class="n">他人 Key</div><div class="t">进入转发</div></div>
+            <div class="arr"></div>
+            <div class="node fail" style="flex:1.4;"><div class="n">失败虚线</div><div class="t">只剩自己 → NO_AVAILABLE_KEY</div><div class="s">不降级、不枚举</div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>22 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="23 卖家接入" data-od-id="slide-23-onboard">
+        <div class="frame">
+          <p class="kicker">SF08 + SF06</p>
+          <h2 class="h">先验证，再加密入库。额度不可读就标 unknown。</h2>
+          <div class="flow-h" style="height:220px;">
+            <div class="node"><div class="n">01</div><div class="t">seller-keys</div><div class="s">已认证卖家</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">02</div><div class="t">网关 validate</div><div class="s">GET /models · 3s 截止</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">03</div><div class="t">加密入库</div><div class="s">nonce / ct / tag</div></div>
+          </div>
+          <div class="grid-2" style="margin-top:22px;">
+            <div class="tile"><div class="code">quota_unavailable</div><div class="name">允许落库</div><p>禁止把额度填成 0；health=unknown，不可路由</p></div>
+            <div class="node fail" style="min-height:148px;padding:22px;"><div class="n">失败虚线</div><div class="t">invalid / zero_quota / duplicate</div><div class="s">不保存可解密凭证</div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>23 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="24 密文" data-od-id="slide-24-crypto">
+        <div class="frame">
+          <p class="kicker">Encrypt-then-MAC</p>
+          <h2 class="h">SHAKE256 流 + HMAC。三列分开存。</h2>
+          <div class="flow-h" style="height:280px;margin-top:24px;">
+            <div class="node"><div class="n">plaintext</div><div class="t">卖家原始 Key</div><div class="s">只在进程内存</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">XOR</div><div class="t">SHAKE256(key ∥ nonce)</div><div class="s">等长密钥流</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">tag</div><div class="t">HMAC-SHA256</div><div class="s">key, nonce ∥ ct</div></div>
+          </div>
+          <p class="lede" style="margin-top:32px;">密钥材料在进程环，不与行一起持久化。读路径可 re-encrypt 到当前 key_version。</p>
+          <footer class="foot"><span>TokenMarket</span><span>24 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="25 状态机" data-od-id="slide-25-lifecycle">
+        <div class="frame">
+          <p class="kicker">SF09</p>
+          <h2 class="h">active 与 paused 可来回。revoked 擦密文。</h2>
+          <div class="machine">
+            <div class="st">active<small>可参与选路</small></div>
+            <div class="mono gold" style="font-size:28px;">↔</div>
+            <div class="st">paused<small>停用，密文仍在</small></div>
+            <div class="mono" style="font-size:28px;color:var(--magenta);">→</div>
+            <div class="st dead">revoked<small>密文擦除 · 终态</small></div>
+          </div>
+          <p class="sm" style="text-align:center;">不允许 revoked → active。重复 revoked 幂等。</p>
+          <footer class="foot"><span>TokenMarket</span><span>25 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="26 可路由条件" data-od-id="slide-26-routable">
+        <div class="frame">
+          <p class="kicker">Routable</p>
+          <h2 class="h">五条全过，才能被 Pick 拿走。</h2>
+          <div class="checks">
+            <div class="check"><i>01</i><div><b>Admin = active</b><span>paused / revoked 直接跳过</span></div></div>
+            <div class="check"><i>02</i><div><b>Health = healthy</b><span>unknown / down / rate_limited 不可路由</span></div></div>
+            <div class="check"><i>03</i><div><b>额度为正</b><span>空值当未知，不当 0</span></div></div>
+            <div class="check"><i>04</i><div><b>SellerID ≠ BuyerID</b><span>自买自卖排除，不降级</span></div></div>
+            <div class="check"><i>05</i><div><b>inflight &lt; cap 且不在冷却</b><span>cap = 官方并发 × 0.8，未知则 32</span></div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>26 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="27 tmk- 签发" data-od-id="slide-27-tmk">
+        <div class="frame">
+          <p class="kicker">SF10 / SF11</p>
+          <h2 class="h">明文只回一次。库里只有 hash。</h2>
+          <div class="flow-h" style="height:240px;">
+            <div class="node"><div class="n">01</div><div class="t">签发 tmk-</div><div class="s">tmk- + 48 hex</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">02</div><div class="t">HMAC(pepper)</div><div class="s">只存 hash</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">03</div><div class="t">响应明文一次</div><div class="s">重放不再回显</div></div>
+          </div>
+          <div class="flow-h" style="height:180px;margin-top:28px;">
+            <div class="node"><div class="n">认证</div><div class="t">Bearer</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="t">HMAC</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="t">by-hash</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="t">active?</div></div>
+            <div class="arr fail"></div>
+            <div class="node fail"><div class="t">401 统一</div><div class="s">不枚举原因</div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>27 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="28 正缓存张力" data-od-id="slide-28-cache">
+        <div class="frame">
+          <p class="kicker">Tension</p>
+          <h2 class="h">正缓存 30s，撤销要求 1s。这是张力。</h2>
+          <div class="split">
+            <div class="card">
+              <h3 class="mono">posTTL = 30s</h3>
+              <p class="lede">admission.go 成功查找的正缓存。加速可重建记录。</p>
+            </div>
+            <div class="card">
+              <h3 class="mono">SF11 撤销 ≤ 1s</h3>
+              <p class="lede">规格：active 被撤销后，新请求必须在 1 秒内失败。</p>
+            </div>
+          </div>
+          <p class="lede" style="margin-top:32px;">不要把 30s 说成已经满足 1s。Q&amp;A 可以打这里。</p>
+          <footer class="foot"><span>TokenMarket</span><span>28 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="29 网关包地图" data-od-id="slide-29-packages">
+        <div class="frame">
+          <p class="kicker">proxy-gateway/internal</p>
+          <h2 class="h">七个包。主路径从左到右。</h2>
+          <div class="grid-4" style="grid-template-columns:repeat(4,1fr);height:auto;">
+            <div class="tile"><div class="code">httpserver</div><div class="name">handleProxy</div><p>入口与包络</p></div>
+            <div class="tile"><div class="code">chatcompat</div><div class="name">允许列表</div><p>usage 三态</p></div>
+            <div class="tile"><div class="code">proxyauth</div><div class="name">Bearer HMAC</div><p>admission 缓存</p></div>
+            <div class="tile"><div class="code">keypool</div><div class="name">Pick / Release</div><p>RR + cap</p></div>
+            <div class="tile"><div class="code">keyhealth</div><div class="name">30s 探活</div><p>429 / 5xx 规则</p></div>
+            <div class="tile"><div class="code">usageobs</div><div class="name">观察端口</div><p>不落账</p></div>
+            <div class="tile"><div class="code">volcano</div><div class="name">ChatClient</div><p>MaxAttempts=1</p></div>
+            <div class="tile goal"><div class="code">加权路由</div><div class="name">没有这个包</div><p>目标 / 未落地</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>29 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="30 handleProxy" data-od-id="slide-30-handleproxy">
+        <div class="frame">
+          <p class="kicker">Core · httpserver/proxy.go</p>
+          <h2 class="h">handleProxy。全场主图。</h2>
+          <div class="flow-h" style="height:250px;" data-od-id="handleproxy-row-1">
+            <div class="node"><div class="n">01 Auth</div><div class="t">Bearer → HMAC</div><div class="s">by-hash · active?</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">02 Parse</div><div class="t">allowlist</div><div class="s">未知键直接拒</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">03 Pick</div><div class="t">排除自己</div><div class="s">空池 503</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">04 Inject</div><div class="t">注入卖家 Key</div><div class="s">platform=volcano</div></div>
+          </div>
+          <div class="arr-d" style="height:28px;margin:10px auto;"></div>
+          <div class="flow-h" style="height:250px;" data-od-id="handleproxy-row-2">
+            <div class="node core"><div class="n">05 Call</div><div class="t">Complete / OpenStream</div><div class="s">MaxAttempts=1 · 禁止换 Key</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">06 Observe</div><div class="t">用量三态</div><div class="s">不填 0 · 不扣费</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">07 Release</div><div class="t">inflight--</div><div class="s">defer 必走</div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>30 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="31 Pick 算法" data-od-id="slide-31-pick">
+        <div class="frame">
+          <p class="kicker">SF13 keypool.Pick</p>
+          <h2 class="h">先推进下标，再取。不是先看再转。</h2>
+          <div class="flow-v" style="margin-top:8px;">
+            <div class="node core" style="min-height:72px;"><div class="n">loop</div><div class="t">idx = (idx + 1) % n　← 先推进</div></div>
+            <div class="arr-d"></div>
+            <div class="node" style="min-height:64px;"><div class="t">Routable？admin=active 且 health=healthy 且额度为正</div></div>
+            <div class="arr-d"></div>
+            <div class="node" style="min-height:64px;"><div class="t">exclude SellerID == BuyerID</div></div>
+            <div class="arr-d"></div>
+            <div class="node" style="min-height:64px;"><div class="t">cooldown 未到期？跳过</div></div>
+            <div class="arr-d"></div>
+            <div class="node" style="min-height:64px;"><div class="t">inflight &lt; cap(官方×0.8 或 32) → inflight++ 返回</div></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>31 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="32 容量与冷却" data-od-id="slide-32-cap">
+        <div class="frame">
+          <p class="kicker">SF14 · 请求级</p>
+          <h2 class="h">容量用 80%。请求 429 冷却 30s。</h2>
+          <div class="split">
+            <div class="card">
+              <p class="big mono" style="font-size:64px;">× 0.8</p>
+              <p class="lede" style="margin-top:16px;">AllocableConcurrency = 官方并发向下取整 80%，至少 1。未知官方并发 → 32。</p>
+            </div>
+            <div class="card">
+              <p class="big mono" style="font-size:64px;">30s</p>
+              <p class="lede" style="margin-top:16px;">请求级 429：该 Key 冷却 30s，或更长的 Retry-After。下一页的 30min 是健康探活，别混。</p>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>32 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="33 允许列表" data-od-id="slide-33-allowlist">
+        <div class="frame">
+          <p class="kicker">chatcompat</p>
+          <h2 class="h">出站只带允许列表。其余直接拒。</h2>
+          <div class="split">
+            <div class="card">
+              <h3>允许出站</h3>
+              <p class="mono" style="font-size:22px;line-height:1.7;color:var(--gold);">model messages stream<br>temperature max_tokens top_p stop<br>presence_penalty frequency_penalty n=1</p>
+            </div>
+            <div class="card">
+              <h3>明确拒绝</h3>
+              <p class="mono" style="font-size:22px;line-height:1.7;color:var(--magenta);">tools tool_choice response_format<br>stream_options user seed logprobs<br>functions function_call thinking extra_body</p>
+            </div>
+          </div>
+          <p class="sm" style="margin-top:24px;">越界不钳制。未知公开模型 ID 不得改写成别的模型。</p>
+          <footer class="foot"><span>TokenMarket</span><span>33 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="34 usage 三态" data-od-id="slide-34-usage">
+        <div class="frame">
+          <p class="kicker">InspectUsage</p>
+          <h2 class="h">缺失不是 0。0 是一种谎。</h2>
+          <div class="grid-3" style="height:480px;">
+            <div class="tile"><div class="code">missing</div><div class="name">字段不在</div><p>返回 nil，禁止 {0,0,0}</p></div>
+            <div class="tile"><div class="code">inconsistent</div><div class="name">负数或 total &lt; p+c</div><p>原样保留，标不一致</p></div>
+            <div class="tile"><div class="code">complete</div><div class="name">三字段齐全且自洽</div><p>才算官方用量</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>34 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="35 非流 vs 流" data-od-id="slide-35-stream">
+        <div class="frame">
+          <p class="kicker">SF12 / SF15 边界</p>
+          <h2 class="h">连上游前失败走包络。SSE 一旦出手，就停在 SSE。</h2>
+          <div class="node fork-start" style="max-width:640px;min-height:88px;margin:0 auto 8px;"><div class="n">失败发生在哪</div><div class="t">以是否已向客户端交出事件为界</div></div>
+          <div class="arr-d"></div>
+          <div class="fork">
+            <div class="flow-v">
+              <div class="node" style="min-height:120px;"><div class="n">非流 / 未出 SSE</div><div class="t">JSON 包络</div><div class="s">Auth · allowlist · Pick · 拨号前</div></div>
+              <div class="arr-d fail"></div>
+              <div class="node fail" style="min-height:100px;"><div class="t">不发 [DONE]</div><div class="s">不开空流</div></div>
+            </div>
+            <div class="flow-v">
+              <div class="node core" style="min-height:120px;"><div class="n">已出 ≥1 条 SSE</div><div class="t">SSE error</div><div class="s">truncated_stream</div></div>
+              <div class="arr-d fail"></div>
+              <div class="node fail" style="min-height:100px;"><div class="t">禁止 [DONE]</div><div class="s">禁止再写 JSON 错误对象</div></div>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>35 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="36 禁止换 Key 重放" data-od-id="slide-36-noretry">
+        <div class="frame">
+          <p class="kicker">ChatClient.MaxAttempts = 1</p>
+          <p class="quote">生成请求不是幂等的。换一把 Key 重放，会把同一段提示词变成另一次上游生成。</p>
+          <p class="lede muted" style="margin-top:36px;">校验 GET /models 可以有限重试；Chat Completions 不行。</p>
+          <footer class="foot"><span>TokenMarket</span><span>36 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="37 健康调度" data-od-id="slide-37-health">
+        <div class="frame">
+          <p class="kicker">SF16 · 30s tick</p>
+          <h2 class="h">探活每 30 秒。429 停 30 分钟。5xx 要连续 3 次。</h2>
+          <div class="flow-h" style="height:200px;">
+            <div class="node"><div class="n">tick</div><div class="t">30s</div><div class="s">只探 admin=active</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">probe</div><div class="t">GET /models</div><div class="s">SF06 分类</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">apply</div><div class="t">写 health</div><div class="s">下一轮 Pick 立即生效</div></div>
+          </div>
+          <div class="grid-3" style="margin-top:22px;">
+            <div class="tile"><div class="code">success</div><div class="name">healthy</div><p>失败计数清零</p></div>
+            <div class="tile"><div class="code">429</div><div class="name">rate_limited</div><p>停探 30min</p></div>
+            <div class="tile"><div class="code">5xx / timeout</div><div class="name">×3 才 down</div><p>前两次保持原状态</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>37 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="38 用量观察" data-od-id="slide-38-usageobs">
+        <div class="frame">
+          <p class="kicker">SF17</p>
+          <h2 class="h">观察不是扣费。billing 不在这条链上。</h2>
+          <div class="flow-h" style="height:240px;margin-top:40px;">
+            <div class="node"><div class="n">01</div><div class="t">gateway Observe</div><div class="s">usageobs.Sink</div></div>
+            <div class="arr"></div>
+            <div class="node core"><div class="n">02</div><div class="t">api 落盘</div><div class="s">幂等按服务端事件 ID</div></div>
+            <div class="arr fail"></div>
+            <div class="node goal"><div class="n">没有</div><div class="t">billing-service</div><div class="s">目标 / 未落地</div></div>
+          </div>
+          <p class="lede" style="margin-top:36px;">冲突载荷不得覆盖。缺失用量保持空，不补零。</p>
+          <footer class="foot"><span>TokenMarket</span><span>38 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="39 指标与 Prometheus" data-od-id="slide-39-metrics">
+        <div class="frame">
+          <p class="kicker">SF19</p>
+          <h2 class="h">指标已经埋了。本地没有 Prometheus。</h2>
+          <div class="split">
+            <div class="card">
+              <h3>已埋</h3>
+              <ul class="list">
+                <li class="mono">proxy_requests_total</li>
+                <li class="mono">proxy_request_duration_seconds</li>
+                <li class="mono">proxy_capacity_rejected_total</li>
+                <li class="mono">/metrics 在网关进程</li>
+              </ul>
+            </div>
+            <div class="card dim">
+              <h3>本地没有</h3>
+              <ul class="list">
+                <li>Prometheus 不在 compose.local.yml</li>
+                <li>Grafana 数据源指向 :9090</li>
+                <li>没有人拉起采集器就不亮</li>
+              </ul>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>39 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="40 错误码" data-od-id="slide-40-errors">
+        <div class="frame">
+          <p class="kicker">Public proxy codes</p>
+          <h2 class="h">少行。客户端按 code 分支。</h2>
+          <table class="mat">
+            <thead>
+              <tr><th>code</th><th>HTTP</th><th>何时</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">INVALID_API_KEY</td><td>401</td><td>认证失败，不枚举</td></tr>
+              <tr><td class="mono">AUTH_OVERLOAD</td><td>429</td><td>认证过载</td></tr>
+              <tr><td class="mono">INVALID_REQUEST</td><td>400</td><td>允许列表 / 契约</td></tr>
+              <tr><td class="mono">NO_AVAILABLE_KEY</td><td>503</td><td>Pick 空</td></tr>
+              <tr><td class="mono">RATE_LIMITED / UPSTREAM_TIMEOUT</td><td>429 / 504</td><td>上游限流或超时</td></tr>
+              <tr><td class="mono">USAGE_DURABILITY</td><td>503</td><td>用量没落下</td></tr>
+            </tbody>
+          </table>
+          <footer class="foot"><span>TokenMarket</span><span>40 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="41 billing+admin 骨架" data-od-id="slide-41-skeleton">
+        <div class="frame">
+          <p class="kicker">SF01 scaffold</p>
+          <h2 class="h">两个服务在跑。业务还没长进去。</h2>
+          <div class="split">
+            <div class="card">
+              <h3>billing :8001</h3>
+              <p class="lede">第二迁移所有者。live / ready 骨架。V0.1 不扣费、不生成账单。</p>
+            </div>
+            <div class="card">
+              <h3>admin :8002</h3>
+              <p class="lede">健康骨架。不是管理后台。无用户封禁、无仲裁。</p>
+            </div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>41 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="42 分层 Compose" data-od-id="slide-42-compose">
+        <div class="frame">
+          <p class="kicker">ADR 003</p>
+          <h2 class="h">local 只有中间件。业务服务永不进这张文件。</h2>
+          <div class="flow-h" style="height:280px;margin-top:20px;">
+            <div class="node core"><div class="n">L</div><div class="t">compose.local.yml</div><div class="s">PG / Redis / Grafana<br>make dev</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">I</div><div class="t">Dockerfiles</div><div class="s">make build</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">A</div><div class="t">compose.app.yml</div><div class="s">五个预构建镜像</div></div>
+            <div class="arr"></div>
+            <div class="node"><div class="n">D</div><div class="t">compose.deploy.yml</div><div class="s">make deploy mode=test|prod</div></div>
+          </div>
+          <div class="node fail" style="margin-top:28px;min-height:88px;"><div class="t">禁止把 gateway / api / frontend / Kafka 写进 compose.local.yml</div></div>
+          <footer class="foot"><span>TokenMarket</span><span>42 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="43 模块清单" data-od-id="slide-43-coverage">
+        <div class="frame">
+          <p class="kicker">Coverage</p>
+          <h2 class="h">这一轮该讲的，都在这 44 页里。</h2>
+          <div class="grid-2">
+            <div class="tile"><div class="code">SF01–19</div><div class="name">五组全覆盖</div><p>工程 / 身份 / 凭证 / 代理 / 运营</p></div>
+            <div class="tile"><div class="code">8 仓库块</div><div class="name">目录即边界</div><p>gateway api billing admin frontend contracts infra ops</p></div>
+            <div class="tile"><div class="code">13 张流程图</div><div class="name">机制用图</div><p>含 handleProxy 主图与 Pick</p></div>
+            <div class="tile"><div class="code">铁律</div><div class="name">现码 / 未落地分开</div><p>usage 不填 0 · 生成不重试 · 网关无用户表</p></div>
+          </div>
+          <footer class="foot"><span>TokenMarket</span><span>43 / 44</span></footer>
+        </div>
+      </section>
+
+      <section class="slide" data-screen-label="44 带走三句" data-od-id="slide-44-close">
+        <div class="frame">
+          <p class="kicker">Takeaway + Q&amp;A</p>
+          <div class="stack" style="margin-top:12px;">
+            <div class="rank"><div class="lv">1</div><div class="nm">网关是火山 Chat 单进程适配器；用户表和密文在 api-service。</div></div>
+            <div class="rank"><div class="lv">2</div><div class="nm">生成 MaxAttempts=1；usage 缺失不得填 0。</div></div>
+            <div class="rank"><div class="lv">3</div><div class="nm">本地 Compose 只有 PG / Redis / Grafana。Kafka、扣费、三端页面是目标，不是现码。</div></div>
+          </div>
+          <p class="lede" style="margin-top:36px;">提问先报页码。张力页在 28：正缓存 30s vs 撤销 1s。</p>
+          <footer class="foot"><span>TokenMarket</span><span>44 / 44</span></footer>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Framework chrome — DO NOT EDIT below this line. -->
+  <nav class="deck-counter" role="navigation" aria-label="Deck navigation">
+    <button type="button" id="deck-prev" aria-label="Previous slide">‹</button>
+    <span class="deck-count"><span id="deck-cur">01</span> <span class="total">/ <span id="deck-total">01</span></span></span>
+    <button type="button" id="deck-next" aria-label="Next slide">›</button>
+  </nav>
+  <div class="deck-hint">← / → · space · R reset</div>
+
+  <script>
+    (function () {
+      var stage = document.getElementById('deck-stage');
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var prev = document.getElementById('deck-prev');
+      var next = document.getElementById('deck-next');
+      var cur = document.getElementById('deck-cur');
+      var total = document.getElementById('deck-total');
+      var STORE = 'deck:idx:' + (location.pathname || '/');
+      var idx = 0;
+
+      // ---- scale-to-fit ---------------------------------------------------
+      // The stage is 1920×1080 and sits at .deck-shell's (0, 0) in normal
+      // block flow — the shell is intentionally NOT a grid/flex container,
+      // so the stage's natural top-left is (0, 0). We scale via transform
+      // with transform-origin:top-left, then translate by the remainder to
+      // center the scaled box in the viewport. This survives nested
+      // transforms (e.g. when the OD viewer wraps the iframe in its own
+      // scale wrapper at zoom != 100%).
+      function fit() {
+        var sw = window.innerWidth;
+        var sh = window.innerHeight;
+        var pad = 32;
+        var s = Math.min((sw - pad) / 1920, (sh - pad) / 1080);
+        if (!isFinite(s) || s <= 0) s = 1;
+        var tx = (sw - 1920 * s) / 2;
+        var ty = (sh - 1080 * s) / 2;
+        stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')';
+      }
+
+      // ---- navigation -----------------------------------------------------
+      function pad2(n) { return (n < 10 ? '0' : '') + n; }
+      function paint() {
+        slides.forEach(function (el, i) { el.classList.toggle('active', i === idx); });
+        if (cur) cur.textContent = pad2(idx + 1);
+        if (total) total.textContent = pad2(slides.length);
+        if (prev) prev.toggleAttribute('disabled', idx <= 0);
+        if (next) next.toggleAttribute('disabled', idx >= slides.length - 1);
+      }
+      function go(i) {
+        idx = Math.max(0, Math.min(slides.length - 1, i));
+        paint();
+        try { localStorage.setItem(STORE, String(idx)); } catch (_) {}
+      }
+      function onKey(e) {
+        if (e.__odDeckKeyHandled) return;
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx - 1); }
+        else if (e.key === 'Home' || String(e.key).toLowerCase() === 'r') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
+        else if (e.key === 'End') { e.__odDeckKeyHandled = true; e.preventDefault(); go(slides.length - 1); }
+      }
+      // Capture phase + listen on both targets — inside the OD iframe,
+      // focus may be on window OR document; a single non-capture listener
+      // silently misses presses.
+      window.addEventListener('keydown', onKey, true);
+      document.addEventListener('keydown', onKey, true);
+      if (prev) prev.addEventListener('click', function () { go(idx - 1); });
+      if (next) next.addEventListener('click', function () { go(idx + 1); });
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        var t = e.target;
+        while (t && t !== document.body && t !== document.documentElement) {
+          var tag = String(t.tagName || '').toUpperCase();
+          if (
+            tag === 'A' ||
+            tag === 'BUTTON' ||
+            tag === 'INPUT' ||
+            tag === 'TEXTAREA' ||
+            tag === 'SELECT' ||
+            t.isContentEditable ||
+            t.getAttribute('role') === 'button' ||
+            t.getAttribute('role') === 'link'
+          ) return;
+          t = t.parentElement;
+        }
+        focusDeck();
+        if (e.clientX < window.innerWidth / 2) go(idx - 1);
+        else go(idx + 1);
+      }, true);
+
+      // Auto-focus body so arrow keys work without an initial click.
+      document.body.setAttribute('tabindex', '-1');
+      document.body.style.outline = 'none';
+      function focusDeck() { try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) {} }
+      document.addEventListener('mousedown', focusDeck);
+      window.addEventListener('load', focusDeck);
+
+      // Restore last position.
+      try {
+        var saved = parseInt(localStorage.getItem(STORE) || '0', 10);
+        if (!isNaN(saved) && saved >= 0 && saved < slides.length) idx = saved;
+      } catch (_) {}
+
+      window.addEventListener('resize', fit);
+      fit();
+      paint();
+      focusDeck();
+    })();
+  </script>
+  <script>
+    (function () {
+      var btn = document.getElementById('deck-fs');
+      if (!btn) return;
+      function label() {
+        btn.textContent = document.fullscreenElement ? '退出全屏' : '全屏';
+      }
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!document.fullscreenElement) {
+          var el = document.documentElement;
+          if (el.requestFullscreen) el.requestFullscreen();
+        } else if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      });
+      document.addEventListener('fullscreenchange', label);
+      label();
+    })();
+  </script>
+</body>
+</html>

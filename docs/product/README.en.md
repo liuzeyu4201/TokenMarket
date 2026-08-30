@@ -24,7 +24,7 @@ Full index: [`产品调研/README.md`](../../产品调研/README.md)
 
 | Directory | Purpose |
 |-----------|---------|
-| `商业计划书/` | Business-plan chapters and bound edition |
+| `商业计划书/` | Business-plan chapters, bound edition, [promo deck](../../产品调研/商业计划书/TokenMarket_宣传PPT.pptx) |
 | `竞品分析/` | Gateways, resale, domestic market, indirect competitors |
 | `厂商调研/` | Model and platform vendors |
 | `战略与生态规划/` | Coding Plan ecosystem and synthesis |

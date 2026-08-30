@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TokenMarket · 让闲置额度流动起来</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ===========================================================
+       Deck framework — DO NOT EDIT the rules in this <style> block.
+       Edit only inside the second <style> block below (per-deck
+       styles) and inside <section class="slide"> bodies.
+
+       Contract this framework provides:
+         - 1920×1080 fixed canvas, scaled to fit the viewport
+         - Only .slide.active is visible at a time
+         - Programmatic prev/next + counter elements kept outside the scaled
+           stage but hidden by default so the host can render the UI chrome
+         - Keyboard (← → space PgUp PgDn Home End R), half-slide click, and stored
+           position survive iframe focus quirks
+         - "Save as PDF" produces a multi-page vertical PDF, one slide
+           per page, by toggling every slide visible under @media print
+       =========================================================== */
+    :root {
+      /* SLOT: theme tokens — the only top-level CSS the agent edits.
+         Add or override --bg / --fg / --accent / etc. here. */
+      --bg: oklch(16.9% 0.0245 265.2);
+      --fg: oklch(97.5% 0.0062 255.5);
+      --muted: oklch(78.0% 0.0280 261.0);
+      --accent: oklch(49.5% 0.1992 260.6);
+      --surface: oklch(21.0% 0.0318 264.7);
+      --shell: oklch(12.4% 0.022 265);
+      --gold: oklch(86.7% 0.0647 89.6);
+      --border: oklch(32.0% 0.028 265);
+      --font-display: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+      --font-body: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--shell);
+      color: var(--fg);
+      font: 18px/1.5 -apple-system, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .deck-shell {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+    .deck-stage {
+      width: 1920px;
+      height: 1080px;
+      background: var(--bg);
+      position: relative;
+      transform-origin: top left;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+    }
+    .slide {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+    /* Visibility toggle hardened with :not(.active) + !important so cascade
+       order can't break it. The previous `.slide { display:none }` rule
+       lost the cascade whenever a per-slide variant class (e.g.
+       `.s-cold { display:grid }`) was declared after it on the same
+       element — every slide silently became visible at once. The
+       `!important` is a belt-and-suspenders against agent code that adds
+       `!important` on variant classes too. */
+    .slide:not(.active) { display: none !important; }
+    /* The active default uses :where() so it has zero specificity. Per-slide
+       variant classes like `.s-cold { display:grid }` or
+       `.s-magazine { display:block }` can override the default flex layout
+       just by declaring `display` — no need for the variant to be more
+       specific. The hide rule above still wins for inactive slides. */
+    :where(.slide.active) { display: flex; flex-direction: column; }
+
+    /* Programmatic chrome — counter + prev/next live outside the scaled
+       stage so the host bridge can read/update them, but they stay hidden
+       in preview, presentation, fullscreen, and new-tab modes. */
+    .deck-counter {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 4px;
+      background: rgba(10, 14, 26, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.18em;
+      z-index: 1000;
+    }
+    .deck-counter button {
+      width: 36px; height: 36px;
+      background: transparent;
+      color: #fff;
+      border: 0;
+      border-radius: 50%;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s;
+    }
+    .deck-counter button:hover { background: rgba(255, 255, 255, 0.12); }
+    .deck-counter button[disabled] { opacity: 0.3; cursor: default; }
+    .deck-counter .deck-count {
+      padding: 0 14px;
+      letter-spacing: 0.22em;
+    }
+    .deck-counter .deck-count .total { color: rgba(255, 255, 255, 0.5); }
+    .deck-hint {
+      position: fixed;
+      bottom: 26px;
+      right: 28px;
+      color: rgba(255, 255, 255, 0.4);
+      font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      z-index: 999;
+      pointer-events: none;
+      display: none;
+    }
+
+    /* Print / PDF stitching — every slide stacks top-to-bottom, one per
+       page. The viewer's "Share → PDF" relies on this; do not remove. */
+    @media print {
+      @page { size: 1920px 1080px; margin: 0; }
+      html, body {
+        width: 1920px !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: #fff !important;
+      }
+      .deck-shell {
+        position: static !important;
+        display: block !important;
+        inset: auto !important;
+      }
+      .deck-stage {
+        width: 1920px !important;
+        height: auto !important;
+        transform: none !important;
+        box-shadow: none !important;
+        position: static !important;
+      }
+      .slide {
+        display: flex !important;
+        position: relative !important;
+        inset: auto !important;
+        width: 1920px !important;
+        height: 1080px !important;
+        page-break-after: always;
+        break-after: page;
+      }
+      .slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-counter, .deck-hint { display: none !important; }
+    }
+  </style>
+  <style>
+    /* SLOT: per-deck styles */
+    .s-cover,
+    .s-page {
+      display: grid;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+    }
+    .grain {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.045;
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+    .s-pad {
+      position: relative;
+      z-index: 1;
+      height: 1080px;
+      padding: 84px 108px 200px;
+    }
+    .s-cover .s-pad {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding-bottom: 228px;
+    }
+    .s-foot {
+      position: absolute;
+      left: 108px;
+      right: 108px;
+      bottom: 52px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.4;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .s-pg { color: var(--gold); letter-spacing: 0.16em; }
+    .brand {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    .kicker {
+      font-family: var(--font-body);
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 1.4;
+      letter-spacing: 0.14em;
+      color: var(--gold);
+    }
+    .kicker::after {
+      content: "";
+      display: block;
+      width: 44px;
+      height: 2px;
+      margin-top: 16px;
+      background: var(--accent);
+    }
+    .h1 {
+      margin-top: 28px;
+      max-width: 18em;
+      font-family: var(--font-display);
+      font-size: 64px;
+      font-weight: 700;
+      line-height: 1.34;
+      letter-spacing: 0;
+      color: var(--fg);
+    }
+    .s-cover .h1 {
+      margin-top: 22px;
+      max-width: 12em;
+      font-size: 88px;
+      line-height: 1.32;
+    }
+    .lede {
+      margin-top: 28px;
+      max-width: 22em;
+      font-size: 26px;
+      font-weight: 400;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .fs-btn {
+      height: 44px;
+      padding: 0 16px;
+      border: 1px solid var(--border);
+      border-radius: 0;
+      background: transparent;
+      color: var(--fg);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+    }
+    .fs-btn:hover {
+      background: oklch(21.0% 0.0318 264.7);
+      color: var(--fg);
+    }
+    .fs-btn:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 3px;
+    }
+    .stat-row,
+    .trio,
+    .quad,
+    .split {
+      display: grid;
+      gap: 28px;
+      margin-top: 48px;
+    }
+    .stat-row { grid-template-columns: repeat(3, 1fr); }
+    .trio { grid-template-columns: repeat(3, 1fr); }
+    .quad { grid-template-columns: repeat(4, 1fr); }
+    .split { grid-template-columns: 1fr 1fr; align-items: stretch; }
+    .stat,
+    .card,
+    .step {
+      min-width: 0;
+    }
+    .num {
+      font-family: var(--font-display);
+      font-size: 72px;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: 0;
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+    }
+    .num-sm { font-size: 52px; }
+    .label {
+      margin-top: 12px;
+      font-size: 24px;
+      font-weight: 400;
+      line-height: 1.7;
+      color: var(--fg);
+    }
+    .rule-list {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 44px;
+    }
+    .rule {
+      padding: 28px 0 0;
+      border-top: 1px solid var(--border);
+      font-family: var(--font-display);
+      font-size: 40px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .ban {
+      margin-top: 36px;
+      font-size: 24px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .stat-row.two {
+      grid-template-columns: 1fr 1fr;
+      max-width: 1180px;
+    }
+    .card {
+      padding: 32px 36px 36px;
+      min-height: 228px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .card h3 {
+      font-family: var(--font-display);
+      font-size: 36px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .card p {
+      margin-top: 14px;
+      font-size: 24px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .step {
+      padding-top: 22px;
+      border-top: 2px solid var(--gold);
+    }
+    .step .who {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      letter-spacing: 0.12em;
+      color: var(--gold);
+    }
+    .step h3 {
+      margin-top: 16px;
+      font-family: var(--font-display);
+      font-size: 36px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .step p {
+      margin-top: 12px;
+      font-size: 24px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .layer {
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .layer .lv {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      letter-spacing: 0.14em;
+      color: var(--gold);
+    }
+    .layer h3 {
+      margin-top: 14px;
+      font-size: 28px;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .trust {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px 36px;
+      margin-top: 44px;
+    }
+    .trust article {
+      padding: 26px 0 8px;
+      border-top: 1px solid var(--border);
+    }
+    .trust h3 {
+      font-size: 28px;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .trust p {
+      margin-top: 8px;
+      font-size: 24px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .cmp {
+      display: grid;
+      grid-template-columns: 1.1fr 2fr;
+      margin-top: 36px;
+      align-items: stretch;
+    }
+    .cmp span {
+      padding: 18px 20px 18px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 24px;
+      line-height: 1.45;
+    }
+    .cmp .hd {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      padding-top: 0;
+      padding-bottom: 14px;
+    }
+    .cmp .us {
+      color: var(--gold);
+    }
+    .formula {
+      margin-top: 20px;
+      max-width: none;
+      font-family: var(--font-display);
+      font-size: 44px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+    .formula em {
+      font-style: normal;
+      color: var(--gold);
+    }
+    .chips {
+      display: flex;
+      gap: 40px;
+      margin-top: 48px;
+      padding-top: 28px;
+      border-top: 1px solid var(--border);
+      font-size: 24px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .plat-p0 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 36px;
+    }
+    .plat-p1 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .plat {
+      padding: 28px 28px 30px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .plat .tag {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      letter-spacing: 0.14em;
+      color: var(--gold);
+    }
+    .plat h3 {
+      margin-top: 14px;
+      font-size: 32px;
+      font-weight: 500;
+      line-height: 1.35;
+    }
+    .road {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      margin-top: 48px;
+    }
+    .road article {
+      padding: 8px 36px 0 0;
+    }
+    .road article + article {
+      padding-left: 36px;
+      border-left: 1px solid var(--border);
+    }
+    .road .when {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      letter-spacing: 0.1em;
+      color: var(--gold);
+    }
+    .road h3 {
+      margin-top: 18px;
+      font-family: var(--font-display);
+      font-size: 40px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .road p {
+      margin-top: 14px;
+      font-size: 24px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .cta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      margin-top: 40px;
+    }
+    .poster {
+      min-height: 280px;
+      padding: 40px 40px 44px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 36px;
+    }
+    .poster .who {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      letter-spacing: 0.14em;
+      color: var(--gold);
+    }
+    .poster q {
+      quotes: "「" "」";
+      margin-top: 28px;
+      font-family: var(--font-display);
+      font-size: 40px;
+      font-weight: 600;
+      line-height: 1.38;
+      color: var(--fg);
+    }
+    .poster q::before { content: open-quote; color: var(--gold); }
+    .poster q::after { content: close-quote; color: var(--gold); }
+  </style>
+</head>
+<body>
+  <div class="deck-shell">
+    <div class="deck-stage" id="deck-stage">
+
+      <section class="slide active s-cover" data-screen-label="01 封面" data-od-id="slide-cover">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="brand" data-od-id="cover-brand">TokenMarket</p>
+          <h1 class="h1" data-od-id="cover-title">让闲置额度流动起来</h1>
+          <p class="lede" data-od-id="cover-sub">AI Coding Plan 额度实时撮合与代理平台</p>
+        </div>
+        <footer class="s-foot">
+          <span>开发者 · 卖家 · 买家 · 合作伙伴</span>
+          <button type="button" class="fs-btn" data-od-id="btn-fullscreen" onclick="var d=document;if(!d.fullscreenElement){d.documentElement.requestFullscreen&&d.documentElement.requestFullscreen();}else if(d.exitFullscreen){d.exitFullscreen();}">全屏演示</button>
+          <span class="s-pg">01 / 14</span>
+        </footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="02 痛点" data-od-id="slide-pain">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">痛点</p>
+          <h1 class="h1" data-od-id="pain-title">固定订阅，硬停止</h1>
+          <div class="rule-list" data-od-id="pain-rules">
+            <p class="rule">不累积</p>
+            <p class="rule">不暂停</p>
+            <p class="rule">不退款</p>
+          </div>
+          <p class="ban">三层限流：5 小时窗口 + 每周 + 每月</p>
+          <div class="stat-row two" style="margin-top:48px">
+            <article class="stat" data-od-id="stat-util">
+              <p class="num">5%–15%</p>
+              <p class="label">个人开发者利用率</p>
+            </article>
+            <article class="stat" data-od-id="stat-idle">
+              <p class="num">约 5%</p>
+              <p class="label">企业闲置席位</p>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">02 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="03 市场" data-od-id="slide-market">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">市场</p>
+          <h1 class="h1" data-od-id="market-title">浪费来自结构，不是偶然</h1>
+          <div class="stat-row" data-od-id="market-stats">
+            <article class="stat">
+              <p class="num">50–80 万</p>
+              <p class="label">国内付费开发者</p>
+            </article>
+            <article class="stat">
+              <p class="num">6–10 亿元</p>
+              <p class="label">年度结构性浪费</p>
+            </article>
+            <article class="stat">
+              <p class="num">2–3 亿元</p>
+              <p class="label">可撮合有效余额 / 年</p>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">03 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="04 解法" data-od-id="slide-solution">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">解法</p>
+          <h1 class="h1" data-od-id="solution-title">撮合闲置，隔离风险</h1>
+          <div class="split" data-od-id="solution-pillars">
+            <article class="card">
+              <h3>C2C 实时撮合</h3>
+              <p>卖家授权 API Key。平台不囤积额度，不承担过期风险。</p>
+            </article>
+            <article class="card">
+              <h3>技术代理隔离</h3>
+              <p>买家拿平台代理 Key。智能路由按量结算。</p>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">04 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="05 闭环" data-od-id="slide-loop">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">闭环</p>
+          <h1 class="h1" data-od-id="loop-title">三端成交，一层托管</h1>
+          <div class="trio" data-od-id="loop-steps">
+            <article class="step">
+              <p class="who">卖家</p>
+              <h3>一键挂售</h3>
+              <p>7 折回收闲置额度</p>
+            </article>
+            <article class="step">
+              <p class="who">平台</p>
+              <h3>路由 / 计量 / Escrow</h3>
+              <p>成交托管，按量结算</p>
+            </article>
+            <article class="step">
+              <p class="who">买家</p>
+              <h3>按模型统一价</h3>
+              <p>8.5 折即充即用</p>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">05 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="06 卖家" data-od-id="slide-seller">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">卖家</p>
+          <h1 class="h1" data-od-id="seller-title">闲置席位，止损回血</h1>
+          <p class="lede">面向学生、兼职与企业闲置席位。</p>
+          <div class="rule-list" data-od-id="seller-guards">
+            <p class="rule">原始 Key 加密隔离</p>
+            <p class="rule">可调上限</p>
+            <p class="rule">可暂停</p>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">06 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="07 买家" data-od-id="slide-buyer">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">买家</p>
+          <h1 class="h1" data-od-id="buyer-title">不绑月订，即充即用</h1>
+          <div class="rule-list" data-od-id="buyer-points">
+            <p class="rule">无需绑定月订</p>
+            <p class="rule">不靠近卖家</p>
+            <p class="rule">代理 Key 与官方格式兼容</p>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">07 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="08 链路" data-od-id="slide-stack">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">链路</p>
+          <h1 class="h1" data-od-id="stack-title">四层隔离，按量结算</h1>
+          <div class="quad" data-od-id="stack-layers">
+            <article class="layer">
+              <p class="lv">L1</p>
+              <h3>Key 接入加密</h3>
+            </article>
+            <article class="layer">
+              <p class="lv">L2</p>
+              <h3>代理 Key</h3>
+            </article>
+            <article class="layer">
+              <p class="lv">L3</p>
+              <h3>智能路由</h3>
+            </article>
+            <article class="layer">
+              <p class="lv">L4</p>
+              <h3>实时计量</h3>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">08 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="09 信任" data-od-id="slide-trust">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">信任</p>
+          <h1 class="h1" data-od-id="trust-title">不是灰色中转站</h1>
+          <div class="trust" data-od-id="trust-layers">
+            <article>
+              <h3>Escrow</h3>
+              <p>成交托管，按量结算。</p>
+            </article>
+            <article>
+              <h3>评价</h3>
+              <p>履约记录公开可查。</p>
+            </article>
+            <article>
+              <h3>保险池</h3>
+              <p>交易 1% 赔付基金。</p>
+            </article>
+            <article>
+              <h3>Key 池自动切换</h3>
+              <p>路由失败时自动切换，不把中断交给买家。</p>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">09 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="10 对比" data-od-id="slide-compare">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">对比</p>
+          <h1 class="h1" data-od-id="compare-title">做撮合，不是做中转</h1>
+          <div class="cmp" data-od-id="compare-grid">
+            <span class="hd">对象</span>
+            <span class="hd">模式</span>
+            <span class="us">TokenMarket</span>
+            <span class="us">C2C 实时撮合 + 技术代理隔离</span>
+            <span>AI Credits</span>
+            <span>B2B 大额</span>
+            <span>CreditSwap</span>
+            <span>扩展</span>
+            <span>4SAPI / 88code</span>
+            <span>灰色 B2C</span>
+            <span>OpenRouter</span>
+            <span>一级聚合</span>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">10 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="11 商业" data-od-id="slide-model">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">商业</p>
+          <h1 class="h1 formula" data-od-id="model-spread">买家 85 折 − 卖家 70 折 = <em>约 15%</em> 利差</h1>
+          <p class="lede" style="margin-top:20px">以火山方舟 Pro ¥200 为例</p>
+          <div class="stat-row" data-od-id="model-example">
+            <article class="stat">
+              <p class="num num-sm">¥170</p>
+              <p class="label">买家</p>
+            </article>
+            <article class="stat">
+              <p class="num num-sm">¥140</p>
+              <p class="label">卖家</p>
+            </article>
+            <article class="stat">
+              <p class="num num-sm">¥30</p>
+              <p class="label">平台</p>
+            </article>
+          </div>
+          <p class="chips" data-od-id="model-lines"><span>会员 ¥19–49</span><span>企业 SaaS</span><span>增值服务</span></p>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">11 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="12 平台" data-od-id="slide-platforms">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">首批平台</p>
+          <h1 class="h1" data-od-id="plat-title">先打通 Coding Plan</h1>
+          <div class="plat-p0" data-od-id="plat-p0">
+            <article class="plat">
+              <p class="tag">P0</p>
+              <h3>火山方舟</h3>
+            </article>
+            <article class="plat">
+              <p class="tag">P0</p>
+              <h3>智谱 GLM</h3>
+            </article>
+          </div>
+          <div class="plat-p1" data-od-id="plat-p1">
+            <article class="plat">
+              <p class="tag">P1</p>
+              <h3>MiniMax</h3>
+            </article>
+            <article class="plat">
+              <p class="tag">P1</p>
+              <h3>Kimi</h3>
+            </article>
+            <article class="plat">
+              <p class="tag">P1</p>
+              <h3>Claude Code</h3>
+            </article>
+            <article class="plat">
+              <p class="tag">P1</p>
+              <h3>GPT</h3>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">12 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="13 路线" data-od-id="slide-roadmap">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">路线</p>
+          <h1 class="h1" data-od-id="road-title">先个人撮合，再企业，再聚合</h1>
+          <div class="road" data-od-id="road-phases">
+            <article>
+              <p class="when">0–12 月</p>
+              <h3>Plan A</h3>
+              <p>个人撮合</p>
+            </article>
+            <article>
+              <p class="when">12–24 月</p>
+              <h3>Plan B</h3>
+              <p>企业 SaaS</p>
+            </article>
+            <article>
+              <p class="when">24 月+</p>
+              <h3>Plan C</h3>
+              <p>开源模型聚合</p>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot"><span>TokenMarket</span><span class="s-pg">13 / 14</span></footer>
+      </section>
+
+      <section class="slide s-page" data-screen-label="14 邀请" data-od-id="slide-cta">
+        <div class="grain" aria-hidden="true"></div>
+        <div class="s-pad">
+          <p class="kicker">TokenMarket</p>
+          <h1 class="h1" data-od-id="cta-title">让闲置额度流动起来</h1>
+          <div class="cta-grid">
+            <article class="poster" data-od-id="cta-seller">
+              <p class="who">卖家</p>
+              <q>月底清零？不如 7 折变现</q>
+            </article>
+            <article class="poster" data-od-id="cta-buyer">
+              <p class="who">买家</p>
+              <q>不绑订阅，按量 8.5 折</q>
+            </article>
+          </div>
+        </div>
+        <footer class="s-foot">
+          <span>让闲置额度流动起来</span>
+          <span class="s-pg">14 / 14</span>
+        </footer>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Framework chrome — DO NOT EDIT below this line. -->
+  <nav class="deck-counter" role="navigation" aria-label="Deck navigation">
+    <button type="button" id="deck-prev" aria-label="Previous slide">‹</button>
+    <span class="deck-count"><span id="deck-cur">01</span> <span class="total">/ <span id="deck-total">01</span></span></span>
+    <button type="button" id="deck-next" aria-label="Next slide">›</button>
+  </nav>
+  <div class="deck-hint">← / → · space · R reset</div>
+
+  <script>
+    (function () {
+      var stage = document.getElementById('deck-stage');
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var prev = document.getElementById('deck-prev');
+      var next = document.getElementById('deck-next');
+      var cur = document.getElementById('deck-cur');
+      var total = document.getElementById('deck-total');
+      var STORE = 'deck:idx:' + (location.pathname || '/');
+      var idx = 0;
+
+      // ---- scale-to-fit ---------------------------------------------------
+      // The stage is 1920×1080 and sits at .deck-shell's (0, 0) in normal
+      // block flow — the shell is intentionally NOT a grid/flex container,
+      // so the stage's natural top-left is (0, 0). We scale via transform
+      // with transform-origin:top-left, then translate by the remainder to
+      // center the scaled box in the viewport. This survives nested
+      // transforms (e.g. when the OD viewer wraps the iframe in its own
+      // scale wrapper at zoom != 100%).
+      function fit() {
+        var sw = window.innerWidth;
+        var sh = window.innerHeight;
+        var pad = 32;
+        var s = Math.min((sw - pad) / 1920, (sh - pad) / 1080);
+        if (!isFinite(s) || s <= 0) s = 1;
+        var tx = (sw - 1920 * s) / 2;
+        var ty = (sh - 1080 * s) / 2;
+        stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')';
+      }
+
+      // ---- navigation -----------------------------------------------------
+      function pad2(n) { return (n < 10 ? '0' : '') + n; }
+      function paint() {
+        slides.forEach(function (el, i) { el.classList.toggle('active', i === idx); });
+        if (cur) cur.textContent = pad2(idx + 1);
+        if (total) total.textContent = pad2(slides.length);
+        if (prev) prev.toggleAttribute('disabled', idx <= 0);
+        if (next) next.toggleAttribute('disabled', idx >= slides.length - 1);
+      }
+      function go(i) {
+        idx = Math.max(0, Math.min(slides.length - 1, i));
+        paint();
+        try { localStorage.setItem(STORE, String(idx)); } catch (_) {}
+      }
+      function onKey(e) {
+        if (e.__odDeckKeyHandled) return;
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx - 1); }
+        else if (e.key === 'Home' || String(e.key).toLowerCase() === 'r') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
+        else if (e.key === 'End') { e.__odDeckKeyHandled = true; e.preventDefault(); go(slides.length - 1); }
+      }
+      // Capture phase + listen on both targets — inside the OD iframe,
+      // focus may be on window OR document; a single non-capture listener
+      // silently misses presses.
+      window.addEventListener('keydown', onKey, true);
+      document.addEventListener('keydown', onKey, true);
+      if (prev) prev.addEventListener('click', function () { go(idx - 1); });
+      if (next) next.addEventListener('click', function () { go(idx + 1); });
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        var t = e.target;
+        while (t && t !== document.body && t !== document.documentElement) {
+          var tag = String(t.tagName || '').toUpperCase();
+          if (
+            tag === 'A' ||
+            tag === 'BUTTON' ||
+            tag === 'INPUT' ||
+            tag === 'TEXTAREA' ||
+            tag === 'SELECT' ||
+            t.isContentEditable ||
+            t.getAttribute('role') === 'button' ||
+            t.getAttribute('role') === 'link'
+          ) return;
+          t = t.parentElement;
+        }
+        focusDeck();
+        if (e.clientX < window.innerWidth / 2) go(idx - 1);
+        else go(idx + 1);
+      }, true);
+
+      // Auto-focus body so arrow keys work without an initial click.
+      document.body.setAttribute('tabindex', '-1');
+      document.body.style.outline = 'none';
+      function focusDeck() { try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) {} }
+      document.addEventListener('mousedown', focusDeck);
+      window.addEventListener('load', focusDeck);
+
+      // Restore last position.
+      try {
+        var saved = parseInt(localStorage.getItem(STORE) || '0', 10);
+        if (!isNaN(saved) && saved >= 0 && saved < slides.length) idx = saved;
+      } catch (_) {}
+
+      window.addEventListener('resize', fit);
+      fit();
+      paint();
+      focusDeck();
+    })();
+  </script>
+
+<script type="application/json" id="speaker-notes">
+[]
+</script>
+</body>
+</html>

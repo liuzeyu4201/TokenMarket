@@ -9,6 +9,7 @@ import { Home } from './pages/Home'
 import { Login } from './pages/Login'
 import { NotFound } from './pages/NotFound'
 import { Connections } from './pages/Connections'
+import { Supply } from './pages/Supply'
 import { ProjectDetail } from './pages/ProjectDetail'
 import { Projects } from './pages/Projects'
 import { Register } from './pages/Register'
@@ -61,6 +62,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Connections />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="supply"
+              element={
+                <ProtectedRoute>
+                  <Supply />
                 </ProtectedRoute>
               }
             />

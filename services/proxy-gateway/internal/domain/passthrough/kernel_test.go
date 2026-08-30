@@ -320,6 +320,28 @@ func TestSelectorErrorString(t *testing.T) {
 	}
 }
 
+func TestStaticSelectorSelectConnection(t *testing.T) {
+	s := StaticSelector{Up: Upstream{BaseURL: "http://up", Credential: "k", ConnectionID: "conn-A"}}
+	up, err := s.SelectConnection(context.Background(), "conn-A")
+	if err != nil || up.ConnectionID != "conn-A" {
+		t.Fatalf("%+v %v", up, err)
+	}
+	if _, err := s.SelectConnection(context.Background(), "conn-B"); err == nil {
+		t.Fatal("expected miss on other connection")
+	}
+	empty := StaticSelector{Up: Upstream{BaseURL: "http://up", Credential: "k"}}
+	up, err = empty.SelectConnection(context.Background(), "conn-Z")
+	if err != nil || up.ConnectionID != "conn-Z" {
+		t.Fatalf("%+v %v", up, err)
+	}
+}
+
+func TestFailClosedSelectConnection(t *testing.T) {
+	if _, err := (FailClosedSelector{}).SelectConnection(context.Background(), "c"); err == nil {
+		t.Fatal("expected no upstream")
+	}
+}
+
 func TestNoChatcompatImport(t *testing.T) {
 	root := "."
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {

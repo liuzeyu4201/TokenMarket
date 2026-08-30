@@ -29,6 +29,26 @@ var outboundDenied = map[string]struct{}{
 	"X-Internal-Token": {},
 }
 
+// inboundDeniedWebsocket keeps Upgrade/Connection so ReverseProxy can pin the handshake.
+var inboundDeniedWebsocket map[string]struct{}
+
+func init() {
+	inboundDeniedWebsocket = make(map[string]struct{}, len(inboundDenied))
+	for k := range inboundDenied {
+		if k == "Upgrade" || k == "Connection" {
+			continue
+		}
+		inboundDeniedWebsocket[k] = struct{}{}
+	}
+}
+
+func inboundStripSet(websocket bool) map[string]struct{} {
+	if websocket {
+		return inboundDeniedWebsocket
+	}
+	return inboundDenied
+}
+
 func stripDenied(h http.Header, denied map[string]struct{}) {
 	for k := range h {
 		if _, ok := denied[http.CanonicalHeaderKey(k)]; ok {

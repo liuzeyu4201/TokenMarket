@@ -214,7 +214,8 @@ export async function verifyChallenge(
       body: JSON.stringify(body),
       sameOriginAuth: true,
     })
-    if (data.code === 'PROFILE_COMPLETION_REQUIRED') {
+    const businessCode = String(data.code ?? '')
+    if (businessCode === 'PROFILE_COMPLETION_REQUIRED') {
       const phoneMasked =
         data.data && typeof data.data === 'object' && 'phone_masked' in data.data
           ? String((data.data as { phone_masked?: string }).phone_masked ?? '')

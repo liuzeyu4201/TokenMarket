@@ -5,6 +5,7 @@ import { AuthProvider } from './auth/AuthContext'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './layouts/AppShell'
 import { Dashboard } from './pages/Dashboard'
+import { DesignSystem } from './pages/DesignSystem'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
 import { NotFound } from './pages/NotFound'
@@ -31,6 +32,7 @@ function renderAt(path: string) {
             <Route index element={<Home />} />
             <Route path="register" element={<Register />} />
             <Route path="login" element={<Login />} />
+            <Route path="design-system" element={<DesignSystem />} />
             <Route
               path="dashboard"
               element={
@@ -64,6 +66,15 @@ describe('app shell routes', () => {
     expect(screen.getAllByRole('link', { name: '注册' }).length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText(/补充资料即可自动登录/)).toBeInTheDocument()
     expect(screen.queryByText(/注册不自动登录/)).not.toBeInTheDocument()
+    expect(screen.getByText(/OpenAI/)).toBeInTheDocument()
+    expect(screen.getByText(/测试额度/)).toBeInTheDocument()
+  })
+
+  it('shows design system catalog on /design-system', async () => {
+    renderAt('/design-system')
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '组件目录' })).toBeInTheDocument()
+    })
   })
 
   it('shows unified phone verification on /register', async () => {

@@ -1,4 +1,5 @@
 import { useAuth } from '../auth/AuthContext'
+import { UnavailableAction } from '../ui/UnavailableAction'
 
 const ROLE_LABEL: Record<string, string> = {
   buyer: '买家',
@@ -24,6 +25,9 @@ export function Dashboard() {
       <h1>工作台</h1>
       <p>受保护首页占位。业务能力将陆续开放。</p>
       <p className="hint">使用顶部导航的「退出」可结束当前会话。刷新后会话由服务端 Cookie 恢复。</p>
+      <p>买家 Project、代理 Key 与卖家供给尚未开放，不会提交请求。</p>
+      <UnavailableAction label="创建 Project" />
+      <UnavailableAction label="创建代理 Key" />
       <dl className="session-summary" aria-label="当前会话摘要">
         <div>
           <dt>昵称</dt>

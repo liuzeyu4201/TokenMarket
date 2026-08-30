@@ -63,6 +63,8 @@ describe('AppShell accessibility (T113)', () => {
       expect(screen.getByRole('navigation', { name: '主导航' })).toBeInTheDocument()
     })
     expect(screen.getByRole('main')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '跳到主要内容' })).toHaveAttribute('href', '#main-content')
+    expect(screen.getByRole('navigation', { name: '面包屑' })).toBeInTheDocument()
   })
 
   it('shows discoverable login/register only when anonymous — no fake identity', async () => {

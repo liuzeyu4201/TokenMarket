@@ -14,6 +14,9 @@ import {
   secondsUntilDeadline,
 } from '../auth/challengeState'
 import type { ChallengeAcceptedData, UserRole } from '../types/auth'
+import { Button } from '../ui/Button'
+import { FormField } from '../ui/FormField'
+import { Notice } from '../ui/Notice'
 
 type FieldKey = 'phone' | 'code'
 
@@ -70,8 +73,6 @@ export function deriveLoginState(input: {
 export function Login() {
   const phoneId = useId()
   const codeId = useId()
-  const phoneHelpId = useId()
-  const codeHelpId = useId()
   const statusId = useId()
   const alertId = useId()
   const auth = useAuth()
@@ -359,11 +360,6 @@ export function Login() {
       ? `${resendSeconds} 秒后可重新获取`
       : '获取验证码'
 
-  const phoneErrorId = fieldErrors.phone ? `${phoneId}-err` : undefined
-  const codeErrorId = fieldErrors.code ? `${codeId}-err` : undefined
-  const phoneDescribedBy = [phoneHelpId, phoneErrorId].filter(Boolean).join(' ')
-  const codeDescribedBy = [codeHelpId, codeErrorId].filter(Boolean).join(' ')
-
   // Polite status region content — stable messages, no per-second countdown digits.
   const statusMessage =
     loginState === 'requesting'
@@ -410,16 +406,17 @@ export function Login() {
             }
           }}
         >
-          <label htmlFor={`${phoneId}-nick`}>昵称</label>
-          <input
+          <FormField
             id={`${phoneId}-nick`}
+            label="昵称"
             value={nickname}
             onChange={(ev) => setNickname(ev.target.value)}
             autoComplete="nickname"
           />
-          <label htmlFor={`${phoneId}-role`}>角色</label>
-          <select
+          <FormField
+            as="select"
             id={`${phoneId}-role`}
+            label="角色"
             value={role}
             onChange={(ev) => setRole(ev.target.value as UserRole)}
           >
@@ -427,13 +424,9 @@ export function Login() {
             <option value="buyer">买家</option>
             <option value="seller">卖家</option>
             <option value="both">买家与卖家</option>
-          </select>
-          {formError ? (
-            <div className="form-error" role="alert">
-              {formError}
-            </div>
-          ) : null}
-          <button type="submit">完成并登录</button>
+          </FormField>
+          {formError ? <Notice tone="error">{formError}</Notice> : null}
+          <Button type="submit">完成并登录</Button>
         </form>
       ) : null}
 
@@ -446,21 +439,20 @@ export function Login() {
       </div>
 
       {displayFormError ? (
-        <div
+        <Notice
+          tone="error"
           id={alertId}
           ref={alertRef}
-          className="form-error"
-          role="alert"
           tabIndex={-1}
           data-error-kind={displayErrorKind ?? undefined}
         >
           {displayFormError}
           {requestId ? <div>请求标识：{requestId}</div> : null}
-        </div>
+        </Notice>
       ) : null}
 
       {activeChallenge ? (
-        <div className="neutral-accept" data-testid="challenge-status">
+        <Notice tone="info" data-testid="challenge-status" role="presentation" aria-live="off">
           {/* Static accept copy only inside status — countdown stays outside to avoid SR spam. */}
           <div role="status" aria-live="polite" aria-atomic="true">
             <p>
@@ -477,7 +469,7 @@ export function Login() {
           ) : (
             <p data-testid="resend-ready">可以重新获取验证码</p>
           )}
-        </div>
+        </Notice>
       ) : null}
 
       <form
@@ -486,81 +478,53 @@ export function Login() {
         aria-busy={busy || undefined}
         aria-describedby={statusMessage ? statusId : undefined}
       >
-        <div className="form-field">
-          <label htmlFor={phoneId}>手机号</label>
-          <input
-            ref={phoneRef}
-            id={phoneId}
-            name="phone"
-            type="tel"
-            autoComplete="tel"
-            inputMode="tel"
-            value={phone}
-            onChange={(ev) => setPhone(ev.target.value)}
-            aria-invalid={fieldErrors.phone ? true : undefined}
-            aria-describedby={phoneDescribedBy || undefined}
-            disabled={busy}
-          />
-          <div id={phoneHelpId} className="field-help">
-            中国大陆 11 位手机号，可含空格或 +86 前缀
-          </div>
-          {fieldErrors.phone ? (
-            <div id={`${phoneId}-err`} className="field-error" role="alert">
-              {fieldErrors.phone}
-            </div>
-          ) : null}
-        </div>
+        <FormField
+          ref={phoneRef}
+          id={phoneId}
+          name="phone"
+          label="手机号"
+          type="tel"
+          autoComplete="tel"
+          inputMode="tel"
+          value={phone}
+          onChange={(ev) => setPhone(ev.target.value)}
+          hint="中国大陆 11 位手机号，可含空格或 +86 前缀"
+          error={fieldErrors.phone}
+          disabled={busy}
+        />
 
         <div className="form-field form-field-inline">
-          <button
+          <Button
+            variant="secondary"
             type="button"
-            className="secondary"
             onClick={() => void onRequestCode()}
             disabled={busy || !canResend}
             aria-busy={requestingCode || undefined}
           >
             {getCodeLabel}
-          </button>
+          </Button>
         </div>
 
-        <div className="form-field">
-          <label htmlFor={codeId}>验证码</label>
-          <input
-            ref={otpRef}
-            id={codeId}
-            name="code"
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]*"
-            maxLength={6}
-            value={code}
-            onChange={(ev) => {
-              // Allow leading zeros; keep digits only for paste hygiene but preserve length rules via validation.
-              setCode(ev.target.value)
-            }}
-            aria-invalid={fieldErrors.code ? true : undefined}
-            aria-describedby={codeDescribedBy || undefined}
-            disabled={busy}
-          />
-          <div id={codeHelpId} className="field-help">
-            6 位数字，前导零有效
-          </div>
-          {fieldErrors.code ? (
-            <div id={`${codeId}-err`} className="field-error" role="alert">
-              {fieldErrors.code}
-            </div>
-          ) : null}
-        </div>
-
-        <button
-          className="primary"
-          type="submit"
+        <FormField
+          ref={otpRef}
+          id={codeId}
+          name="code"
+          label="验证码"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]*"
+          maxLength={6}
+          value={code}
+          onChange={(ev) => setCode(ev.target.value)}
+          hint="6 位数字，前导零有效"
+          error={fieldErrors.code}
           disabled={busy}
-          aria-busy={loggingIn || undefined}
-        >
+        />
+
+        <Button type="submit" disabled={busy} aria-busy={loggingIn || undefined}>
           {loggingIn ? '登录中…' : success ? '登录成功' : '登录'}
-        </button>
+        </Button>
       </form>
 
       <p className="auth-footer">

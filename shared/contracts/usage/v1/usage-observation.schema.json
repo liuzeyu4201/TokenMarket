@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tokenmarket.local/contracts/usage/v1/usage-observation.schema.json",
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "title": "UsageObservation",
   "type": "object",
   "additionalProperties": false,
@@ -21,8 +21,18 @@
     "provider": { "enum": ["openai", "anthropic", "vertex"] },
     "endpoint_id": { "type": "string", "minLength": 1 },
     "cost_status": { "enum": ["reported", "rated", "unresolved"] },
+    "settlement_basis": { "enum": ["reported", "usage", "unresolved", "none"] },
     "reported_cost_minor_units": { "type": ["integer", "null"], "minimum": 0 },
     "currency": { "type": ["string", "null"] },
+    "cost_scale": { "type": "integer", "minimum": 0, "maximum": 9 },
+    "parser_version": { "type": "string", "minLength": 1 },
+    "evidence_digest": { "type": "string", "minLength": 1 },
+    "unresolved_reason": { "type": ["string", "null"] },
+    "integrity": { "enum": ["complete", "partial", "failed"] },
+    "dual_present": { "type": "boolean" },
+    "metering_source": {
+      "enum": ["usage", "mixed", "reported_cost", "none", "unresolved"]
+    },
     "usage": {
       "type": "object",
       "additionalProperties": false,
@@ -32,9 +42,12 @@
         "total_tokens": { "type": ["integer", "null"], "minimum": 0 },
         "cache_read_tokens": { "type": ["integer", "null"], "minimum": 0 },
         "cache_write_tokens": { "type": ["integer", "null"], "minimum": 0 },
-        "reasoning_tokens": { "type": ["integer", "null"], "minimum": 0 }
+        "reasoning_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "image_units": { "type": ["integer", "null"], "minimum": 0 },
+        "audio_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "duration_ms": { "type": ["integer", "null"], "minimum": 0 }
       }
     }
   },
-  "description": "未知费用必须 cost_status=unresolved，不得把 reported_cost_minor_units 记为 0 表示未知。"
+  "description": "未知费用必须 cost_status=unresolved，不得把 reported_cost_minor_units 记为 0 表示未知。金额与 usage 共存时结算选金额。cost_scale 默认 6（微单位）。"
 }

@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket Project proxy Key (SF12)
+  version: 1.0.0
+  description: |
+    V0.2 代理 Key 归属 Project。明文只在创建/轮换出现一次。
+    列表仅前后缀。鉴权失败不暴露存在性。
+paths:
+  /api/v1/projects/{project_id}/proxy-keys:
+    get:
+      operationId: listProjectProxyKeys
+      responses:
+        "200":
+          description: 掩码列表
+    post:
+      operationId: issueProjectProxyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueProjectKeyRequest"
+      responses:
+        "201":
+          description: 含一次性 secret
+        "409":
+          description: 超出 Binding 能力
+  /api/v1/projects/{project_id}/proxy-keys/{key_id}/rotate:
+    post:
+      operationId: rotateProjectProxyKey
+      responses:
+        "200":
+          description: 新 secret 一次
+        "404":
+          description: 同形不存在
+  /api/v1/projects/{project_id}/proxy-keys/{key_id}/disable:
+    post:
+      operationId: disableProjectProxyKey
+  /api/v1/projects/{project_id}/proxy-keys/{key_id}/enable:
+    post:
+      operationId: enableProjectProxyKey
+  /api/v1/projects/{project_id}/proxy-keys/{key_id}/revoke:
+    post:
+      operationId: revokeProjectProxyKey
+components:
+  schemas:
+    IssueProjectKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [protocols]
+      properties:
+        name: { type: string, maxLength: 64 }
+        protocols:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [openai, anthropic, vertex] }
+        allowed_models:
+          type: array
+          items: { type: string }
+        allowed_cidrs:
+          type: array
+          items: { type: string }
+        quota_period: { type: string, enum: [day, month] }
+        quota_limit: { type: integer, minimum: 1 }
+        expires_at: { type: string, format: date-time }
+        idempotency_key: { type: string }
+    ProxyKeyPublic:
+      type: object
+      additionalProperties: false
+      description: 不得包含 secret
+      required: [key_id, status, masked_prefix, masked_suffix]
+      properties:
+        key_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, disabled, revoked] }
+        masked_prefix: { type: string }
+        masked_suffix: { type: string }
+        protocols:
+          type: array
+          items: { type: string }
+        expires_at: { type: string, format: date-time, nullable: true }

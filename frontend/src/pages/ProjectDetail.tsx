@@ -10,6 +10,7 @@ import {
   type Binding,
   type SdkHint,
 } from '../api/v1/bindings'
+import { issueProjectKey, listProjectKeys, type ProxyKeyPublic } from '../api/v1/proxyKeys'
 import {
   MODE_CONSEQUENCE,
   deleteProject,
@@ -42,16 +43,24 @@ export function ProjectDetail() {
   const [hint, setHint] = useState<SdkHint | null>(null)
   const [bindProtocol, setBindProtocol] = useState<ProtocolName>('openai')
   const [bindModels, setBindModels] = useState('gpt-test')
+  const [keys, setKeys] = useState<ProxyKeyPublic[]>([])
+  const [onceSecret, setOnceSecret] = useState<string | null>(null)
+  const [keyName, setKeyName] = useState('dev')
 
   useEffect(() => {
     if (auth.status !== 'authenticated' || !projectId) return
     let cancelled = false
-    void Promise.all([getProject(projectId), listBindings(projectId)])
-      .then(([p, rows]) => {
+    void Promise.all([
+      getProject(projectId),
+      listBindings(projectId),
+      listProjectKeys(projectId).catch(() => []),
+    ])
+      .then(([p, rows, keyRows]) => {
         if (cancelled) return
         setItem(p)
         setName(p.display_name)
         setBindings(rows)
+        setKeys(keyRows)
         setNotFound(false)
       })
       .catch((err: unknown) => {
@@ -237,6 +246,52 @@ export function ProjectDetail() {
         {bindings.map((b) => (
           <li key={b.binding_id}>
             {b.protocol} · {b.status} · v{b.version}
+          </li>
+        ))}
+      </ul>
+      <h2>代理 Key</h2>
+      <p>明文只显示一次。列表仅前后缀，不能用于认证。</p>
+      <form
+        data-testid="proxy-key-form"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void run(async () => {
+            const issued = await issueProjectKey(
+              item.project_id,
+              {
+                name: keyName,
+                protocols: ['openai'],
+                allowed_models: bindModels
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              },
+              auth.getCsrfToken(),
+            )
+            setOnceSecret(issued.secret ?? null)
+            setKeys(await listProjectKeys(item.project_id))
+          })
+        }}
+      >
+        <FormField
+          id="key-name"
+          label="Key 名称"
+          value={keyName}
+          onChange={(ev) => setKeyName(ev.target.value)}
+        />
+        <Button type="submit" loading={busy}>
+          签发代理 Key
+        </Button>
+      </form>
+      {onceSecret ? (
+        <Notice tone="info" data-testid="key-secret-once">
+          <p>请立即保存：{onceSecret}</p>
+        </Notice>
+      ) : null}
+      <ul data-testid="proxy-key-list">
+        {keys.map((k) => (
+          <li key={k.key_id}>
+            {k.masked_prefix}****{k.masked_suffix} · {k.status}
           </li>
         ))}
       </ul>

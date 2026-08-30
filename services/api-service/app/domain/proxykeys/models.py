@@ -14,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.domain.base import Base
@@ -34,10 +34,36 @@ class ProxyKey(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     buyer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     platform: Mapped[str] = mapped_column(String(32), nullable=False)
     secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     masked_suffix: Mapped[str] = mapped_column(String(8), nullable=False)
+    masked_prefix: Mapped[str] = mapped_column(
+        String(8), nullable=False, server_default=text("'tmk-'")
+    )
     name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    protocols: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
+    allowed_models: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
+    allowed_cidrs: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{}'")
+    )
+    quota_period: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    quota_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    disabled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rotated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'active'")
     )
@@ -78,4 +104,19 @@ class ProxyKeyIdempotency(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
+class ProxyKeyQuota(Base):
+    __tablename__ = "proxy_key_quota"
+    __table_args__ = (
+        PrimaryKeyConstraint("key_id", "period_start", name="pk_proxy_key_quota"),
+    )
+
+    key_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    period_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    accepted: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
     )

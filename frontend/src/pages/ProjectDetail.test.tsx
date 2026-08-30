@@ -13,6 +13,8 @@ const listBindings = vi.fn()
 const createBinding = vi.fn()
 const publishBinding = vi.fn()
 const getSdkHint = vi.fn()
+const listProjectKeys = vi.fn()
+const issueProjectKey = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
   const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
@@ -28,6 +30,15 @@ vi.mock('../api/v1/projects', async () => {
   return {
     ...actual,
     getProject: (...args: unknown[]) => getProject(...args),
+  }
+})
+
+vi.mock('../api/v1/proxyKeys', async () => {
+  const actual = await vi.importActual<typeof import('../api/v1/proxyKeys')>('../api/v1/proxyKeys')
+  return {
+    ...actual,
+    listProjectKeys: (...args: unknown[]) => listProjectKeys(...args),
+    issueProjectKey: (...args: unknown[]) => issueProjectKey(...args),
   }
 })
 
@@ -61,6 +72,9 @@ describe('ProjectDetail', () => {
     createBinding.mockReset()
     publishBinding.mockReset()
     getSdkHint.mockReset()
+    listProjectKeys.mockReset()
+    listProjectKeys.mockResolvedValue([])
+    issueProjectKey.mockReset()
   })
 
   it('shows immutable mode copy', async () => {

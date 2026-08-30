@@ -144,7 +144,12 @@ async def lookup_proxy_hash(
     if denied is not None:
         return denied
     svc = request.app.state.proxy_key_service
-    rec = svc.lookup_hash(secret_hash)
+    rec = svc.lookup_hash(
+        secret_hash,
+        protocol=request.query_params.get("protocol"),
+        model=request.query_params.get("model"),
+        client_ip=request.query_params.get("ip"),
+    )
     if rec is None:
         return JSONResponse(
             status_code=404,
@@ -155,6 +160,7 @@ async def lookup_proxy_hash(
         "buyer_id": str(rec.buyer_id),
         "platform": rec.platform,
         "status": rec.status,
+        "project_id": str(rec.project_id) if rec.project_id else None,
     }
     return JSONResponse(
         status_code=200, content=success_envelope(data, request_id=_rid(request))

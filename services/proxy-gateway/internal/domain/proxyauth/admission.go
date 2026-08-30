@@ -34,7 +34,7 @@ const (
 	defaultNegCap = 4096
 	defaultPosCap = 4096
 	defaultNegTTL = 2 * time.Second
-	defaultPosTTL = 30 * time.Second
+	defaultPosTTL = 1 * time.Second
 )
 
 // AdmissionLimiter bounds failed-auth lookups separately from valid traffic.

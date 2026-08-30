@@ -21,6 +21,7 @@ from .api.v1.authorization import router as authorization_router
 from .api.v1.internal import router as internal_router
 from .api.v1.bindings import internal_router as bindings_internal_router
 from .api.v1.bindings import router as bindings_router
+from .api.v1.project_keys import router as project_keys_router
 from .api.v1.projects import router as projects_router
 from .api.v1.proxy_keys import router as proxy_keys_router
 from .api.v1.seller_keys import router as seller_keys_router
@@ -85,9 +86,6 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
             application.state.seller_sync_engine = engine
             maker = sessionmaker(engine)
             store = SessionedSQLKeyStore(maker)
-            application.state.proxy_key_service = ProxyKeyService(
-                pepper, store=SessionedProxyStore(maker)
-            )
             application.state.usage_recorder = UsageRecorder(
                 store=SessionedUsageStore(maker)
             )
@@ -101,21 +99,27 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
             application.state.project_service = ProjectService(
                 store=proj_store, binding=bind_svc
             )
+            application.state.proxy_key_service = ProxyKeyService(
+                pepper,
+                store=SessionedProxyStore(maker),
+                projects=proj_store,
+                bindings=bind_svc,
+            )
         except Exception:
             logger.warning("seller key SQL store disabled; using memory")
             from app.domain.projects.store import MemoryProjectStore
 
-            application.state.proxy_key_service = ProxyKeyService(pepper)
-            application.state.usage_recorder = UsageRecorder()
             mem_proj = MemoryProjectStore()
             bind_svc = BindingService(projects=mem_proj)
             application.state.binding_service = bind_svc
             application.state.project_service = ProjectService(
                 store=mem_proj, binding=bind_svc
             )
+            application.state.proxy_key_service = ProxyKeyService(
+                pepper, projects=mem_proj, bindings=bind_svc
+            )
+            application.state.usage_recorder = UsageRecorder()
     else:
-        application.state.proxy_key_service = ProxyKeyService(pepper)
-        application.state.usage_recorder = UsageRecorder()
         from app.domain.projects.store import MemoryProjectStore
 
         mem_proj = MemoryProjectStore()
@@ -124,6 +128,10 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
         application.state.project_service = ProjectService(
             store=mem_proj, binding=bind_svc
         )
+        application.state.proxy_key_service = ProxyKeyService(
+            pepper, projects=mem_proj, bindings=bind_svc
+        )
+        application.state.usage_recorder = UsageRecorder()
     application.state.seller_key_store = store
     application.state.internal_token = os.environ.get("INTERNAL_GATEWAY_TOKEN") or ""
 
@@ -272,6 +280,7 @@ app.include_router(authorization_router)
 app.include_router(seller_keys_router)
 app.include_router(proxy_keys_router)
 app.include_router(projects_router)
+app.include_router(project_keys_router)
 app.include_router(bindings_router)
 app.include_router(bindings_internal_router)
 app.include_router(internal_router)

@@ -21,6 +21,7 @@
 | [002](002-local-compose-lifecycle.md) | 本地依赖生命周期走 Docker Compose | Accepted（实现已 Verified） |
 | [003](003-layered-compose-deploy.md) | 分层 Compose 与 deploy 入口隔离 | Accepted |
 | [004](004-hosted-toolchain-execution-profiles.md) | 托管工具链执行 profile | Accepted |
+| [005](005-endpoint-catalog-governance.md) | V0.2 Endpoint Catalog 作为数据面范围唯一事实源 | Accepted |
 
 ## 何时写 ADR
 

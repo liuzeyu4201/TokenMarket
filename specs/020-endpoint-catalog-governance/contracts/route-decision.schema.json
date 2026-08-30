@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/route-decision/v1/route-decision.schema.json",
+  "schema_version": "1.0.0",
+  "title": "RouteDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "request_id",
+    "catalog_major",
+    "scoring_version",
+    "project_id",
+    "project_mode",
+    "provider",
+    "endpoint_id",
+    "hard_filter_exclusions",
+    "self_trade_excluded",
+    "selected_connection_id",
+    "explain"
+  ],
+  "properties": {
+    "decision_id": { "type": "string", "minLength": 1 },
+    "request_id": { "type": "string", "minLength": 1 },
+    "catalog_major": { "type": "integer", "minimum": 1 },
+    "scoring_version": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "project_mode": { "enum": ["shared", "dedicated"] },
+    "provider": { "enum": ["openai", "anthropic", "vertex"] },
+    "endpoint_id": { "type": "string", "minLength": 1 },
+    "hard_filter_exclusions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "self_trade_excluded": { "type": "boolean", "const": true },
+    "selected_connection_id": { "type": ["string", "null"] },
+    "explain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["qualified_connection_ids", "scores"],
+      "properties": {
+        "qualified_connection_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["connection_id", "health", "latency", "capacity", "price", "total"],
+            "properties": {
+              "connection_id": { "type": "string" },
+              "health": { "type": "integer" },
+              "latency": { "type": "integer" },
+              "capacity": { "type": "integer" },
+              "price": { "type": "integer" },
+              "total": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

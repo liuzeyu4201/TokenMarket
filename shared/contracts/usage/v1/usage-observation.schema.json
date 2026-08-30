@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/usage/v1/usage-observation.schema.json",
+  "schema_version": "1.0.0",
+  "title": "UsageObservation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "observation_id",
+    "request_id",
+    "project_id",
+    "provider",
+    "endpoint_id",
+    "cost_status",
+    "usage"
+  ],
+  "properties": {
+    "observation_id": { "type": "string", "minLength": 1 },
+    "request_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "provider": { "enum": ["openai", "anthropic", "vertex"] },
+    "endpoint_id": { "type": "string", "minLength": 1 },
+    "cost_status": { "enum": ["reported", "rated", "unresolved"] },
+    "reported_cost_minor_units": { "type": ["integer", "null"], "minimum": 0 },
+    "currency": { "type": ["string", "null"] },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "output_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "total_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "cache_read_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "cache_write_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "reasoning_tokens": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    }
+  },
+  "description": "未知费用必须 cost_status=unresolved，不得把 reported_cost_minor_units 记为 0 表示未知。"
+}

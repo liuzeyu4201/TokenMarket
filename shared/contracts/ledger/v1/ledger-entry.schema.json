@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/ledger/v1/ledger-entry.schema.json",
+  "schema_version": "1.0.0",
+  "title": "LedgerEntry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "entry_id",
+    "account_id",
+    "request_id",
+    "amount_minor_units",
+    "direction",
+    "status",
+    "rate_version",
+    "created_at"
+  ],
+  "properties": {
+    "entry_id": { "type": "string", "minLength": 1 },
+    "account_id": { "type": "string", "minLength": 1 },
+    "request_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string" },
+    "amount_minor_units": { "type": "integer", "minimum": 0 },
+    "direction": { "enum": ["debit", "credit"] },
+    "status": {
+      "enum": ["reserved", "settled", "released", "unresolved", "reversed"]
+    },
+    "rate_version": { "type": "string", "minLength": 1 },
+    "reverses_entry_id": { "type": ["string", "null"] },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "description": "仅追加。无 update/delete 操作。冲正通过 reverses_entry_id 指向原分录。测试额度不可提现。"
+}

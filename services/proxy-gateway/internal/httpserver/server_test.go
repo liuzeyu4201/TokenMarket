@@ -109,6 +109,29 @@ func TestReadiness(t *testing.T) {
 	requireHealthResponse(t, rec, "ready")
 }
 
+func TestReadinessFailsWhenCatalogNotLocked(t *testing.T) {
+	ready := false
+	srv, err := httpserver.NewServer(httpserver.Config{
+		Service:      testService,
+		Version:      testVersion,
+		CatalogReady: &ready,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("code %d", rec.Code)
+	}
+	live := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(live, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	if live.Code != http.StatusOK {
+		t.Fatalf("liveness %d", live.Code)
+	}
+}
+
 // TestMetrics confirms that Prometheus-compatible metrics are exposed and
 // contain no secret or personal data.
 func TestMetrics(t *testing.T) {

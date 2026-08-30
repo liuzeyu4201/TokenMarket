@@ -21,6 +21,7 @@ Historical ADR bodies keep the language they were written in (mostly English, pl
 | [002](002-local-compose-lifecycle.md) | Local dependency lifecycle via Docker Compose | Accepted (implementation Verified) |
 | [003](003-layered-compose-deploy.md) | Layered Compose and isolated deploy entry | Accepted |
 | [004](004-hosted-toolchain-execution-profiles.md) | Hosted toolchain execution profiles | Accepted |
+| [005](005-endpoint-catalog-governance.md) | V0.2 Endpoint Catalog as the unique data-plane scope source | Accepted |
 
 ## When to write an ADR
 

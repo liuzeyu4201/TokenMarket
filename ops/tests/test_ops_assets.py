@@ -39,6 +39,11 @@ def test_ops_runbook_migrations_exists() -> None:
     assert runbook.is_file()
 
 
+def test_ops_runbook_endpoint_catalog_exists() -> None:
+    runbook = OPS_DIR / "runbooks" / "endpoint-catalog.md"
+    assert runbook.is_file()
+
+
 def test_ops_validate_assets_tool_exists() -> None:
     tool = OPS_DIR / "tools" / "validate_assets.py"
     assert tool.is_file()

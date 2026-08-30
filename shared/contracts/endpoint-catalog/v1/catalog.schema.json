@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/endpoint-catalog/v1/catalog.schema.json",
+  "schema_version": "1.0.0",
+  "title": "TokenMarket V0.2 Endpoint Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "catalog_major",
+    "catalog_minor",
+    "freeze_date",
+    "providers",
+    "records"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "catalog_major": { "type": "integer", "minimum": 1 },
+    "catalog_minor": { "type": "integer", "minimum": 0 },
+    "freeze_date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "providers": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": { "enum": ["openai", "anthropic", "vertex"] }
+    },
+    "records": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/endpoint_record" }
+    }
+  },
+  "$defs": {
+    "endpoint_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "provider",
+        "protocol_version",
+        "method",
+        "path_template",
+        "stability",
+        "capability_tags",
+        "stateful",
+        "transport",
+        "affinity",
+        "metering_source",
+        "first_supported_version",
+        "test_fixture_version",
+        "official_source",
+        "owning_sf",
+        "requires_project_opt_in"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "provider": { "enum": ["openai", "anthropic", "vertex"] },
+        "protocol_version": { "type": "string", "minLength": 1 },
+        "method": {
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "WEBSOCKET"]
+        },
+        "path_template": { "type": "string", "pattern": "^/" },
+        "stability": {
+          "enum": ["stable", "preview", "beta", "control_plane"]
+        },
+        "capability_tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "stateful": { "type": "boolean" },
+        "transport": {
+          "enum": ["http", "sse", "websocket", "multipart", "binary"]
+        },
+        "affinity": { "enum": ["none", "connection", "resource_id"] },
+        "metering_source": {
+          "enum": ["usage", "reported_cost", "mixed", "unresolved", "none"]
+        },
+        "first_supported_version": { "type": "string", "minLength": 1 },
+        "test_fixture_version": { "type": "string", "minLength": 1 },
+        "official_source": { "type": "string", "minLength": 1 },
+        "owning_sf": { "type": "string", "pattern": "^SF[0-9]{2}$" },
+        "requires_project_opt_in": { "type": "boolean" }
+      }
+    }
+  }
+}

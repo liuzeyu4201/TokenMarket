@@ -25,17 +25,18 @@ from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from
 from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
+from .domain.endpcatalog import CatalogError, must_load
 from .domain.proxykeys.service import ProxyKeyService
 from .domain.sellerkeys.crypto import CredentialEncryptor
 from .domain.sellerkeys.memory_store import MemoryKeyStore
 from .domain.sellerkeys.validator_http import FailClosedValidator, GatewayValidator
 from .domain.usage.service import UsageRecorder
-from .security.shared_secrets import SharedSecretError, load_process_shared_secrets
 from .errors import DependencyUnavailableError
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
 from .rate_limit import MemoryRateLimiter, build_rate_limiter_from_env
 from .schemas.envelope import error_envelope
+from .security.shared_secrets import SharedSecretError, load_process_shared_secrets
 from .sms.synthetic import build_sms_adapter
 
 VERSION = "0.1.0"
@@ -131,6 +132,24 @@ def _browser_origins() -> list[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Own readiness engine, session factory, rate limiter, and auth dispatcher."""
+    try:
+        catalog = must_load()
+    except CatalogError as exc:
+        logger.error(
+            "endpoint catalog load failed",
+            extra={"code": exc.code, "message": exc.message},
+        )
+        raise
+    app.state.endpoint_catalog = catalog
+    logger.info(
+        "endpoint catalog loaded",
+        extra={
+            "catalog_major": catalog["catalog_major"],
+            "catalog_minor": catalog["catalog_minor"],
+            "freeze_date": catalog["freeze_date"],
+            "record_count": len(catalog["records"]),
+        },
+    )
     engine: AsyncEngine | None = None
     session_engine: AsyncEngine | None = None
     dispatcher: AuthDeliveryDispatcher | None = None

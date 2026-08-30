@@ -10,17 +10,37 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import Info, generate_latest
 from starlette.responses import Response
 
+from .domain.endpcatalog import CatalogError, must_load
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
 
 VERSION = "0.1.0"
 logger = configure_logging()
 
+try:
+    _catalog = must_load()
+except CatalogError as exc:
+    logger.error(
+        "endpoint catalog load failed",
+        extra={"code": exc.code, "message": exc.message},
+    )
+    raise
+logger.info(
+    "endpoint catalog loaded",
+    extra={
+        "catalog_major": _catalog["catalog_major"],
+        "catalog_minor": _catalog["catalog_minor"],
+        "freeze_date": _catalog["freeze_date"],
+        "record_count": len(_catalog["records"]),
+    },
+)
+
 service_info = Info("app", "Admin service build information")
 service_info.info({"service": "admin-service", "version": VERSION})
 
 app = FastAPI(title="TokenMarket Admin Service", version=VERSION)
 app.state.version = VERSION
+app.state.endpoint_catalog = _catalog
 app.include_router(health_router)
 
 

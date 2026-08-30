@@ -345,6 +345,145 @@ def test_catalog_price_lookup_openai_stable() -> None:
     assert EmptyConnectionLookup().get(uuid.uuid4()) is None
 
 
+def test_two_projects_cannot_share_dedicated_connection() -> None:
+    proj, bind, conns = _stack()
+    cid = uuid.uuid4()
+    conns.put(
+        ConnectionFact(
+            connection_id=cid,
+            provider="openai",
+            supply_mode="dedicated",
+            usable=True,
+        )
+    )
+    owner_a, rec_a = _owner_project(proj, mode="dedicated")
+    _publish(
+        bind,
+        owner_a,
+        rec_a.project_id,
+        "openai",
+        supply_mode="dedicated",
+        connection_id=cid,
+        allowed_models=[],
+    )
+    owner_b, rec_b = _owner_project(proj, mode="dedicated")
+    with pytest.raises(BindingError) as exc:
+        _publish(
+            bind,
+            owner_b,
+            rec_b.project_id,
+            "openai",
+            supply_mode="dedicated",
+            connection_id=cid,
+            allowed_models=[],
+        )
+    assert exc.value.code == "PUBLISH_CONFLICT"
+
+
+def test_replace_requires_confirmation_and_drains_old() -> None:
+    proj, bind, conns = _stack()
+    owner, rec = _owner_project(proj, mode="dedicated")
+    old_id = uuid.uuid4()
+    new_id = uuid.uuid4()
+    conns.put(
+        ConnectionFact(
+            connection_id=old_id,
+            provider="openai",
+            supply_mode="dedicated",
+            usable=True,
+        )
+    )
+    published = _publish(
+        bind,
+        owner,
+        rec.project_id,
+        "openai",
+        supply_mode="dedicated",
+        connection_id=old_id,
+        allowed_models=[],
+    )
+    bind.degrade_for_connection(old_id, "deg-r")
+    preview = bind.replace_preview(
+        binding_id=published.binding_id,
+        owner_id=owner,
+        role="buyer",
+        workspace="buyer",
+    )
+    assert preview["migrates"] is False
+    assert "files" in preview["non_migrating"]
+    assert "operations" in preview["non_migrating"]
+    with pytest.raises(BindingError) as denied:
+        bind.replace(
+            binding_id=published.binding_id,
+            owner_id=owner,
+            role="buyer",
+            workspace="buyer",
+            request_id="no",
+            new_connection_id=new_id,
+            buyer_confirmed=False,
+            reason="outage",
+            step_up=True,
+        )
+    assert denied.value.code == "BUYER_CONFIRMATION_REQUIRED"
+    still = bind.get(
+        binding_id=published.binding_id, owner_id=owner, role="buyer", workspace="buyer"
+    )
+    assert still.connection_id == old_id
+    assert still.status == "degraded"
+    conns.put(
+        ConnectionFact(
+            connection_id=new_id,
+            provider="openai",
+            supply_mode="dedicated",
+            usable=True,
+            lifecycle_state="listed",
+        )
+    )
+    swapped = bind.replace(
+        binding_id=published.binding_id,
+        owner_id=owner,
+        role="buyer",
+        workspace="buyer",
+        request_id="yes",
+        new_connection_id=new_id,
+        buyer_confirmed=True,
+        reason="seller outage",
+        step_up=True,
+    )
+    assert swapped.connection_id == new_id
+    assert swapped.draining_connection_id == old_id
+    assert swapped.status == "active"
+    assert swapped.version == published.version + 1
+    assert conns.get(old_id).lifecycle_state == "draining"
+    assert conns.get(new_id).lifecycle_state == "bound"
+    events = [
+        a
+        for a in getattr(bind._store, "audits", [])
+        if a["event_type"] == "binding.replaced"
+    ]
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["buyer_confirmed"] is True
+    assert payload["reason"] == "seller outage"
+    assert payload["before_connection_id"] == str(old_id)
+    assert payload["after_connection_id"] == str(new_id)
+    assert payload["actor"] == str(owner)
+
+
+def test_shared_binding_replace_denied() -> None:
+    proj, bind, _ = _stack()
+    owner, rec = _owner_project(proj)
+    published = _publish(bind, owner, rec.project_id, "openai")
+    with pytest.raises(BindingError) as exc:
+        bind.replace_preview(
+            binding_id=published.binding_id,
+            owner_id=owner,
+            role="buyer",
+            workspace="buyer",
+        )
+    assert exc.value.code == "BINDING_REPLACE_DENIED"
+
+
 def test_seller_workspace_forbidden() -> None:
     proj, bind, _ = _stack()
     owner, rec = _owner_project(proj)

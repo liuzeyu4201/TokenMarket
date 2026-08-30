@@ -47,6 +47,32 @@ class DictConnectionLookup:
                 admits_new=False,
             )
 
+    def mark_bound(self, connection_id: uuid.UUID, request_id: str) -> None:
+        _ = request_id
+        cur = self._rows.get(connection_id)
+        if cur is not None:
+            self._rows[connection_id] = ConnectionFact(
+                connection_id=cur.connection_id,
+                provider=cur.provider,
+                supply_mode=cur.supply_mode,
+                usable=True,
+                lifecycle_state="bound",
+                admits_new=False,
+            )
+
+    def mark_draining(self, connection_id: uuid.UUID, request_id: str) -> None:
+        _ = request_id
+        cur = self._rows.get(connection_id)
+        if cur is not None:
+            self._rows[connection_id] = ConnectionFact(
+                connection_id=cur.connection_id,
+                provider=cur.provider,
+                supply_mode=cur.supply_mode,
+                usable=False,
+                lifecycle_state="draining",
+                admits_new=False,
+            )
+
     def get(self, connection_id: uuid.UUID) -> ConnectionFact | None:
         return self._rows.get(connection_id)
 

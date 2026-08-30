@@ -52,3 +52,4 @@ type selectorError string
 func (e selectorError) Error() string { return string(e) }
 
 const errNoUpstream selectorError = CodeNoUpstream
+const errDedicatedUnavailable selectorError = CodeDedicatedUnavailable

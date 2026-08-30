@@ -9,7 +9,9 @@ from typing import Sequence
 from app.domain.authorization.workspace import effective_role
 from app.domain.bindings.codes import (
     BINDING_DEGRADED,
+    BINDING_REPLACE_DENIED,
     BINDING_REQUIRED,
+    BUYER_CONFIRMATION_REQUIRED,
     CONNECTION_REQUIRED,
     FORBIDDEN_ROLE,
     ILLEGAL_STATE_TRANSITION,
@@ -25,6 +27,7 @@ from app.domain.bindings.codes import (
     PUBLISH_CONFLICT,
     PUBLISHED,
     SDK_HINTS,
+    STEP_UP_REQUIRED,
     VALIDATION,
 )
 from app.domain.bindings.models import BindingRecord, utcnow
@@ -39,6 +42,9 @@ from app.domain.projects.models import ProjectRecord
 from app.domain.projects.store import MemoryProjectStore, ProjectStore
 
 logger = logging.getLogger("api-service")
+
+NON_MIGRATING = ("files", "batches", "caches", "fine_tuning", "operations")
+IDLE_LIFECYCLES = frozenset({"listed", "verified"})
 
 
 class BindingError(Exception):
@@ -172,7 +178,11 @@ class BindingService:
         return rec
 
     def _require_connection(
-        self, connection_id: uuid.UUID | None, protocol: str
+        self,
+        connection_id: uuid.UUID | None,
+        protocol: str,
+        *,
+        idle: bool = False,
     ) -> None:
         if connection_id is None:
             raise BindingError(
@@ -185,6 +195,10 @@ class BindingService:
             or fact.supply_mode != "dedicated"
             or fact.provider != protocol
         ):
+            raise BindingError(
+                CONNECTION_REQUIRED, MSG[CONNECTION_REQUIRED], http_status=409
+            )
+        if idle and fact.lifecycle_state not in IDLE_LIFECYCLES:
             raise BindingError(
                 CONNECTION_REQUIRED, MSG[CONNECTION_REQUIRED], http_status=409
             )
@@ -420,6 +434,95 @@ class BindingService:
             "protocol": rec.protocol,
             "supply_mode": rec.supply_mode,
         }
+
+    def replace_preview(
+        self,
+        *,
+        binding_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        role: str,
+        workspace: str | None,
+    ) -> dict[str, object]:
+        self._require_buyer(role, workspace)
+        rec = self._owned(binding_id, owner_id)
+        if rec.supply_mode != "dedicated":
+            raise BindingError(
+                BINDING_REPLACE_DENIED, MSG[BINDING_REPLACE_DENIED], http_status=409
+            )
+        return {
+            "old_connection_id": str(rec.connection_id) if rec.connection_id else None,
+            "non_migrating": list(NON_MIGRATING),
+            "migrates": False,
+        }
+
+    def replace(
+        self,
+        *,
+        binding_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        role: str,
+        workspace: str | None,
+        request_id: str,
+        new_connection_id: uuid.UUID,
+        buyer_confirmed: bool,
+        reason: str,
+        step_up: bool,
+    ) -> BindingRecord:
+        self._require_buyer(role, workspace)
+        rec = self._owned(binding_id, owner_id)
+        if rec.supply_mode != "dedicated":
+            raise BindingError(
+                BINDING_REPLACE_DENIED, MSG[BINDING_REPLACE_DENIED], http_status=409
+            )
+        if rec.status not in ("active", "degraded"):
+            raise BindingError(
+                ILLEGAL_STATE_TRANSITION,
+                MSG[ILLEGAL_STATE_TRANSITION],
+                http_status=409,
+            )
+        if not buyer_confirmed:
+            raise BindingError(
+                BUYER_CONFIRMATION_REQUIRED,
+                MSG[BUYER_CONFIRMATION_REQUIRED],
+                http_status=409,
+            )
+        if not step_up:
+            raise BindingError(STEP_UP_REQUIRED, MSG[STEP_UP_REQUIRED], http_status=409)
+        if not str(reason).strip():
+            raise BindingError(VALIDATION, MSG[VALIDATION], http_status=400)
+        if rec.connection_id == new_connection_id:
+            raise BindingError(VALIDATION, MSG[VALIDATION], http_status=400)
+        self._require_connection(new_connection_id, rec.protocol, idle=True)
+        old = rec.connection_id
+        rec.draining_connection_id = old
+        rec.connection_id = new_connection_id
+        rec.status = "active"
+        rec.version = rec.version + 1
+        rec.updated_at = utcnow()
+        self._store.save(rec)
+        if old is not None:
+            drain = getattr(self._connections, "mark_draining", None)
+            if callable(drain):
+                drain(old, request_id)
+        bound = getattr(self._connections, "mark_bound", None)
+        if callable(bound):
+            bound(new_connection_id, request_id)
+        self._store.audit(
+            owner_id=owner_id,
+            project_id=rec.project_id,
+            binding_id=rec.binding_id,
+            event_type="binding.replaced",
+            request_id=request_id,
+            payload={
+                "actor": str(owner_id),
+                "buyer_confirmed": True,
+                "step_up": True,
+                "reason": str(reason).strip(),
+                "before_connection_id": str(old) if old else None,
+                "after_connection_id": str(new_connection_id),
+            },
+        )
+        return rec
 
     def degrade_for_connection(self, connection_id: uuid.UUID, request_id: str) -> int:
         """Degrade dedicated bindings for a connection. Never fall back to shared."""

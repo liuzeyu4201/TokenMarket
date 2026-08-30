@@ -7,7 +7,11 @@ import uuid
 from fastapi.testclient import TestClient
 
 from app.api.v1.actors import Actor
-from app.domain.bindings.ports import AlwaysPriceLookup
+from app.domain.bindings.ports import (
+    AlwaysPriceLookup,
+    ConnectionFact,
+    DictConnectionLookup,
+)
 from app.domain.bindings.service import BindingService
 from app.domain.bindings.store import MemoryBindingStore
 from app.domain.projects.service import ProjectService
@@ -150,6 +154,74 @@ def test_list_get_validate_deactivate_and_degrade() -> None:
             json={"connection_id": str(uuid.uuid4())},
         )
         assert denied.status_code == 401
+    finally:
+        _close(client)
+
+
+def test_replace_preview_and_unconfirmed_http() -> None:
+    user = uuid.uuid4()
+    projects = MemoryProjectStore()
+    bindings = MemoryBindingStore()
+    conns = DictConnectionLookup()
+    cid = uuid.uuid4()
+    conns.put(
+        ConnectionFact(
+            connection_id=cid,
+            provider="openai",
+            supply_mode="dedicated",
+            usable=True,
+        )
+    )
+    bind = BindingService(
+        store=bindings, projects=projects, prices=AlwaysPriceLookup(), connections=conns
+    )
+    proj = ProjectService(store=projects, binding=bind)
+    client = TestClient(app)
+    client.__enter__()
+    client.app.state.actor_override = Actor(
+        user_id=user, role="buyer", status="active", workspace="buyer"
+    )
+    client.app.state.project_service = proj
+    client.app.state.binding_service = bind
+    try:
+        created = client.post(
+            "/api/v1/projects",
+            json={
+                "display_name": "Ded",
+                "mode": "dedicated",
+                "enabled_protocols": ["openai"],
+            },
+        )
+        assert created.status_code == 201, created.text
+        pid = created.json()["data"]["project_id"]
+        binding = client.post(
+            f"/api/v1/projects/{pid}/bindings",
+            json={
+                "protocol": "openai",
+                "supply_mode": "dedicated",
+                "connection_id": str(cid),
+            },
+        )
+        assert binding.status_code == 201, binding.text
+        bid = binding.json()["data"]["binding_id"]
+        published = client.post(f"/api/v1/projects/{pid}/bindings/{bid}/publish")
+        assert published.status_code == 200, published.text
+        preview = client.get(f"/api/v1/projects/{pid}/bindings/{bid}/replace-preview")
+        assert preview.status_code == 200, preview.text
+        body = preview.json()["data"]
+        assert body["migrates"] is False
+        assert "files" in body["non_migrating"]
+        denied = client.post(
+            f"/api/v1/projects/{pid}/bindings/{bid}/replace",
+            json={
+                "new_connection_id": str(uuid.uuid4()),
+                "buyer_confirmed": False,
+                "reason": "outage",
+                "step_up": True,
+            },
+        )
+        assert denied.status_code == 409
+        assert denied.json()["code"] == "BUYER_CONFIRMATION_REQUIRED"
     finally:
         _close(client)
 

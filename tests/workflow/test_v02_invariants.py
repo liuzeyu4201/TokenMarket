@@ -74,6 +74,13 @@ def test_route_self_trade_excluded() -> None:
     assert "1.2.0" in text
 
 
+def test_dedicated_unavailable_platform_error() -> None:
+    text = load_text(
+        "shared", "contracts", "native-passthrough", "v1", "platform-errors.md"
+    )
+    assert "DEDICATED_UNAVAILABLE" in text
+
+
 def test_no_cross_protocol_conversion_contract() -> None:
     readme = load_text("shared", "contracts", "README.md")
     assert "unified request" not in readme.lower()

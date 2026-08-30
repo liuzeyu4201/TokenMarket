@@ -31,6 +31,7 @@ class BindingRecord:
     allowed_models: list[str] = field(default_factory=list)
     allowed_regions: list[str] = field(default_factory=list)
     connection_id: uuid.UUID | None = None
+    draining_connection_id: uuid.UUID | None = None
     published_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -60,6 +61,9 @@ class ProviderBindingRow(Base):
         ARRAY(String), nullable=False, default=list
     )
     connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    draining_connection_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
     published_at: Mapped[datetime | None] = mapped_column(

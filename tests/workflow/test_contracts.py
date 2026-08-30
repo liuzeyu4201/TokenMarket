@@ -390,6 +390,10 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
     "ledger/v1/": ("Billing Service (immutable ledger, SF28+)", "1.0.0"),
     "audit/v1/": ("Admin Service (audit events, SF30+)", "1.0.0"),
     "usage-outbox/v1/": ("Proxy Gateway (usage outbox, SF04)", "1.0.0"),
+    "unified-phone-auth/v1/": (
+        "API Service (unified phone auth, SF06)",
+        "1.0.0",
+    ),
 }
 
 

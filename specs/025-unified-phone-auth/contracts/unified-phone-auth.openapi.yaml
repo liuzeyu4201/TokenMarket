@@ -1,0 +1,71 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket unified phone auth (SF06)
+  version: 1.0.0
+  description: |
+    Additive to phone-auth-session/v1. Challenge 202 shape unchanged.
+    POST /sessions may return session or PROFILE_COMPLETION_REQUIRED.
+    POST /profile-completions atomically creates user+session.
+    POST /register without profile cookie is rejected.
+paths:
+  /api/v1/auth/sessions:
+    post:
+      operationId: verifyChallengeUnified
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id, code]
+              properties:
+                challenge_id: { type: string, format: uuid }
+                code: { type: string }
+      responses:
+        "200":
+          description: Session issued OR profile completion required
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, message, data, request_id]
+                properties:
+                  code:
+                    type: string
+                    description: "0" for session; PROFILE_COMPLETION_REQUIRED for new users
+                  data:
+                    type: object
+  /api/v1/auth/profile-completions:
+    post:
+      operationId: completeProfile
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [nickname, role]
+              properties:
+                nickname: { type: string, minLength: 1, maxLength: 50 }
+                role: { type: string, enum: [buyer, seller, both] }
+      responses:
+        "200":
+          description: User and session created
+        "401":
+          description: Missing/expired profile cookie
+        "403":
+          description: Origin rejected
+        "409":
+          description: Phone unique conflict
+  /api/v1/auth/register:
+    post:
+      operationId: registerRequiresVerification
+      responses:
+        "403":
+          description: AUTH_VERIFICATION_REQUIRED when profile cookie absent

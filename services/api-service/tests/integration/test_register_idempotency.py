@@ -34,8 +34,8 @@ def test_idempotent_replay_same_key_body(client: TestClient) -> None:
     r2 = client.post(
         "/api/v1/auth/register", json=body, headers={"Idempotency-Key": key}
     )
-    assert r1.status_code == 200 and r2.status_code == 200
-    assert r1.json()["data"]["user_id"] == r2.json()["data"]["user_id"]
+    assert r1.status_code == 403 and r2.status_code == 403
+    assert r1.json()["code"] == r2.json()["code"] == "AUTH_VERIFICATION_REQUIRED"
 
 
 def test_idempotent_conflict_different_body(client: TestClient) -> None:
@@ -51,5 +51,6 @@ def test_idempotent_conflict_different_body(client: TestClient) -> None:
         json={"phone": phone, "nickname": "乙", "role": "buyer"},
         headers={"Idempotency-Key": key},
     )
-    assert r.status_code == 409
-    assert r.json()["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+    assert r.status_code == 403
+    assert r.json()["code"] == "AUTH_VERIFICATION_REQUIRED"
+    assert "IDEMPOTENCY_KEY_CONFLICT" not in r.text

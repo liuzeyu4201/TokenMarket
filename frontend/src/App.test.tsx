@@ -62,15 +62,16 @@ describe('app shell routes', () => {
     })
     expect(screen.queryByRole('button', { name: '注册' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: '注册' }).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/补充资料即可自动登录/)).toBeInTheDocument()
+    expect(screen.queryByText(/注册不自动登录/)).not.toBeInTheDocument()
   })
 
-  it('shows register form on /register', async () => {
+  it('shows unified phone verification on /register', async () => {
     renderAt('/register')
     await waitFor(() => {
       expect(screen.getByLabelText('手机号')).toBeInTheDocument()
     })
-    expect(screen.getByLabelText('昵称')).toBeInTheDocument()
-    expect(screen.getByLabelText('角色')).toBeInTheDocument()
+    expect(screen.getByLabelText('验证码')).toBeInTheDocument()
   })
 
   it('shows login form on /login', async () => {

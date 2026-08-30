@@ -18,6 +18,7 @@ from app.errors import (
     MSG_CHALLENGE_EXPIRED,
     MSG_CHALLENGE_UNAVAILABLE,
     MSG_CSRF_INVALID,
+    MSG_PROFILE_COMPLETION_REQUIRED,
     MSG_SERVICE_UNAVAILABLE,
     MSG_UNAUTHENTICATED,
     MSG_VALIDATION,
@@ -50,6 +51,7 @@ logger = logging.getLogger("api-service")
 class SessionIssueResult:
     kind: Literal[
         "success",
+        "profile_completion",
         "validation",
         "verification_failed",
         "challenge_unavailable",
@@ -62,6 +64,7 @@ class SessionIssueResult:
     data: Any = None
     # Only set on success — apply to response after commit.
     cookie_value: str | None = None
+    profile_cookie_value: str | None = None
 
 
 @dataclass
@@ -653,10 +656,10 @@ class SessionService:
             challenge.code_digest,
         )
 
-        # Decoy / ineligible: never issue a session; same external attempt lifecycle.
-        is_decoy = challenge.user_id is None
-        eligible = (not is_decoy) and self._repo.is_auth_eligible(user)
-        success_eligible = ok and (not is_decoy) and eligible
+        is_register = challenge.user_id is None and bool(challenge.phone_normalized)
+        is_decoy = challenge.user_id is None and not challenge.phone_normalized
+        eligible = (not is_decoy) and (is_register or self._repo.is_auth_eligible(user))
+        success_eligible = ok and eligible and not is_decoy
 
         if not success_eligible:
             challenge.attempt_count = int(challenge.attempt_count) + 1
@@ -704,6 +707,52 @@ class SessionService:
                 code="VERIFICATION_FAILED",
                 message=MSG_VERIFICATION_FAILED,
                 data=data,
+            )
+
+        if is_register:
+            from app.security.profile_token import (
+                PROFILE_MAX_AGE_SECONDS,
+                generate_profile_token,
+                profile_token_digest,
+            )
+
+            challenge.state = "consumed"
+            challenge.consumed_at = now
+            challenge.code_digest = None
+            challenge.code_salt = None
+            challenge.send_started_at = None
+            token = generate_profile_token(session_mat.version)
+            digest = profile_token_digest(session_mat.current, token.opaque_secret)
+            intent_id = uuid.uuid4()
+            await self._repo.insert_profile_intent(
+                intent_id=intent_id,
+                phone_normalized=str(challenge.phone_normalized),
+                challenge_id=challenge.id,
+                token_digest=digest,
+                token_key_version=session_mat.version,
+                now=now,
+            )
+            await self._repo.append_security_event(
+                event_type="profile_completion_issued",
+                outcome="success",
+                reason_code="register_otp",
+                request_id=request_id,
+                challenge_id=challenge.id,
+                now=now,
+            )
+            await self._repo.commit()
+            record_auth_verify("profile_completion")
+            return SessionIssueResult(
+                kind="profile_completion",
+                http_status=200,
+                code="PROFILE_COMPLETION_REQUIRED",
+                message=MSG_PROFILE_COMPLETION_REQUIRED,
+                data={
+                    "next_step": "complete_profile",
+                    "phone_masked": mask_phone(str(challenge.phone_normalized)),
+                    "expires_in_seconds": PROFILE_MAX_AGE_SECONDS,
+                },
+                profile_cookie_value=token.cookie_value,
             )
 
         assert user is not None

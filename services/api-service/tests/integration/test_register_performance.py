@@ -48,7 +48,8 @@ def test_register_p95_under_500ms(
                 headers={"Idempotency-Key": str(uuid.uuid4())},
             )
             elapsed_ms = (time.perf_counter() - start) * 1000
-            assert r.status_code == 200, r.text
+            assert r.status_code == 403, r.text
+            assert r.json()["code"] == "AUTH_VERIFICATION_REQUIRED"
             samples.append(elapsed_ms)
     samples_sorted = sorted(samples)
     p95 = samples_sorted[int(len(samples_sorted) * 0.95) - 1]

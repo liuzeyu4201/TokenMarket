@@ -250,6 +250,8 @@ class ChallengeService:
         del code
 
         user_id = user.id if eligible and user is not None else None
+        # 无用户：注册用途，保存规范化号码以便投递；停用账户：decoy，不保存号码。
+        register_phone = phone_normalized if user is None else None
         challenge = await self._repo.insert_pending_challenge(
             challenge_id=challenge_id,
             user_id=user_id,
@@ -260,6 +262,7 @@ class ChallengeService:
             code_key_version=otp_mat.version,
             provider_request_ref=provider_request_ref,
             now=now,
+            phone_normalized=register_phone,
         )
 
         expires_at = _ensure_aware(challenge.expires_at)

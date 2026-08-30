@@ -334,11 +334,16 @@ def test_decoy_produces_zero_sessions(
         json={"challenge_id": challenge_id, "code": code},
         headers={"Origin": ORIGIN},
     )
-    assert session_res.status_code == 401
-    assert session_res.json()["code"] == "VERIFICATION_FAILED"
+    assert session_res.status_code == 200
+    assert session_res.json()["code"] == "PROFILE_COMPLETION_REQUIRED"
     assert SESSION_COOKIE_NAME not in session_res.headers.get("set-cookie", "")
 
     with engine.connect() as conn:
         count = conn.execute(text("SELECT count(*) FROM auth_sessions")).scalar_one()
         assert count == 0
+        users = conn.execute(
+            text("SELECT count(*) FROM users WHERE phone_normalized = :p"),
+            {"p": unknown},
+        ).scalar_one()
+        assert users == 0
     engine.dispose()

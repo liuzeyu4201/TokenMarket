@@ -58,6 +58,15 @@ class VerificationFailureData(BaseModel):
     attempts_remaining: int | None = Field(default=None, ge=0, le=4)
 
 
+class CompleteProfileRequest(BaseModel):
+    """POST /profile-completions body (nickname + role only)."""
+
+    model_config = {"extra": "forbid"}
+
+    nickname: str = Field(minLength=1, maxLength=50)
+    role: Literal["buyer", "seller", "both"]
+
+
 class RateLimitData(BaseModel):
     model_config = {"extra": "forbid"}
 

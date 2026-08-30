@@ -87,9 +87,9 @@ class DeliveryService:
         now = utc_now()
         challenge_id = challenge.id
 
-        # Decoy: finalize delivered without provider call (keep OTP digest for
-        # uniform verification attempt lifecycle).
-        if challenge.user_id is None:
+        # Decoy: no user and no registration phone. Registration challenges
+        # (phone_normalized set) are delivered through the provider path.
+        if challenge.user_id is None and not challenge.phone_normalized:
             locked = await self._repo.lock_challenge(challenge_id)
             if locked is None or locked.state != "pending_delivery":
                 return DeliveryOutcome(
@@ -123,8 +123,10 @@ class DeliveryService:
                 sent=False,
             )
 
-        # Eligible path: recheck user under lock order user → challenge.
-        user = await self._repo.lock_user_by_id(challenge.user_id)
+        # Eligible login or registration-delivery path.
+        user = None
+        if challenge.user_id is not None:
+            user = await self._repo.lock_user_by_id(challenge.user_id)
         locked = await self._repo.lock_challenge(challenge_id)
         if locked is None:
             await self._repo.rollback()
@@ -135,7 +137,7 @@ class DeliveryService:
                 sent=False,
             )
 
-        if not self._repo.is_auth_eligible(user):
+        if challenge.user_id is not None and not self._repo.is_auth_eligible(user):
             await self._repo.finalize_delivery_failed(locked, clear_otp=True, now=now)
             await self._repo.append_security_event(
                 event_type="delivery_failed",

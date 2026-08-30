@@ -34,7 +34,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.0.0 | OpenAPI |
 | `project-proxy-key/v1/` | API Service (Project proxy Key, SF12+) | 1.0.0 | OpenAPI |
 | `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.3.0 | OpenAPI |
-| `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.0.0 | JSON Schema |
+| `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.1.0 | JSON Schema |
 | `usage/v1/` | Billing Service (usage observation, SF26+) | 1.1.0 | JSON Schema |
 | `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.1.0 | JSON Schema |
 | `seller-workbench/v1/` | API Service + Frontend (seller quote workbench, SF17) | 1.0.0 | Markdown |

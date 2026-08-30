@@ -448,6 +448,23 @@ class AuthenticationRepository:
             await self._session.flush()
         return len(sessions)
 
+    async def bump_session_generation(self, user: User) -> int:
+        current = int(getattr(user, "session_generation", 1) or 1)
+        user.session_generation = current + 1
+        await self._session.flush()
+        return int(user.session_generation)
+
+    async def list_recent_security_events(
+        self, user_id: uuid.UUID, *, limit: int = 10
+    ) -> Sequence[AuthenticationSecurityEvent]:
+        result = await self._session.execute(
+            select(AuthenticationSecurityEvent)
+            .where(AuthenticationSecurityEvent.user_id == user_id)
+            .order_by(AuthenticationSecurityEvent.occurred_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def insert_session(
         self,
         *,
@@ -458,6 +475,8 @@ class AuthenticationRepository:
         role_snapshot: Any,
         created_request_id: str,
         now: datetime | None = None,
+        session_generation: int = 1,
+        client_hint: str | None = None,
     ) -> AuthSession:
         ts = now or utc_now()
         expires = ts + SESSION_TTL
@@ -466,6 +485,8 @@ class AuthenticationRepository:
             user_id=user_id,
             token_digest=token_digest,
             token_key_version=token_key_version,
+            session_generation=session_generation,
+            client_hint=client_hint,
             role_snapshot=role_snapshot,
             issued_at=ts,
             expires_at=expires,

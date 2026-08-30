@@ -38,6 +38,7 @@ from app.repositories.authentication import (
 )
 from app.security.csrf import issue_csrf_token, verify_csrf_token
 from app.security.otp import verify_otp_digest
+from app.security.reference import client_hint
 from app.security.session import (
     generate_session_token,
     parse_session_cookie,
@@ -80,7 +81,17 @@ class SessionBootstrapResult:
 
 @dataclass
 class SessionLogoutResult:
-    kind: Literal["success", "csrf_invalid", "service_unavailable"]
+    kind: Literal["success", "csrf_invalid", "service_unavailable", "unauthenticated"]
+    http_status: int
+    code: str
+    message: str
+    data: Any = None
+    clear_cookie: bool = False
+
+
+@dataclass
+class SecuritySummaryResult:
+    kind: Literal["success", "unauthenticated", "service_unavailable"]
     http_status: int
     code: str
     message: str
@@ -280,6 +291,18 @@ class SessionService:
                 start=start,
                 request_id=request_id,
                 reason="account_disabled",
+                clear_cookie=True,
+                session_id=auth_session.id,
+                user_id=user.id,
+            )
+
+        user_gen = int(getattr(user, "session_generation", 1) or 1)
+        sess_gen = int(getattr(auth_session, "session_generation", 1) or 1)
+        if user_gen != sess_gen:
+            return self._bootstrap_unauthenticated(
+                start=start,
+                request_id=request_id,
+                reason="generation_mismatch",
                 clear_cookie=True,
                 session_id=auth_session.id,
                 user_id=user.id,
@@ -520,12 +543,224 @@ class SessionService:
             return None
         return verify_csrf_token(key, version, session_id, presented)
 
+    async def revoke_all_sessions(
+        self,
+        *,
+        cookie_value: str | None,
+        csrf_presented: str | None,
+        request_id: str,
+    ) -> SessionLogoutResult:
+        """Bump generation and revoke every Web session for the cookie's user."""
+        try:
+            return await self._revoke_all_inner(
+                cookie_value=cookie_value,
+                csrf_presented=csrf_presented,
+                request_id=request_id,
+            )
+        except (OperationalError, SQLAlchemyError):
+            logger.exception(
+                "session revoke-all dependency failure",
+                extra={"request_id": request_id},
+            )
+            return SessionLogoutResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+                clear_cookie=False,
+            )
+
+    async def _revoke_all_inner(
+        self,
+        *,
+        cookie_value: str | None,
+        csrf_presented: str | None,
+        request_id: str,
+    ) -> SessionLogoutResult:
+        session_mat = self._settings.key_material("session")
+        csrf_mat = self._settings.key_material("csrf")
+        if not session_mat.current_usable() or not csrf_mat.current_usable():
+            return SessionLogoutResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+                clear_cookie=False,
+            )
+        parsed = parse_session_cookie(cookie_value)
+        if parsed is None:
+            return SessionLogoutResult(
+                kind="unauthenticated",
+                http_status=401,
+                code="UNAUTHENTICATED",
+                message=MSG_UNAUTHENTICATED,
+                clear_cookie=True,
+            )
+        key_version, opaque = parsed
+        session_key = session_mat.resolve(key_version)
+        if session_key is None:
+            return SessionLogoutResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+                clear_cookie=False,
+            )
+        digest = token_digest(session_key, opaque)
+        auth_session = await self._repo.lock_session_by_token_digest(
+            token_key_version=key_version, token_digest=digest
+        )
+        if auth_session is None or auth_session.revoked_at is not None:
+            await self._repo.rollback()
+            return SessionLogoutResult(
+                kind="unauthenticated",
+                http_status=401,
+                code="UNAUTHENTICATED",
+                message=MSG_UNAUTHENTICATED,
+                clear_cookie=True,
+            )
+        csrf_ok = self._verify_csrf_for_session(
+            csrf_mat=csrf_mat,
+            session_id=auth_session.id,
+            presented=csrf_presented,
+        )
+        if csrf_ok is None:
+            await self._repo.rollback()
+            return SessionLogoutResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+                clear_cookie=False,
+            )
+        if not csrf_ok:
+            await self._repo.rollback()
+            return SessionLogoutResult(
+                kind="csrf_invalid",
+                http_status=403,
+                code="CSRF_INVALID",
+                message=MSG_CSRF_INVALID,
+                clear_cookie=False,
+            )
+        user = await self._repo.lock_user_by_id(auth_session.user_id)
+        if user is None:
+            await self._repo.rollback()
+            return SessionLogoutResult(
+                kind="unauthenticated",
+                http_status=401,
+                code="UNAUTHENTICATED",
+                message=MSG_UNAUTHENTICATED,
+                clear_cookie=True,
+            )
+        now = utc_now()
+        await self._repo.bump_session_generation(user)
+        await self._repo.revoke_unrevoked_sessions(
+            user.id, reason="superseded", now=now
+        )
+        await self._repo.append_security_event(
+            event_type="session_revoked_all",
+            outcome="success",
+            reason_code="logout_all",
+            request_id=request_id,
+            user_id=user.id,
+            session_id=auth_session.id,
+            now=now,
+        )
+        await self._repo.commit()
+        record_auth_session_event("revoked_all")
+        emit_auth_event(logger, "auth.session.revoked", request_id=request_id)
+        return SessionLogoutResult(
+            kind="success",
+            http_status=200,
+            code="0",
+            message="success",
+            data={"logged_out": True, "scope": "all"},
+            clear_cookie=True,
+        )
+
+    async def security_summary(
+        self, *, cookie_value: str | None, request_id: str
+    ) -> SecuritySummaryResult:
+        boot = await self.bootstrap_session(
+            cookie_value=cookie_value, request_id=request_id
+        )
+        if boot.kind != "success":
+            return SecuritySummaryResult(
+                kind=(
+                    "unauthenticated"
+                    if boot.kind == "unauthenticated"
+                    else "service_unavailable"
+                ),
+                http_status=boot.http_status,
+                code=boot.code,
+                message=boot.message,
+                clear_cookie=boot.clear_cookie,
+            )
+        parsed = parse_session_cookie(cookie_value)
+        if parsed is None:
+            return SecuritySummaryResult(
+                kind="unauthenticated",
+                http_status=401,
+                code="UNAUTHENTICATED",
+                message=MSG_UNAUTHENTICATED,
+                clear_cookie=True,
+            )
+        session_mat = self._settings.key_material("session")
+        key_version, opaque = parsed
+        session_key = session_mat.resolve(key_version)
+        if session_key is None:
+            return SecuritySummaryResult(
+                kind="service_unavailable",
+                http_status=503,
+                code="SERVICE_UNAVAILABLE",
+                message=MSG_SERVICE_UNAVAILABLE,
+            )
+        digest = token_digest(session_key, opaque)
+        row = await self._repo.get_session_with_user_by_token_digest(
+            token_key_version=key_version, token_digest=digest
+        )
+        if row is None:
+            return SecuritySummaryResult(
+                kind="unauthenticated",
+                http_status=401,
+                code="UNAUTHENTICATED",
+                message=MSG_UNAUTHENTICATED,
+                clear_cookie=True,
+            )
+        auth_session, user = row
+        events = await self._repo.list_recent_security_events(user.id, limit=10)
+        return SecuritySummaryResult(
+            kind="success",
+            http_status=200,
+            code="0",
+            message="success",
+            data={
+                "session": {
+                    "issued_at": _ensure_aware(auth_session.issued_at).isoformat(),
+                    "expires_at": _ensure_aware(auth_session.expires_at).isoformat(),
+                    "generation": int(auth_session.session_generation),
+                    "client_hint": auth_session.client_hint,
+                },
+                "recent_events": [
+                    {
+                        "event_type": ev.event_type,
+                        "outcome": ev.outcome,
+                        "reason_code": ev.reason_code,
+                        "request_id": ev.request_id,
+                        "occurred_at": _ensure_aware(ev.occurred_at).isoformat(),
+                    }
+                    for ev in events
+                ],
+            },
+        )
+
     async def create_session(
         self,
         *,
         challenge_id: uuid.UUID,
         code: str,
         request_id: str,
+        client_ip: str | None = None,
     ) -> SessionIssueResult:
         if not _is_six_digit_ascii(code):
             return SessionIssueResult(
@@ -767,8 +1002,8 @@ class SessionService:
         revoked = await self._repo.revoke_unrevoked_sessions(
             user.id, reason="superseded", now=now
         )
-        # Mark naturally expired unrevoked rows as expired_cleanup if needed —
-        # revoke_unrevoked_sessions already covers all unrevoked.
+        generation = await self._repo.bump_session_generation(user)
+        hint = client_hint(self._settings.key_material("reference").current, client_ip)
 
         session_id = uuid.uuid4()
         token = generate_session_token(session_mat.version)
@@ -783,6 +1018,8 @@ class SessionService:
                 role_snapshot=user.role,
                 created_request_id=request_id,
                 now=now,
+                session_generation=generation,
+                client_hint=hint,
             )
         except IntegrityError:
             await self._repo.rollback()

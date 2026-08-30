@@ -38,6 +38,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `audit/v1/` | Admin Service (audit events, SF30+) | 1.0.0 | JSON Schema |
 | `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
 | `unified-phone-auth/v1/` | API Service (unified phone auth, SF06) | 1.0.0 | OpenAPI |
+| `single-session-auth/v1/` | API Service (single-session hardening, SF07) | 1.0.0 | OpenAPI |
 
 ## Compatibility and deprecation status
 

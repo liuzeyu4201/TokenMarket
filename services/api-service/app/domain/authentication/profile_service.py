@@ -21,6 +21,7 @@ from app.errors import (
 from app.repositories.authentication import AuthenticationRepository, utc_now
 from app.security.csrf import issue_csrf_token
 from app.security.profile_token import parse_profile_cookie, profile_token_digest
+from app.security.reference import client_hint
 from app.security.session import generate_session_token, token_digest
 
 
@@ -55,6 +56,7 @@ class ProfileCompletionService:
         role: str,
         idempotency_key: str | None,
         request_id: str,
+        client_ip: str | None = None,
     ) -> ProfileCompleteResult:
         parsed = parse_profile_cookie(cookie_value)
         if parsed is None:
@@ -120,6 +122,13 @@ class ProfileCompletionService:
             )
 
         intent.consumed_at = now
+        generation = await self._repo.bump_session_generation(user)
+        ref_mat = self._settings.key_material("reference")
+        hint = (
+            client_hint(ref_mat.current, client_ip)
+            if ref_mat.current_usable()
+            else None
+        )
         token = generate_session_token(session_mat.version)
         sdigest = token_digest(session_mat.current, token.opaque_secret)
         session_id = uuid.uuid4()
@@ -132,6 +141,8 @@ class ProfileCompletionService:
                 role_snapshot=user.role,
                 created_request_id=request_id,
                 now=now,
+                session_generation=generation,
+                client_hint=hint,
             )
         except IntegrityError:
             await self._repo.rollback()

@@ -140,6 +140,7 @@ def _service_with_challenge(
     repo.commit = AsyncMock()
     repo.rollback = AsyncMock()
     repo.revoke_unrevoked_sessions = AsyncMock(return_value=0)
+    repo.bump_session_generation = AsyncMock(return_value=2)
     repo.insert_session = AsyncMock()
     return service, session, repo
 

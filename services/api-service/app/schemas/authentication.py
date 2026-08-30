@@ -67,6 +67,14 @@ class CompleteProfileRequest(BaseModel):
     role: Literal["buyer", "seller", "both"]
 
 
+class SessionRevokeRequest(BaseModel):
+    """POST /session-revocations body."""
+
+    model_config = {"extra": "forbid"}
+
+    scope: Literal["all"]
+
+
 class RateLimitData(BaseModel):
     model_config = {"extra": "forbid"}
 

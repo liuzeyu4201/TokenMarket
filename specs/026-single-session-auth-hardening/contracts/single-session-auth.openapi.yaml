@@ -1,0 +1,50 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket single-session auth (SF07)
+  version: 1.0.0
+  description: |
+    Additive to phone-auth-session/v1. Session bootstrap checks account generation.
+    POST /session-revocations with scope=all ends every Web session.
+    GET /security-summary returns a redacted current-session view.
+paths:
+  /api/v1/auth/session:
+    get:
+      operationId: bootstrapSessionGeneration
+      responses:
+        "200":
+          description: Current session valid for the account generation
+        "401":
+          description: Missing, revoked, expired, or generation-mismatched cookie
+  /api/v1/auth/session-revocations:
+    post:
+      operationId: revokeWebSessions
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope]
+              properties:
+                scope: { type: string, enum: [all] }
+      responses:
+        "200":
+          description: All Web sessions revoked; generation bumped
+        "401":
+          description: Unauthenticated
+        "403":
+          description: CSRF or origin rejected
+  /api/v1/auth/security-summary:
+    get:
+      operationId: getSecuritySummary
+      responses:
+        "200":
+          description: Redacted session and recent auth events
+        "401":
+          description: Unauthenticated

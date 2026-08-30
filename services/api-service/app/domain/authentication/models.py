@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     SmallInteger,
     String,
     text,
@@ -305,6 +306,10 @@ class AuthSession(Base):
     )
     token_digest: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
     token_key_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    session_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
+    client_hint: Mapped[str | None] = mapped_column(String(32), nullable=True)
     role_snapshot: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole, name="user_role", values_callable=lambda x: [e.value for e in x]

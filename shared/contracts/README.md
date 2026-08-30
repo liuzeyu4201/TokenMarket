@@ -29,6 +29,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `volcano-key-validation/v1/` | Proxy Gateway (provider validation) | 1.0.0 | OpenAPI / Markdown |
 | `volcano-openai-compat/v1/` | Proxy Gateway (Chat Completions adapter) | 1.0.0 | OpenAPI / Markdown |
 | `endpoint-catalog/v1/` | Proxy Gateway (V0.2 Endpoint Catalog) | 1.0.0 | JSON Schema / JSON / Markdown |
+| `native-passthrough/v1/` | Proxy Gateway (native same-protocol kernel, SF18+) | 1.0.0 | Markdown |
 | `project/v1/` | API Service (Project domain, SF10+) | 1.1.0 | OpenAPI |
 | `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.0.0 | OpenAPI |
 | `project-proxy-key/v1/` | API Service (Project proxy Key, SF12+) | 1.0.0 | OpenAPI |
@@ -68,7 +69,8 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   1.1.0 is a backward-compatible expansion implemented by SF14 (encrypted credentials,
   no plaintext read-back). 1.2.0 adds verify, health, and capability snapshots (SF15).
   1.3.0 adds supply lifecycle and mode lock (SF16).
-  Route/usage/pricing/ledger/audit writers land in later SFs.
+  `native-passthrough/v1` is the SF18 same-protocol kernel (no cross-protocol
+  conversion). Route/usage/pricing/ledger/audit writers land in later SFs.
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation

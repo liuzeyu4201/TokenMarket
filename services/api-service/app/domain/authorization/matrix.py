@@ -23,6 +23,10 @@ class Action(str, enum.Enum):
     project_archive = "project.archive"
     project_delete = "project.delete"
     project_enable_protocol = "project.enable_protocol"
+    binding_create = "binding.create"
+    binding_read = "binding.read"
+    binding_publish = "binding.publish"
+    binding_deactivate = "binding.deactivate"
 
 
 # role -> frozenset of allowed actions
@@ -39,6 +43,10 @@ _MATRIX: dict[str, frozenset[Action]] = {
             Action.project_archive,
             Action.project_delete,
             Action.project_enable_protocol,
+            Action.binding_create,
+            Action.binding_read,
+            Action.binding_publish,
+            Action.binding_deactivate,
         }
     ),
     "seller": frozenset(
@@ -65,6 +73,10 @@ _MATRIX: dict[str, frozenset[Action]] = {
             Action.project_archive,
             Action.project_delete,
             Action.project_enable_protocol,
+            Action.binding_create,
+            Action.binding_read,
+            Action.binding_publish,
+            Action.binding_deactivate,
         }
     ),
 }

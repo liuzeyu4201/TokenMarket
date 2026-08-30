@@ -210,6 +210,10 @@ components:
         - project.archive
         - project.delete
         - project.enable_protocol
+        - binding.create
+        - binding.read
+        - binding.publish
+        - binding.deactivate
     LifecycleStatus:
       type: string
       enum: [active, disabled, soft_deleted]

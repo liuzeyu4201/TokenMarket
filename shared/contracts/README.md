@@ -30,6 +30,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `volcano-openai-compat/v1/` | Proxy Gateway (Chat Completions adapter) | 1.0.0 | OpenAPI / Markdown |
 | `endpoint-catalog/v1/` | Proxy Gateway (V0.2 Endpoint Catalog) | 1.0.0 | JSON Schema / JSON / Markdown |
 | `project/v1/` | API Service (Project domain, SF10+) | 1.1.0 | OpenAPI |
+| `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.0.0 | OpenAPI |
 | `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.0.0 | OpenAPI |
 | `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.0.0 | JSON Schema |
 | `usage/v1/` | Billing Service (usage observation, SF26+) | 1.0.0 | JSON Schema |
@@ -87,3 +88,6 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 - `workspace-switch/v1/` owns session workspace (`buyer`/`seller`) and the rule
   that authorization uses the session workspace only. Breaking changes require a
   new version and synchronized API Service + frontend consumers.
+- `provider-binding/v1/` owns Project×protocol Binding draft/validate/publish,
+  single active version, same-protocol constraint, and dedicated degrade
+  without shared-pool fallback. Breaking changes require a new version.

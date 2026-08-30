@@ -64,6 +64,10 @@ _RESOURCE_TYPE = {
     Action.project_archive: "project",
     Action.project_delete: "project",
     Action.project_enable_protocol: "project",
+    Action.binding_create: "binding",
+    Action.binding_read: "binding",
+    Action.binding_publish: "binding",
+    Action.binding_deactivate: "binding",
 }
 
 

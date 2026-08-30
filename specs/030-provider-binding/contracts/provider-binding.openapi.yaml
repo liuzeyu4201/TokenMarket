@@ -1,0 +1,208 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket Provider Binding (SF11)
+  version: 1.0.0
+  description: |
+    Project×protocol 供给配置。禁止跨协议。已发布 version 不可变。
+    dedicated 失效只降级，不回退共享池。SDK 提示不含凭据。
+paths:
+  /api/v1/projects/{project_id}/bindings:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      operationId: listBindings
+      responses:
+        "200":
+          description: Binding 列表
+        "404":
+          description: 不存在与无权同形
+    post:
+      operationId: createBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBindingRequest"
+      responses:
+        "201":
+          description: 草稿已创建
+        "409":
+          description: MODE_MISMATCH 或校验失败
+  /api/v1/projects/{project_id}/bindings/{binding_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/BindingId"
+    get:
+      operationId: getBinding
+      responses:
+        "200":
+          description: Binding
+        "404":
+          description: 不存在与无权同形
+  /api/v1/projects/{project_id}/bindings/{binding_id}/validate:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/BindingId"
+    post:
+      operationId: validateBinding
+      responses:
+        "200":
+          description: 已校验
+        "409":
+          description: 校验失败
+  /api/v1/projects/{project_id}/bindings/{binding_id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/BindingId"
+    post:
+      operationId: publishBinding
+      responses:
+        "200":
+          description: 已发布为该协议唯一 active
+        "409":
+          description: 并发冲突或校验失败
+  /api/v1/projects/{project_id}/bindings/{binding_id}/deactivate:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/BindingId"
+    post:
+      operationId: deactivateBinding
+      responses:
+        "200":
+          description: 已停用
+  /api/v1/projects/{project_id}/bindings/{binding_id}/sdk-hint:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/BindingId"
+    get:
+      operationId: getBindingSdkHint
+      responses:
+        "200":
+          description: 原生 SDK 提示，无凭据
+  /api/v1/projects/{project_id}/bindings/active/{protocol}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - in: path
+        name: protocol
+        required: true
+        schema: { $ref: "#/components/schemas/ProtocolName" }
+    get:
+      operationId: getActiveBinding
+      responses:
+        "200":
+          description: 当前生效或 degraded 快照
+        "404":
+          description: 无生效 Binding
+  /api/v1/projects/{project_id}/bindings/admit:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    post:
+      operationId: admitBindingRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdmitRequest"
+      responses:
+        "200":
+          description: 锁定 version
+        "409":
+          description: 协议/模型/降级拒绝
+components:
+  parameters:
+    ProjectId:
+      in: path
+      name: project_id
+      required: true
+      schema: { type: string, format: uuid }
+    BindingId:
+      in: path
+      name: binding_id
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    ProtocolName:
+      type: string
+      enum: [openai, anthropic, vertex]
+    SupplyMode:
+      type: string
+      enum: [shared, dedicated]
+    BindingStatus:
+      type: string
+      enum: [draft, validated, active, inactive, degraded]
+    CreateBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol, supply_mode]
+      properties:
+        protocol: { $ref: "#/components/schemas/ProtocolName" }
+        supply_mode: { $ref: "#/components/schemas/SupplyMode" }
+        allowed_providers:
+          type: array
+          items: { $ref: "#/components/schemas/ProtocolName" }
+        allowed_models:
+          type: array
+          items: { type: string, minLength: 1 }
+        allowed_regions:
+          type: array
+          items: { type: string }
+        connection_id: { type: string, format: uuid }
+        idempotency_key: { type: string, minLength: 1 }
+    AdmitRequest:
+      type: object
+      additionalProperties: false
+      required: [protocol, provider]
+      properties:
+        protocol: { $ref: "#/components/schemas/ProtocolName" }
+        provider: { $ref: "#/components/schemas/ProtocolName" }
+        model: { type: string }
+    Binding:
+      type: object
+      additionalProperties: false
+      required:
+        - binding_id
+        - project_id
+        - protocol
+        - supply_mode
+        - status
+        - version
+      properties:
+        binding_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        protocol: { $ref: "#/components/schemas/ProtocolName" }
+        supply_mode: { $ref: "#/components/schemas/SupplyMode" }
+        status: { $ref: "#/components/schemas/BindingStatus" }
+        version: { type: integer, minimum: 0 }
+        allowed_providers:
+          type: array
+          items: { type: string }
+        allowed_models:
+          type: array
+          items: { type: string }
+        allowed_regions:
+          type: array
+          items: { type: string }
+        connection_id: { type: string, format: uuid, nullable: true }
+        published_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    SdkHint:
+      type: object
+      additionalProperties: false
+      required: [protocol, base_url, auth_scheme, protocol_version]
+      properties:
+        protocol: { $ref: "#/components/schemas/ProtocolName" }
+        base_url: { type: string }
+        auth_scheme: { type: string, enum: [bearer, x-api-key] }
+        protocol_version: { type: string }
+      description: 不得包含 credential、secret、api_key 字段
+    AdmitResult:
+      type: object
+      additionalProperties: false
+      required: [binding_id, version, protocol]
+      properties:
+        binding_id: { type: string, format: uuid }
+        version: { type: integer }
+        protocol: { $ref: "#/components/schemas/ProtocolName" }
+        supply_mode: { $ref: "#/components/schemas/SupplyMode" }

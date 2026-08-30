@@ -62,6 +62,13 @@ test:
 		--cov-report=term-missing \
 		--cov-fail-under=80 \
 		tests/unit tests/integration -q
+	# Provider Binding domain must stay ≥80% (SF11)
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app.domain.bindings \
+		--cov=app.api.v1.bindings \
+		--cov-report=term-missing \
+		--cov-fail-under=80 \
+		tests/unit tests/integration -q
 
 build:
 	docker build -t $(IMAGE_TAG) .

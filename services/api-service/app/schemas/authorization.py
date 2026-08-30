@@ -22,6 +22,10 @@ ActionLiteral = Literal[
     "project.archive",
     "project.delete",
     "project.enable_protocol",
+    "binding.create",
+    "binding.read",
+    "binding.publish",
+    "binding.deactivate",
 ]
 
 ResourceTypeLiteral = Literal["proxy_key", "seller_key", "project"]

@@ -179,8 +179,22 @@ func topLevelID(b []byte) string {
 		if fallback == "" && strings.HasSuffix(ks, "_id") {
 			fallback = s
 		}
+		if fallback == "" && ks == "name" {
+			fallback = lastPathSegment(s)
+		}
 	}
 	return fallback
+}
+
+func lastPathSegment(s string) string {
+	s = strings.Trim(s, "/")
+	if s == "" {
+		return ""
+	}
+	if i := strings.LastIndexByte(s, '/'); i >= 0 && i+1 < len(s) {
+		return s[i+1:]
+	}
+	return s
 }
 
 type deadlineReadCloser struct {

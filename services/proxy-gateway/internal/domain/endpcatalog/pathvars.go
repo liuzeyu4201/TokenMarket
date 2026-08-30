@@ -36,8 +36,16 @@ func PathVars(tmpl, path string) map[string]string {
 	return out
 }
 
+var contextPathVars = map[string]struct{}{
+	"project":   {},
+	"location":  {},
+	"publisher": {},
+	"model":     {},
+}
+
 // ResourceID picks a vendor resource identifier from path variables.
-// Preference: `id`, then any `*_id` in name order, then any remaining value.
+// Preference: `id`, then any `*_id` in name order, then remaining non-context
+// values (skips Google project/location/publisher/model).
 func ResourceID(vars map[string]string) string {
 	if len(vars) == 0 {
 		return ""
@@ -58,6 +66,9 @@ func ResourceID(vars map[string]string) string {
 		}
 	}
 	for _, k := range keys {
+		if _, skip := contextPathVars[k]; skip {
+			continue
+		}
 		if v := strings.TrimSpace(vars[k]); v != "" {
 			return v
 		}

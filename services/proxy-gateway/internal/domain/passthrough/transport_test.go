@@ -30,6 +30,13 @@ func TestTopLevelIDEmpty(t *testing.T) {
 	}
 }
 
+func TestTopLevelIDNameSegment(t *testing.T) {
+	got := topLevelID([]byte(`{"name":"projects/p/locations/us/operations/op-1"}`))
+	if got != "op-1" {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestWebsocketUpgradeDetect(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/openai/v1/realtime", nil)
 	req.Header.Set("Upgrade", "websocket")

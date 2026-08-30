@@ -55,3 +55,17 @@ func TestResourceIDFallbackPlain(t *testing.T) {
 		t.Fatal("nil vars")
 	}
 }
+
+func TestResourceIDSkipsGoogleContext(t *testing.T) {
+	got := endpcatalog.ResourceID(map[string]string{
+		"project":   "p1",
+		"location":  "us",
+		"operation": "op-9",
+	})
+	if got != "op-9" {
+		t.Fatalf("%q", got)
+	}
+	if endpcatalog.ResourceID(map[string]string{"project": "p1", "location": "us", "model": "m"}) != "" {
+		t.Fatal("context-only path must not pin")
+	}
+}

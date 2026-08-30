@@ -18,9 +18,11 @@ from starlette.responses import Response
 from . import database
 from .api.v1.auth import router as auth_router
 from .api.v1.authorization import router as authorization_router
-from .api.v1.internal import router as internal_router
 from .api.v1.bindings import internal_router as bindings_internal_router
 from .api.v1.bindings import router as bindings_router
+from .api.v1.connections import internal_router as connections_internal_router
+from .api.v1.connections import router as connections_router
+from .api.v1.internal import router as internal_router
 from .api.v1.project_keys import router as project_keys_router
 from .api.v1.projects import router as projects_router
 from .api.v1.proxy_keys import router as proxy_keys_router
@@ -29,8 +31,10 @@ from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from
 from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
-from .domain.endpcatalog import CatalogError, must_load
 from .domain.bindings.service import BindingService
+from .domain.connections.service import ConnectionService, ServiceConnectionLookup
+from .domain.connections.store import MemoryConnectionStore
+from .domain.endpcatalog import CatalogError, must_load
 from .domain.projects.service import ProjectService
 from .domain.proxykeys.service import ProxyKeyService
 from .domain.sellerkeys.crypto import CredentialEncryptor
@@ -90,11 +94,22 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
                 store=SessionedUsageStore(maker)
             )
             from app.repositories.bindings import SessionedBindingStore
+            from app.repositories.connections import SessionedConnectionStore
             from app.repositories.projects import SessionedProjectStore
 
             proj_store = SessionedProjectStore(maker)
             bind_store = SessionedBindingStore(maker)
-            bind_svc = BindingService(store=bind_store, projects=proj_store)
+            conn_store = SessionedConnectionStore(maker)
+            conn_svc = ConnectionService(
+                application.state.seller_encryptor, fp, store=conn_store
+            )
+            bind_svc = BindingService(
+                store=bind_store,
+                projects=proj_store,
+                connections=ServiceConnectionLookup(conn_svc),
+            )
+            conn_svc.bind_bindings(bind_svc)
+            application.state.connection_service = conn_svc
             application.state.binding_service = bind_svc
             application.state.project_service = ProjectService(
                 store=proj_store, binding=bind_svc
@@ -110,7 +125,14 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
             from app.domain.projects.store import MemoryProjectStore
 
             mem_proj = MemoryProjectStore()
-            bind_svc = BindingService(projects=mem_proj)
+            conn_svc = ConnectionService(
+                application.state.seller_encryptor, fp, store=MemoryConnectionStore()
+            )
+            bind_svc = BindingService(
+                projects=mem_proj, connections=ServiceConnectionLookup(conn_svc)
+            )
+            conn_svc.bind_bindings(bind_svc)
+            application.state.connection_service = conn_svc
             application.state.binding_service = bind_svc
             application.state.project_service = ProjectService(
                 store=mem_proj, binding=bind_svc
@@ -123,7 +145,14 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
         from app.domain.projects.store import MemoryProjectStore
 
         mem_proj = MemoryProjectStore()
-        bind_svc = BindingService(projects=mem_proj)
+        conn_svc = ConnectionService(
+            application.state.seller_encryptor, fp, store=MemoryConnectionStore()
+        )
+        bind_svc = BindingService(
+            projects=mem_proj, connections=ServiceConnectionLookup(conn_svc)
+        )
+        conn_svc.bind_bindings(bind_svc)
+        application.state.connection_service = conn_svc
         application.state.binding_service = bind_svc
         application.state.project_service = ProjectService(
             store=mem_proj, binding=bind_svc
@@ -140,7 +169,7 @@ service_info = Info("app", "API service build information")
 service_info.info({"service": "api-service", "version": VERSION})
 
 _AUTH_PATH_PREFIX = "/api/v1/auth"
-_CORS_ALLOW_METHODS = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+_CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 _CORS_ALLOW_HEADERS = [
     "Content-Type",
     "X-Request-ID",
@@ -283,6 +312,8 @@ app.include_router(projects_router)
 app.include_router(project_keys_router)
 app.include_router(bindings_router)
 app.include_router(bindings_internal_router)
+app.include_router(connections_router)
+app.include_router(connections_internal_router)
 app.include_router(internal_router)
 
 app.add_middleware(

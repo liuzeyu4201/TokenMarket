@@ -35,7 +35,9 @@ from app.repositories.authorization import AuthorizationRepository
 
 logger = logging.getLogger("api-service")
 
-_CREATE_ACTIONS = frozenset({Action.proxy_key_create, Action.seller_key_register})
+_CREATE_ACTIONS = frozenset(
+    {Action.proxy_key_create, Action.seller_key_register, Action.connection_create}
+)
 _STATE_CHANGE_ACTIONS = frozenset(
     {
         Action.proxy_key_create,
@@ -48,6 +50,9 @@ _STATE_CHANGE_ACTIONS = frozenset(
         Action.project_archive,
         Action.project_delete,
         Action.project_enable_protocol,
+        Action.connection_create,
+        Action.connection_update,
+        Action.connection_delete,
     }
 )
 _RESOURCE_TYPE = {
@@ -68,6 +73,10 @@ _RESOURCE_TYPE = {
     Action.binding_read: "binding",
     Action.binding_publish: "binding",
     Action.binding_deactivate: "binding",
+    Action.connection_create: "connection",
+    Action.connection_read: "connection",
+    Action.connection_update: "connection",
+    Action.connection_delete: "connection",
 }
 
 

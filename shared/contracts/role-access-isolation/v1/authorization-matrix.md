@@ -26,6 +26,10 @@
 | `binding.read` | `binding` | yes | 仅所有者 |
 | `binding.publish` | `binding` | yes | 单 active version |
 | `binding.deactivate` | `binding` | yes | 停用不改历史 version 行 |
+| `connection.create` | `connection` | no | 卖家工作区；凭据立即加密 |
+| `connection.read` | `connection` | yes | 仅所有者；无明文回读 |
+| `connection.update` | `connection` | yes | 整体替换凭据 |
+| `connection.delete` | `connection` | yes | 销毁密文；专享 Binding degraded |
 
 ## Role matrix
 
@@ -49,6 +53,10 @@
 | `binding.read` | allow | deny | allow |
 | `binding.publish` | allow | deny | allow |
 | `binding.deactivate` | allow | deny | allow |
+| `connection.create` | deny | allow | allow |
+| `connection.read` | deny | allow | allow |
+| `connection.update` | deny | allow | allow |
+| `connection.delete` | deny | allow | allow |
 
 `allow` 仍须通过账户 eligible 与（若适用）所有权/生命周期检查。
 

@@ -73,9 +73,25 @@ describe('AppShell', () => {
     expect(screen.getByTestId('workspace-identity')).toHaveTextContent('工作区：买家')
     expect(screen.getByTestId('workspace-switch')).toBeEnabled()
     expect(screen.queryByRole('link', { name: /管理员/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '跳到主要内容' })).toHaveAttribute('href', '#main-content')
+    expect(screen.getByRole('link', { name: '跳到主要内容' })).toHaveAttribute(
+      'href',
+      '#main-content',
+    )
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '登录' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '提供商连接' })).not.toBeInTheDocument()
+  })
+
+  it('shows provider connection link in seller workspace', async () => {
+    bootstrapSession.mockResolvedValue({ ...SESSION, workspace: 'seller' })
+    renderShell()
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: '提供商连接' })).toHaveAttribute(
+        'href',
+        '/connections',
+      )
+    })
+    expect(screen.queryByRole('link', { name: '我的 Project' })).not.toBeInTheDocument()
   })
 
   it('lets dual-role users switch workspace', async () => {

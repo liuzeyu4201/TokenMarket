@@ -19,6 +19,7 @@ const TITLE: Record<string, string> = {
   '/account/security': '账户安全',
   '/design-system': '组件目录',
   '/projects': '我的 Project',
+  '/connections': '提供商连接',
 }
 
 function pageTitle(pathname: string): string {
@@ -149,6 +150,14 @@ export function AppShell() {
                   aria-current={location.pathname.startsWith('/projects') ? 'page' : undefined}
                 >
                   我的 Project
+                </Link>
+              ) : null}
+              {auth.session!.workspace === 'seller' ? (
+                <Link
+                  to="/connections"
+                  aria-current={location.pathname.startsWith('/connections') ? 'page' : undefined}
+                >
+                  提供商连接
                 </Link>
               ) : null}
               <Link

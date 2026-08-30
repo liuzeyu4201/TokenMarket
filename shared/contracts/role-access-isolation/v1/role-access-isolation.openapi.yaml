@@ -192,7 +192,7 @@ components:
   schemas:
     ResourceType:
       type: string
-      enum: [proxy_key, seller_key, project]
+      enum: [proxy_key, seller_key, project, connection]
     Action:
       type: string
       enum:
@@ -214,6 +214,10 @@ components:
         - binding.read
         - binding.publish
         - binding.deactivate
+        - connection.create
+        - connection.read
+        - connection.update
+        - connection.delete
     LifecycleStatus:
       type: string
       enum: [active, disabled, soft_deleted]

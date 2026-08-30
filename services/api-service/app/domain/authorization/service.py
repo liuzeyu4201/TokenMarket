@@ -43,6 +43,11 @@ _STATE_CHANGE_ACTIONS = frozenset(
         Action.seller_key_register,
         Action.seller_key_update,
         Action.seller_key_disable,
+        Action.project_create,
+        Action.project_update,
+        Action.project_archive,
+        Action.project_delete,
+        Action.project_enable_protocol,
     }
 )
 _RESOURCE_TYPE = {
@@ -53,6 +58,12 @@ _RESOURCE_TYPE = {
     Action.seller_key_read: "seller_key",
     Action.seller_key_update: "seller_key",
     Action.seller_key_disable: "seller_key",
+    Action.project_create: "project",
+    Action.project_read: "project",
+    Action.project_update: "project",
+    Action.project_archive: "project",
+    Action.project_delete: "project",
+    Action.project_enable_protocol: "project",
 }
 
 

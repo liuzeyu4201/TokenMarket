@@ -16,9 +16,15 @@ ActionLiteral = Literal[
     "seller_key.update",
     "seller_key.disable",
     "route_candidate_exclude_self",
+    "project.create",
+    "project.read",
+    "project.update",
+    "project.archive",
+    "project.delete",
+    "project.enable_protocol",
 ]
 
-ResourceTypeLiteral = Literal["proxy_key", "seller_key"]
+ResourceTypeLiteral = Literal["proxy_key", "seller_key", "project"]
 LifecycleLiteral = Literal["active", "disabled", "soft_deleted"]
 
 

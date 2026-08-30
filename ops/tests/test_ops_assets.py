@@ -49,6 +49,15 @@ def test_ops_runbook_gateway_stateless_exists() -> None:
     assert runbook.is_file()
 
 
+def test_ops_runbook_ha_rollout_exists() -> None:
+    runbook = OPS_DIR / "runbooks" / "ha-rollout.md"
+    assert runbook.is_file()
+
+
+def test_ops_postgres_restore_runbook_exists() -> None:
+    assert (OPS_DIR / "backup" / "postgres-restore.md").is_file()
+
+
 def test_ops_validate_assets_tool_exists() -> None:
     tool = OPS_DIR / "tools" / "validate_assets.py"
     assert tool.is_file()

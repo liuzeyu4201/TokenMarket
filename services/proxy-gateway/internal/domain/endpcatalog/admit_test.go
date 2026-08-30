@@ -150,3 +150,18 @@ func TestAdmitAnthropicMessages(t *testing.T) {
 		t.Fatalf("got %s", d.Code)
 	}
 }
+
+func TestMatchPrefersLiteralOverPathVar(t *testing.T) {
+	c, err := endpcatalog.LoadEmbedded(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := endpcatalog.Match(c, "openai", "POST", "/v1/threads/runs")
+	if rec == nil || rec.PathTemplate != "/v1/threads/runs" {
+		t.Fatalf("got %+v", rec)
+	}
+	rec = endpcatalog.Match(c, "openai", "POST", "/v1/threads/thread-1")
+	if rec == nil || rec.PathTemplate != "/v1/threads/{thread_id}" {
+		t.Fatalf("got %+v", rec)
+	}
+}

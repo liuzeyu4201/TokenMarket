@@ -47,6 +47,8 @@ func Match(c *Catalog, provider, method, path string) *EndpointRecord {
 	method = strings.ToUpper(method)
 	path = normalizePath(path)
 	var best *EndpointRecord
+	bestVars := 1 << 30
+	bestLit := -1
 	bestLen := -1
 	for i := range c.Records {
 		rec := &c.Records[i]
@@ -56,9 +58,13 @@ func Match(c *Catalog, provider, method, path string) *EndpointRecord {
 		if !templateRegexp(rec.PathTemplate).MatchString(path) {
 			continue
 		}
+		vars := len(varNamePat.FindAllString(rec.PathTemplate, -1))
+		lit := len(varNamePat.ReplaceAllString(rec.PathTemplate, ""))
 		n := len(rec.PathTemplate)
-		if n > bestLen {
+		if vars < bestVars || (vars == bestVars && lit > bestLit) || (vars == bestVars && lit == bestLit && n > bestLen) {
 			best = rec
+			bestVars = vars
+			bestLit = lit
 			bestLen = n
 		}
 	}

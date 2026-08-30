@@ -477,6 +477,7 @@ class AuthenticationRepository:
         now: datetime | None = None,
         session_generation: int = 1,
         client_hint: str | None = None,
+        workspace: str = "buyer",
     ) -> AuthSession:
         ts = now or utc_now()
         expires = ts + SESSION_TTL
@@ -487,6 +488,7 @@ class AuthenticationRepository:
             token_key_version=token_key_version,
             session_generation=session_generation,
             client_hint=client_hint,
+            workspace=workspace,
             role_snapshot=role_snapshot,
             issued_at=ts,
             expires_at=expires,

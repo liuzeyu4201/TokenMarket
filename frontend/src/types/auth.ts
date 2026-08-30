@@ -4,6 +4,7 @@
  */
 
 export type UserRole = 'buyer' | 'seller' | 'both'
+export type Workspace = 'buyer' | 'seller'
 
 export interface RegisterRequest {
   phone: string
@@ -58,6 +59,7 @@ export interface SessionData {
   nickname: string
   phone_masked: string
   role: UserRole
+  workspace?: Workspace
   expires_at: string
   /** Session-bound CSRF proof — never persist or render. */
   csrf_token: string
@@ -69,6 +71,7 @@ export interface SessionSummary {
   nickname: string
   phoneMasked: string
   role: UserRole
+  workspace: Workspace
   expiresAt: string
 }
 
@@ -95,6 +98,7 @@ export function toSessionSummary(data: SessionData): SessionSummary {
     nickname: data.nickname,
     phoneMasked: data.phone_masked,
     role: data.role,
+    workspace: data.workspace ?? (data.role === 'seller' ? 'seller' : 'buyer'),
     expiresAt: data.expires_at,
   }
 }

@@ -114,11 +114,26 @@ export function AppShell() {
                 </span>
               </span>
               <span className="workspace-chip" data-testid="workspace-identity">
-                工作区：{ROLE_LABEL[auth.session!.role] ?? auth.session!.role}
+                工作区：{auth.session!.workspace === 'seller' ? '卖家' : '买家'}
               </span>
-              <button type="button" className="link-button" disabled title="即将开放">
-                切换工作区（即将开放）
-              </button>
+              {auth.session!.role === 'both' ? (
+                <button
+                  type="button"
+                  className="link-button"
+                  data-testid="workspace-switch"
+                  onClick={() =>
+                    void auth.switchWorkspace(
+                      auth.session!.workspace === 'seller' ? 'buyer' : 'seller',
+                    )
+                  }
+                >
+                  切换到{auth.session!.workspace === 'seller' ? '买家' : '卖家'}工作区
+                </button>
+              ) : (
+                <button type="button" className="link-button" disabled title="未授权">
+                  切换工作区（未授权）
+                </button>
+              )}
               <Link
                 to="/dashboard"
                 aria-current={location.pathname === '/dashboard' ? 'page' : undefined}

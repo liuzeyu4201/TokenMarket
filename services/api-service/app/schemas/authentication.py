@@ -47,8 +47,15 @@ class SessionData(BaseModel):
     nickname: str = Field(min_length=1, max_length=50)
     phone_masked: str
     role: Literal["buyer", "seller", "both"]
+    workspace: Literal["buyer", "seller"] = "buyer"
     expires_at: datetime
     csrf_token: str = Field(min_length=32, max_length=256)
+
+
+class SwitchWorkspaceRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    workspace: Literal["buyer", "seller"]
 
 
 class VerificationFailureData(BaseModel):

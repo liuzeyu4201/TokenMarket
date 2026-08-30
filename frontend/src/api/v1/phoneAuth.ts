@@ -345,6 +345,38 @@ export async function revokeAllSessions(csrfToken: string | null): Promise<void>
   }
 }
 
+export async function switchWorkspace(
+  workspace: 'buyer' | 'seller',
+  csrfToken: string | null,
+): Promise<SessionData> {
+  try {
+    const headers: Record<string, string> = {}
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken
+    }
+    const { data, requestId } = await apiFetch<SessionEnvelope>('/api/v1/auth/workspace', {
+      method: 'POST',
+      sameOriginAuth: true,
+      headers,
+      body: JSON.stringify({ workspace }),
+    })
+    return assertSuccessData<SessionData>(data, requestId)
+  } catch (err) {
+    throw mapPhoneAuthError(err)
+  }
+}
+
+export const WORKSPACE_UI_KEY = 'tokenmarket-workspace-ui'
+
+export function clearWorkspaceUiState(): void {
+  try {
+    sessionStorage.removeItem(WORKSPACE_UI_KEY)
+    localStorage.removeItem(WORKSPACE_UI_KEY)
+  } catch {
+    // storage may be unavailable
+  }
+}
+
 export async function logoutSession(csrfToken: string | null): Promise<void> {
   try {
     const headers: Record<string, string> = {}

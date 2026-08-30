@@ -31,7 +31,10 @@ export function Dashboard() {
           <Link to="/projects">管理买家 Project</Link>
         </p>
       ) : (
-        <p>当前为卖家工作区，买家 Project 入口不可用。</p>
+        <p>
+          当前为卖家工作区，买家 Project 入口不可用。
+          <Link to="/connections">管理提供商连接</Link>
+        </p>
       )}
       {session.workspace === 'buyer' ? (
         <p className="hint">在 Project 详情中签发受限代理 Key；明文只展示一次。</p>

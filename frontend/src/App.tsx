@@ -8,6 +8,7 @@ import { DesignSystem } from './pages/DesignSystem'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
 import { NotFound } from './pages/NotFound'
+import { Connections } from './pages/Connections'
 import { ProjectDetail } from './pages/ProjectDetail'
 import { Projects } from './pages/Projects'
 import { Register } from './pages/Register'
@@ -52,6 +53,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ProjectDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="connections"
+              element={
+                <ProtectedRoute>
+                  <Connections />
                 </ProtectedRoute>
               }
             />

@@ -35,6 +35,10 @@ _EXPECTED: dict[str, set[Action]] = {
         Action.seller_key_read,
         Action.seller_key_update,
         Action.seller_key_disable,
+        Action.connection_create,
+        Action.connection_read,
+        Action.connection_update,
+        Action.connection_delete,
     },
     "both": set(all_actions()),
 }

@@ -69,6 +69,13 @@ test:
 		--cov-report=term-missing \
 		--cov-fail-under=80 \
 		tests/unit tests/integration -q
+	# Provider Connection domain must stay ≥80% (SF14)
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app.domain.connections \
+		--cov=app.api.v1.connections \
+		--cov-report=term-missing \
+		--cov-fail-under=80 \
+		tests/unit tests/integration -q
 
 build:
 	docker build -t $(IMAGE_TAG) .

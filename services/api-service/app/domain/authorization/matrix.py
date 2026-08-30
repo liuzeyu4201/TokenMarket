@@ -27,6 +27,10 @@ class Action(str, enum.Enum):
     binding_read = "binding.read"
     binding_publish = "binding.publish"
     binding_deactivate = "binding.deactivate"
+    connection_create = "connection.create"
+    connection_read = "connection.read"
+    connection_update = "connection.update"
+    connection_delete = "connection.delete"
 
 
 # role -> frozenset of allowed actions
@@ -55,6 +59,10 @@ _MATRIX: dict[str, frozenset[Action]] = {
             Action.seller_key_read,
             Action.seller_key_update,
             Action.seller_key_disable,
+            Action.connection_create,
+            Action.connection_read,
+            Action.connection_update,
+            Action.connection_delete,
         }
     ),
     "both": frozenset(
@@ -77,6 +85,10 @@ _MATRIX: dict[str, frozenset[Action]] = {
             Action.binding_read,
             Action.binding_publish,
             Action.binding_deactivate,
+            Action.connection_create,
+            Action.connection_read,
+            Action.connection_update,
+            Action.connection_delete,
         }
     ),
 }

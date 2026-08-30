@@ -372,6 +372,23 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
     "deploy-environment/v1/": ("Repository and infrastructure maintainers", "1.0.0"),
     "user-registration/v1/": ("API Service (user domain)", "1.0.0"),
     "phone-auth-session/v1/": ("API Service (authentication domain)", "1.0.0"),
+    "role-access-isolation/v1/": ("API Service (authorization domain)", "1.0.0"),
+    "volcano-key-validation/v1/": ("Proxy Gateway (provider validation)", "1.0.0"),
+    "volcano-openai-compat/v1/": (
+        "Proxy Gateway (Chat Completions adapter)",
+        "1.0.0",
+    ),
+    "endpoint-catalog/v1/": ("Proxy Gateway (V0.2 Endpoint Catalog)", "1.0.0"),
+    "project/v1/": ("API Service (Project domain, SF10+)", "1.0.0"),
+    "provider-connection/v1/": (
+        "API Service (Provider Connection, SF14+)",
+        "1.0.0",
+    ),
+    "route-decision/v1/": ("Proxy Gateway (routing decision, SF23+)", "1.0.0"),
+    "usage/v1/": ("Billing Service (usage observation, SF26+)", "1.0.0"),
+    "pricing/v1/": ("Billing Service (versioned rates, SF27+)", "1.0.0"),
+    "ledger/v1/": ("Billing Service (immutable ledger, SF28+)", "1.0.0"),
+    "audit/v1/": ("Admin Service (audit events, SF30+)", "1.0.0"),
 }
 
 

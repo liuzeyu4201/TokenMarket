@@ -1,0 +1,66 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket Provider Connection contract (SF01 source, implemented by SF14+)
+  version: 1.0.0
+  description: |
+    凭据只在创建请求出现一次。响应与列表不得包含明文。无 read-back 路径。
+paths:
+  /api/v1/provider-connections:
+    post:
+      operationId: createProviderConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProviderConnectionRequest"
+      responses:
+        "201":
+          description: 已创建（无明文）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderConnection"
+components:
+  schemas:
+    ProviderName:
+      type: string
+      enum: [openai, anthropic, vertex]
+    SupplyMode:
+      type: string
+      enum: [shared, dedicated]
+    CreateProviderConnectionRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, supply_mode, credential]
+      properties:
+        provider: { $ref: "#/components/schemas/ProviderName" }
+        supply_mode: { $ref: "#/components/schemas/SupplyMode" }
+        region: { type: string }
+        purpose: { type: string }
+        credential:
+          type: object
+          additionalProperties: false
+          description: write-only；不得在任何响应中回显
+          required: [secret]
+          properties:
+            secret: { type: string, minLength: 1, writeOnly: true }
+            project_number: { type: string }
+            location: { type: string }
+        idempotency_key: { type: string }
+    ProviderConnection:
+      type: object
+      additionalProperties: false
+      required: [connection_id, seller_account_id, provider, supply_mode, credential_fingerprint]
+      properties:
+        connection_id: { type: string, minLength: 1 }
+        seller_account_id: { type: string, minLength: 1 }
+        provider: { $ref: "#/components/schemas/ProviderName" }
+        supply_mode: { $ref: "#/components/schemas/SupplyMode" }
+        region: { type: string }
+        purpose: { type: string }
+        credential_fingerprint:
+          type: string
+          minLength: 8
+          description: 不可逆指纹；不是密钥
+      description: 禁止 credential 或 plaintext 读字段。

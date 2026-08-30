@@ -20,6 +20,7 @@ from .database import (
     create_postgres_engine,
     probe_postgres_readiness,
 )
+from .domain.endpcatalog import CatalogError, must_load
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
 
@@ -63,6 +64,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     startup; injected probes are preserved while any present engine is still
     disposed at shutdown.
     """
+    try:
+        catalog = must_load()
+    except CatalogError as exc:
+        logger.error(
+            "endpoint catalog load failed",
+            extra={"code": exc.code, "message": exc.message},
+        )
+        raise
+    app.state.endpoint_catalog = catalog
+    logger.info(
+        "endpoint catalog loaded",
+        extra={
+            "catalog_major": catalog["catalog_major"],
+            "catalog_minor": catalog["catalog_minor"],
+            "freeze_date": catalog["freeze_date"],
+            "record_count": len(catalog["records"]),
+        },
+    )
     created = getattr(app.state, "postgres_probe", None) is None
     if created:
         probe, engine = _build_probe_from_env()

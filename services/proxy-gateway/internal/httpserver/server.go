@@ -24,6 +24,8 @@ type Config struct {
 	// MountValidate 为 true 时才在本 Server 上挂载 validate 路由（C1：公网 listener 可关掉）
 	MountValidate bool
 	Proxy         *ProxyDeps
+	// CatalogReady 非 nil 且为 false 时 readiness 失败关闭（目录未锁定）。
+	CatalogReady *bool
 }
 
 // Server wraps the Gin engine and configuration.
@@ -112,6 +114,16 @@ func (s *Server) liveness(c *gin.Context) {
 }
 
 func (s *Server) readiness(c *gin.Context) {
+	if s.config.CatalogReady != nil && !*s.config.CatalogReady {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"service":    s.config.Service,
+			"status":     "not_ready",
+			"version":    s.config.Version,
+			"request_id": c.GetString("request_id"),
+			"code":       "CATALOG_LOAD_FAILED",
+		})
+		return
+	}
 	s.healthResponse(c, "ready")
 }
 

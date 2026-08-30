@@ -11,6 +11,7 @@ import (
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/application"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/chatcompat"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/endpcatalog"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keyhealth"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keypool"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/providervalid"
@@ -94,6 +95,19 @@ func main() {
 		usageSink = dur
 	}
 
+	catalog, err := endpcatalog.MustLoadFromEnv()
+	if err != nil {
+		logger.Error("endpoint catalog load failed", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("endpoint catalog loaded",
+		"catalog_major", catalog.CatalogMajor,
+		"catalog_minor", catalog.CatalogMinor,
+		"freeze_date", catalog.FreezeDate,
+		"record_count", len(catalog.Records),
+	)
+	catalogReady := true
+
 	httpMetrics := observability.DefaultProxyHTTPMetrics()
 	inventory := observability.DefaultKeyInventoryMetrics()
 	publishInventory(inventory, pool)
@@ -119,6 +133,7 @@ func main() {
 		Validate:      validateDeps,
 		MountValidate: mountOnPublic,
 		Proxy:         proxyDeps,
+		CatalogReady:  &catalogReady,
 	})
 	if err != nil {
 		logger.Error("failed to create public server", "error", err)

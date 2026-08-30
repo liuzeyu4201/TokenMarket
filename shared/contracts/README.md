@@ -25,10 +25,17 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `deploy-environment/v1/` | Repository and infrastructure maintainers | 1.0.0 | Markdown |
 | `user-registration/v1/` | API Service (user domain) | 1.0.0 | OpenAPI / Markdown |
 | `phone-auth-session/v1/` | API Service (authentication domain) | 1.0.0 | OpenAPI / Markdown |
-
 | `role-access-isolation/v1/` | API Service (authorization domain) | 1.0.0 | OpenAPI / Markdown |
 | `volcano-key-validation/v1/` | Proxy Gateway (provider validation) | 1.0.0 | OpenAPI / Markdown |
 | `volcano-openai-compat/v1/` | Proxy Gateway (Chat Completions adapter) | 1.0.0 | OpenAPI / Markdown |
+| `endpoint-catalog/v1/` | Proxy Gateway (V0.2 Endpoint Catalog) | 1.0.0 | JSON Schema / JSON / Markdown |
+| `project/v1/` | API Service (Project domain, SF10+) | 1.0.0 | OpenAPI |
+| `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.0.0 | OpenAPI |
+| `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.0.0 | JSON Schema |
+| `usage/v1/` | Billing Service (usage observation, SF26+) | 1.0.0 | JSON Schema |
+| `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.0.0 | JSON Schema |
+| `ledger/v1/` | Billing Service (immutable ledger, SF28+) | 1.0.0 | JSON Schema |
+| `audit/v1/` | Admin Service (audit events, SF30+) | 1.0.0 | JSON Schema |
 
 ## Compatibility and deprecation status
 
@@ -45,6 +52,12 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 - `local-environment/v1/` owns the SF02 dependency set, URL grammar, workspace identity,
   lock, resource, probe, persistence and recovery rules; incompatible changes require a
   new version and synchronized consumers.
+- `endpoint-catalog/v1/` is the V0.2 freeze-day (2026-08-31) unique source for OpenAI,
+  Anthropic, and Google Vertex model data-plane scope (ADR 005). Published versions only
+  add compatible records/fields; `catalog_major` mismatch fail-closes consumers. Preview/beta
+  require Project opt-in. Control-plane paths are cataloged and rejected. Volcano V0.1
+  contracts stay independent. Domain Project/Connection/route/usage/pricing/ledger/audit
+  contracts in this table are source-of-truth schemas; writers land in later SFs.
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation

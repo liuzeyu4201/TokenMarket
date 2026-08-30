@@ -390,7 +390,7 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
     ),
     "provider-connection/v1/": (
         "API Service (Provider Connection, SF14+)",
-        "1.1.0",
+        "1.2.0",
     ),
     "route-decision/v1/": ("Proxy Gateway (routing decision, SF23+)", "1.0.0"),
     "usage/v1/": ("Billing Service (usage observation, SF26+)", "1.0.0"),

@@ -12,6 +12,7 @@ const listConnections = vi.fn()
 const createConnection = vi.fn()
 const replaceConnectionCredential = vi.fn()
 const deleteConnection = vi.fn()
+const verifyConnection = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
   const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
@@ -31,6 +32,7 @@ vi.mock('../api/v1/connections', async () => {
     createConnection: (...args: unknown[]) => createConnection(...args),
     replaceConnectionCredential: (...args: unknown[]) => replaceConnectionCredential(...args),
     deleteConnection: (...args: unknown[]) => deleteConnection(...args),
+    verifyConnection: (...args: unknown[]) => verifyConnection(...args),
   }
 })
 
@@ -52,6 +54,7 @@ const ROW = {
   credential_fingerprint: 'abc123fingerprint',
   credential_version: 1,
   status: 'active' as const,
+  health_state: 'healthy' as const,
 }
 
 function renderPage() {
@@ -73,6 +76,8 @@ describe('Connections page', () => {
     createConnection.mockReset()
     replaceConnectionCredential.mockReset()
     deleteConnection.mockReset()
+    verifyConnection.mockReset()
+    verifyConnection.mockResolvedValue({ ...ROW, health_state: 'healthy' })
     listConnections.mockResolvedValue([])
     createConnection.mockResolvedValue(ROW)
   })
@@ -117,6 +122,23 @@ describe('Connections page', () => {
     })
     expect(screen.queryByText('sk-once')).not.toBeInTheDocument()
     expect(screen.queryByText('sk-live')).not.toBeInTheDocument()
+  })
+
+  it('shows health and re-verify without echoing secret', async () => {
+    bootstrapSession.mockResolvedValue(SESSION)
+    listConnections.mockResolvedValue([{ ...ROW, health_state: 'unhealthy' }])
+    const user = userEvent.setup()
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByTestId('connection-health')).toHaveTextContent('不健康')
+    })
+    await user.click(screen.getByRole('button', { name: '立即复验' }))
+    await waitFor(() => {
+      expect(verifyConnection).toHaveBeenCalled()
+    })
+    const [, csrf] = verifyConnection.mock.calls[0] as [string, string]
+    expect(csrf).toBe('csrf-connections')
+    expect(screen.queryByText('sk-never-show-this')).not.toBeInTheDocument()
   })
 
   it('hides create for buyer workspace', async () => {

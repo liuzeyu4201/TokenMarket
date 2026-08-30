@@ -34,6 +34,8 @@ export function Dashboard() {
         <p>
           当前为卖家工作区，买家 Project 入口不可用。
           <Link to="/connections">管理提供商连接</Link>
+          {' · '}
+          <Link to="/supply">供给工作台</Link>
         </p>
       )}
       {session.workspace === 'buyer' ? (

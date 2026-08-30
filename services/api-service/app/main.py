@@ -27,6 +27,7 @@ from .api.v1.project_keys import router as project_keys_router
 from .api.v1.projects import router as projects_router
 from .api.v1.proxy_keys import router as proxy_keys_router
 from .api.v1.seller_keys import router as seller_keys_router
+from .api.v1.workbench import router as workbench_router
 from .auth_rate_limit import MemoryAuthRateLimiter, build_auth_rate_limiter_from_env
 from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
@@ -43,6 +44,7 @@ from .domain.sellerkeys.crypto import CredentialEncryptor
 from .domain.sellerkeys.memory_store import MemoryKeyStore
 from .domain.sellerkeys.validator_http import FailClosedValidator, GatewayValidator
 from .domain.usage.service import UsageRecorder
+from .domain.workbench.service import WorkbenchService
 from .errors import DependencyUnavailableError
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
@@ -181,6 +183,7 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
         application.state.usage_recorder = UsageRecorder()
     application.state.seller_key_store = store
     application.state.internal_token = os.environ.get("INTERNAL_GATEWAY_TOKEN") or ""
+    application.state.workbench_service = WorkbenchService()
 
 
 service_info = Info("app", "API service build information")
@@ -332,6 +335,7 @@ app.include_router(bindings_router)
 app.include_router(bindings_internal_router)
 app.include_router(connections_router)
 app.include_router(connections_internal_router)
+app.include_router(workbench_router)
 app.include_router(internal_router)
 
 app.add_middleware(

@@ -20,6 +20,7 @@ const TITLE: Record<string, string> = {
   '/design-system': '组件目录',
   '/projects': '我的 Project',
   '/connections': '提供商连接',
+  '/supply': '供给工作台',
 }
 
 function pageTitle(pathname: string): string {
@@ -153,12 +154,20 @@ export function AppShell() {
                 </Link>
               ) : null}
               {auth.session!.workspace === 'seller' ? (
-                <Link
-                  to="/connections"
-                  aria-current={location.pathname.startsWith('/connections') ? 'page' : undefined}
-                >
-                  提供商连接
-                </Link>
+                <>
+                  <Link
+                    to="/connections"
+                    aria-current={location.pathname.startsWith('/connections') ? 'page' : undefined}
+                  >
+                    提供商连接
+                  </Link>
+                  <Link
+                    to="/supply"
+                    aria-current={location.pathname.startsWith('/supply') ? 'page' : undefined}
+                  >
+                    供给工作台
+                  </Link>
+                </>
               ) : null}
               <Link
                 to="/account/security"

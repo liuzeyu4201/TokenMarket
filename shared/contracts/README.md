@@ -37,6 +37,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `route-decision/v1/` | Proxy Gateway (routing decision, SF23+) | 1.0.0 | JSON Schema |
 | `usage/v1/` | Billing Service (usage observation, SF26+) | 1.1.0 | JSON Schema |
 | `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.1.0 | JSON Schema |
+| `seller-workbench/v1/` | API Service + Frontend (seller quote workbench, SF17) | 1.0.0 | Markdown |
 | `ledger/v1/` | Billing Service (immutable ledger, SF28+) | 1.0.0 | JSON Schema |
 | `audit/v1/` | Admin Service (audit events, SF30+) | 1.0.0 | JSON Schema |
 | `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
@@ -75,6 +76,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   coverage (SF20); 1.4.0 adds Vertex publisher-model coverage (SF21).
   `usage/v1` 1.1.0 expands native spend and multi-dimension capture (SF26).
   `pricing/v1` 1.1.0 adds versioned rates, buyer multiplier, and seller quotes (SF27).
+  `seller-workbench/v1` is the seller quote and supply console (SF17).
   Route/ledger/audit writers land in later SFs.
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;

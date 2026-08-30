@@ -24,8 +24,8 @@ const (
 	defaultReplayEvery       = 2 * time.Second
 )
 
-// DurableSink 先把观察写入本地 JSON 文件再投递 Next；成功后删除文件。
-// 进程重启时可 Replay 补写。Dir 为空则退化为只调用 Next。
+// DurableSink 可选地把观察写入本地 JSON 再投递 Next。Dir 仅为可丢弃缓存，
+// 不是账务事实源；Dir 为空则只调用 Next。启动不得依赖 Replay 本地文件。
 type DurableSink struct {
 	Dir         string
 	Next        Sink

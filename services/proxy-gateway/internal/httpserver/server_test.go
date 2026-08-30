@@ -2,6 +2,7 @@ package httpserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/httpserver"
 )
@@ -107,6 +109,45 @@ func TestReadiness(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 
 	requireHealthResponse(t, rec, "ready")
+}
+
+func TestDrainRejectsNewRequestsAndKeepsLiveness(t *testing.T) {
+	srv, _ := newTestServer(t)
+	if err := srv.Drain(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("ready %d", rec.Code)
+	}
+	live := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(live, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	if live.Code != http.StatusOK {
+		t.Fatalf("live %d", live.Code)
+	}
+	denied := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(denied, httptest.NewRequest(http.MethodPost, "/v1/proxy/volcano/chat/completions", strings.NewReader(`{}`)))
+	if denied.Code != http.StatusServiceUnavailable {
+		t.Fatalf("proxy during drain %d", denied.Code)
+	}
+}
+
+func TestDrainWaitsForInflightThenTimesOut(t *testing.T) {
+	srv, _ := newTestServer(t)
+	if !srv.BeginWork() {
+		t.Fatal("begin")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	err := srv.Drain(ctx)
+	if err == nil {
+		t.Fatal("expected timeout while inflight")
+	}
+	srv.EndWork()
+	if err := srv.Drain(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestReadinessFailsWhenCatalogNotLocked(t *testing.T) {

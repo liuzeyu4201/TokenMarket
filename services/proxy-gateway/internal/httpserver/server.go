@@ -3,10 +3,12 @@
 package httpserver
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +39,8 @@ type Server struct {
 	metricsHandler http.Handler
 	metricsReg     prometheus.Registerer
 	registerCount  atomic.Int32
+	draining       atomic.Bool
+	inflight       sync.WaitGroup
 }
 
 // NewServer creates an operational scaffold server (health/metrics + optional validate).
@@ -50,6 +54,7 @@ func NewServer(cfg Config) (*Server, error) {
 	r.Use(gin.Recovery())
 
 	s := &Server{config: cfg, engine: r}
+	r.Use(s.drainMiddleware())
 	s.initMetrics()
 	r.GET("/health/live", s.liveness)
 	r.GET("/health/ready", s.readiness)
@@ -114,6 +119,16 @@ func (s *Server) liveness(c *gin.Context) {
 }
 
 func (s *Server) readiness(c *gin.Context) {
+	if s.draining.Load() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"service":    s.config.Service,
+			"status":     "not_ready",
+			"version":    s.config.Version,
+			"request_id": c.GetString("request_id"),
+			"code":       "NOT_READY",
+		})
+		return
+	}
 	if s.config.CatalogReady != nil && !*s.config.CatalogReady {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"service":    s.config.Service,
@@ -125,6 +140,61 @@ func (s *Server) readiness(c *gin.Context) {
 		return
 	}
 	s.healthResponse(c, "ready")
+}
+
+func (s *Server) drainMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if path == "/health/live" || path == "/metrics" || path == "/health/ready" {
+			c.Next()
+			return
+		}
+		if s.draining.Load() {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"service":    s.config.Service,
+				"status":     "not_ready",
+				"version":    s.config.Version,
+				"request_id": c.GetString("request_id"),
+				"code":       "NOT_READY",
+			})
+			c.Abort()
+			return
+		}
+		s.inflight.Add(1)
+		defer s.inflight.Done()
+		c.Next()
+	}
+}
+
+// BeginWork 测试/排空记账：摘流后返回 false。
+func (s *Server) BeginWork() bool {
+	if s == nil || s.draining.Load() {
+		return false
+	}
+	s.inflight.Add(1)
+	return true
+}
+
+func (s *Server) EndWork() {
+	if s != nil {
+		s.inflight.Done()
+	}
+}
+
+// Drain 拒绝新请求并等待在途结束或 ctx 取消。
+func (s *Server) Drain(ctx context.Context) error {
+	s.draining.Store(true)
+	done := make(chan struct{})
+	go func() {
+		s.inflight.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *Server) initMetrics() {

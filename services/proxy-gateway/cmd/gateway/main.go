@@ -16,6 +16,7 @@ import (
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keypool"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/providervalid"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/proxyauth"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/runtimesnap"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageobs"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/httpserver"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/infrastructure/apisvc"
@@ -105,6 +106,17 @@ func main() {
 		"catalog_minor", catalog.CatalogMinor,
 		"freeze_date", catalog.FreezeDate,
 		"record_count", len(catalog.Records),
+	)
+	var snapHolder runtimesnap.Holder
+	snap, err := snapHolder.Swap("boot", catalog)
+	if err != nil {
+		logger.Error("runtime snapshot rejected", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("runtime snapshot published",
+		"snapshot_id", snap.ID,
+		"generation", snap.Generation,
+		"catalog_major", snap.CatalogMajor,
 	)
 	catalogReady := true
 

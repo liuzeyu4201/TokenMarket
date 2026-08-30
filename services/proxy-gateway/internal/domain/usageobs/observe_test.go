@@ -35,6 +35,21 @@ func TestMemorySinkIdempotentByRequestID(t *testing.T) {
 
 func intPtr(n int) *int { return &n }
 
+func TestDurableSinkEmptyDirIsNotSourceOfRecord(t *testing.T) {
+	mem := usageobs.NewMemorySink()
+	d := &usageobs.DurableSink{Dir: "", Next: mem}
+	obs := usageobs.Observation{RequestID: "rid-empty", UsageSource: "official"}
+	if err := d.Observe(context.Background(), obs); err != nil {
+		t.Fatal(err)
+	}
+	if mem.Len() != 1 {
+		t.Fatal(mem.Len())
+	}
+	if n := d.Replay(context.Background()); n != 0 {
+		t.Fatalf("replay %d", n)
+	}
+}
+
 func TestDurableSinkWritesThenRemovesOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	mem := usageobs.NewMemorySink()

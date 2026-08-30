@@ -44,6 +44,11 @@ def test_ops_runbook_endpoint_catalog_exists() -> None:
     assert runbook.is_file()
 
 
+def test_ops_runbook_gateway_stateless_exists() -> None:
+    runbook = OPS_DIR / "runbooks" / "gateway-stateless.md"
+    assert runbook.is_file()
+
+
 def test_ops_validate_assets_tool_exists() -> None:
     tool = OPS_DIR / "tools" / "validate_assets.py"
     assert tool.is_file()

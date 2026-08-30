@@ -398,6 +398,10 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
         "API Service (single-session hardening, SF07)",
         "1.0.0",
     ),
+    "web-design-system/v1/": (
+        "Frontend (design system and app shell, SF08)",
+        "1.0.0",
+    ),
 }
 
 

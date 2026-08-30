@@ -114,4 +114,15 @@ describe('globals.css WCAG 2.2 AA token ratios', () => {
     expect(css).toMatch(/overflow-x:\s*hidden/)
     expect(css).toMatch(/320/)
   })
+
+  it('declares 360, 768 and 1440 viewport rules', () => {
+    expect(css).toMatch(/360px/)
+    expect(css).toMatch(/768px/)
+    expect(css).toMatch(/1440px/)
+  })
+
+  it('defines type and spacing tokens', () => {
+    expect(css).toMatch(/--font-size-sm/)
+    expect(css).toMatch(/--space-4/)
+  })
 })

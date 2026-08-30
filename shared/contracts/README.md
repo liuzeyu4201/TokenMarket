@@ -39,6 +39,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
 | `unified-phone-auth/v1/` | API Service (unified phone auth, SF06) | 1.0.0 | OpenAPI |
 | `single-session-auth/v1/` | API Service (single-session hardening, SF07) | 1.0.0 | OpenAPI |
+| `web-design-system/v1/` | Frontend (design system and app shell, SF08) | 1.0.0 | Markdown |
 
 ## Compatibility and deprecation status
 
@@ -77,3 +78,6 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   performs recipient-specific SMS delivery; the 202 does not assert account existence or
   actual delivery. Breaking changes require a new version and synchronized API Service +
   Frontend consumers; registration v1 semantics are not modified by this contract.
+- `web-design-system/v1/` owns the SF08 foundation component state catalog (button,
+  field, notice, dialog, table, page states). Breaking visual/interaction changes
+  require a new version and synchronized frontend pages.

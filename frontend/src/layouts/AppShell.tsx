@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { Breadcrumbs } from '../ui/Breadcrumbs'
+import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { PageState } from '../ui/PageState'
 
 const ROLE_LABEL: Record<string, string> = {
   buyer: '买家',
@@ -8,21 +11,43 @@ const ROLE_LABEL: Record<string, string> = {
   both: '买家与卖家',
 }
 
+const TITLE: Record<string, string> = {
+  '/': '首页',
+  '/login': '登录',
+  '/register': '注册',
+  '/dashboard': '工作台',
+  '/account/security': '账户安全',
+  '/design-system': '组件目录',
+}
+
 export function AppShell() {
   const auth = useAuth()
   const location = useLocation()
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutStatus, setLogoutStatus] = useState<string | null>(null)
+  const [online, setOnline] = useState(
+    typeof navigator === 'undefined' ? true : navigator.onLine,
+  )
   const loginLinkRef = useRef<HTMLAnchorElement>(null)
   const logoutButtonRef = useRef<HTMLButtonElement>(null)
   const focusLoginAfterLogout = useRef(false)
+
+  useEffect(() => {
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
 
   const onLogout = async () => {
     if (loggingOut) return
     setLoggingOut(true)
     setLogoutStatus('正在退出')
     try {
-      // If logout outcome is uncertain, bootstrap first then attempt again.
       if (auth.status === 'unavailable') {
         await auth.revalidate()
       }
@@ -34,7 +59,6 @@ export function AppShell() {
     }
   }
 
-  // After logout, return keyboard focus to the Login link (anonymous nav).
   useEffect(() => {
     if (auth.status === 'anonymous' && focusLoginAfterLogout.current) {
       focusLoginAfterLogout.current = false
@@ -47,9 +71,20 @@ export function AppShell() {
   const isAuthed = auth.status === 'authenticated' && auth.session
   const isChecking = auth.status === 'checking'
   const showAnonymousActions = auth.status === 'anonymous' || auth.status === 'unavailable'
+  const crumbs = useMemo(() => {
+    if (location.pathname === '/') return [{ label: '首页' }]
+    const here = TITLE[location.pathname] ?? '当前页'
+    return [
+      { label: '首页', to: '/' },
+      { label: here },
+    ]
+  }, [location.pathname])
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        跳到主要内容
+      </a>
       <header className="app-header">
         <strong>
           <Link to="/" className="app-brand">
@@ -59,6 +94,12 @@ export function AppShell() {
         <nav aria-label="主导航">
           <Link to="/" aria-current={location.pathname === '/' ? 'page' : undefined}>
             首页
+          </Link>
+          <Link
+            to="/design-system"
+            aria-current={location.pathname === '/design-system' ? 'page' : undefined}
+          >
+            组件目录
           </Link>
           {isAuthed ? (
             <>
@@ -72,6 +113,12 @@ export function AppShell() {
                   {ROLE_LABEL[auth.session!.role] ?? auth.session!.role}
                 </span>
               </span>
+              <span className="workspace-chip" data-testid="workspace-identity">
+                工作区：{ROLE_LABEL[auth.session!.role] ?? auth.session!.role}
+              </span>
+              <button type="button" className="link-button" disabled title="即将开放">
+                切换工作区（即将开放）
+              </button>
               <Link
                 to="/dashboard"
                 aria-current={location.pathname === '/dashboard' ? 'page' : undefined}
@@ -95,7 +142,6 @@ export function AppShell() {
               >
                 {loggingOut ? '退出中…' : '退出'}
               </button>
-              {/* No login/register when authenticated — avoid duplicate auth actions. */}
             </>
           ) : isChecking ? (
             <span aria-busy="true" data-testid="shell-checking">
@@ -119,7 +165,6 @@ export function AppShell() {
               >
                 注册
               </Link>
-              {/* No identity/logout when anonymous — avoid fake session UI. */}
             </>
           ) : null}
         </nav>
@@ -128,7 +173,11 @@ export function AppShell() {
         </div>
       </header>
       <main className="app-main" id="main-content" role="main">
-        <Outlet />
+        {!online ? <PageState kind="offline" /> : null}
+        <Breadcrumbs items={crumbs} />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )

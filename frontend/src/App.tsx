@@ -4,6 +4,7 @@ import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './layouts/AppShell'
 import { AccountSecurity } from './pages/AccountSecurity'
 import { Dashboard } from './pages/Dashboard'
+import { DesignSystem } from './pages/DesignSystem'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
 import { NotFound } from './pages/NotFound'
@@ -19,6 +20,7 @@ function App() {
             <Route index element={<Home />} />
             <Route path="register" element={<Register />} />
             <Route path="login" element={<Login />} />
+            <Route path="design-system" element={<DesignSystem />} />
             <Route
               path="dashboard"
               element={

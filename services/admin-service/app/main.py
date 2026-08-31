@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import Info, generate_latest
 from starlette.responses import Response
 
+from .api.admin import router as admin_router
+from .domain.admin import AdminService
 from .domain.endpcatalog import CatalogError, must_load
 from .health import router as health_router
 from .observability import configure_logging, generate_request_id, redact_headers
@@ -42,6 +44,8 @@ app = FastAPI(title="TokenMarket Admin Service", version=VERSION)
 app.state.version = VERSION
 app.state.endpoint_catalog = _catalog
 app.include_router(health_router)
+app.include_router(admin_router)
+app.state.admin_service = AdminService()
 
 
 @app.middleware("http")

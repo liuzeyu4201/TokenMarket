@@ -158,7 +158,20 @@ def test_probe_metrics_contain_no_configuration_or_exception_data(
     assert PROBES_TOTAL in body
     assert PROBE_FAILURES_TOTAL in body
     assert PROBE_DURATION in body
-    lowered = body.lower()
+    # Inspect probe family names, help text, and labels only — numeric sample
+    # values (timestamps, histogram sums) can coincidentally contain digits
+    # like 65432.
+    blobs: list[str] = []
+    for family in text_string_to_metric_families(body):
+        if family.name not in PROBE_FAMILIES:
+            continue
+        blobs.append(family.name)
+        blobs.append(family.documentation or "")
+        for sample in family.samples:
+            blobs.append(sample.name)
+            blobs.extend(sample.labels.keys())
+            blobs.extend(sample.labels.values())
+    lowered = " ".join(blobs).lower()
     for forbidden in (
         "markeruser",
         "markerscret",

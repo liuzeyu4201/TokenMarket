@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/capacity/v1/report.schema.json",
+  "schema_version": "1.0.0",
+  "title": "CapacityRunReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "tenants",
+    "target_rps",
+    "achieved_rps",
+    "success_rate",
+    "platform_p95_ms",
+    "pass"
+  ],
+  "properties": {
+    "profile": { "type": "string" },
+    "tenants": { "type": "integer", "minimum": 1 },
+    "target_rps": { "type": "number" },
+    "achieved_rps": { "type": "number" },
+    "duration_ms": { "type": "integer" },
+    "total": { "type": "integer" },
+    "success": { "type": "integer" },
+    "success_rate": { "type": "number" },
+    "platform_p95_ms": { "type": "number" },
+    "disconnect_rate": { "type": "number" },
+    "heap_delta_bytes": { "type": "integer" },
+    "open_reservations": { "type": "integer" },
+    "double_charge": { "type": "integer" },
+    "cross_tenant_leaks": { "type": "integer" },
+    "pass": { "type": "boolean" }
+  }
+}

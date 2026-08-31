@@ -42,6 +42,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `admin-identity/v1/` | Admin Service (admin identity/RBAC, SF30) | 1.0.0 | Markdown |
 | `admin-console/v1/` | Admin Service (ops console, SF31) | 1.0.0 | OpenAPI / Markdown |
 | `observability/v1/` | Proxy Gateway + Admin Service (SLO/alerts, SF32) | 1.0.0 | Markdown / JSON Schema |
+| `capacity/v1/` | Proxy Gateway (capacity/resilience, SF33) | 1.0.0 | Markdown / JSON Schema |
 | `audit/v1/` | Admin Service (audit events, SF30+) | 1.1.0 | JSON Schema |
 | `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
 | `unified-phone-auth/v1/` | API Service (unified phone auth, SF06) | 1.0.0 | OpenAPI |
@@ -93,6 +94,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   `admin-console/v1` 1.0.0 is the paginated ops catalog, config pipeline, and
   high-risk wizards (SF31).
   `observability/v1` 1.0.0 is the trace hop, SLO/error-budget, and alert catalog (SF32).
+  `capacity/v1` 1.0.0 is the 500 RPS / long-connection / RPO-RTO capacity gate (SF33).
   `audit/v1` 1.1.0 expands admin action payloads with hash-chain fields (SF30).
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;

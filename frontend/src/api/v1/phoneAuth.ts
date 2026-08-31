@@ -205,9 +205,7 @@ export type VerifyChallengeResult =
   | { status: 'complete_profile'; phoneMasked: string }
 
 /** Unified verify: existing users get a session; new users must complete profile. */
-export async function verifyChallenge(
-  body: CreateSessionRequest,
-): Promise<VerifyChallengeResult> {
+export async function verifyChallenge(body: CreateSessionRequest): Promise<VerifyChallengeResult> {
   try {
     const { data, requestId } = await apiFetch<SessionEnvelope>(SESSIONS_PATH, {
       method: 'POST',

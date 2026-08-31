@@ -109,9 +109,7 @@ def _wizards(request: Request) -> WizardService:
     return wiz
 
 
-def _require(
-    request: Request, action: str
-) -> tuple[Any, AdminService, str | None, str | None]:
+def _require(request: Request, action: str) -> tuple[Any, AdminService, str | None, str | None]:
     admin, user = _tokens(request)
     svc = _admin(request)
     acc = svc.resolve(admin_token=admin, user_cookie=user)
@@ -127,11 +125,7 @@ async def list_kinds(request: Request) -> JSONResponse:
         acc, _, _, _ = _require(request, "alert.read")
     except AdminError as exc:
         return _fail(exc, rid)
-    visible = [
-        kind
-        for kind in KINDS
-        if evaluate(acc.role, acc.readonly, KIND_ACTION[kind])
-    ]
+    visible = [kind for kind in KINDS if evaluate(acc.role, acc.readonly, KIND_ACTION[kind])]
     return JSONResponse(
         status_code=200,
         content=_envelope("0", "ok", rid, {"kinds": visible}),
@@ -152,9 +146,7 @@ async def list_ops(kind: str, request: Request) -> JSONResponse:
         return _fail(exc, rid)
     except ValueError:
         return _fail(AdminError(VALIDATION, MSG[VALIDATION], http_status=400), rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, page.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, page.as_dict()))
 
 
 @router.get("/ops/{kind}/{item_id}")
@@ -192,9 +184,7 @@ async def create_draft(body: DraftBody, request: Request) -> JSONResponse:
         draft = _pipe(request).create_draft(body.kind, body.payload)
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, draft.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, draft.as_dict()))
 
 
 @router.get("/config/{draft_id}")
@@ -205,9 +195,7 @@ async def get_draft(draft_id: str, request: Request) -> JSONResponse:
         _require(request, READ_ACTION[draft.kind])
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, draft.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, draft.as_dict()))
 
 
 @router.get("/config/{draft_id}/diff")
@@ -243,15 +231,11 @@ async def approve_draft(draft_id: str, request: Request) -> JSONResponse:
         out = _pipe(request).approve(draft_id)
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, out.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, out.as_dict()))
 
 
 @router.post("/config/{draft_id}/publish")
-async def publish_draft(
-    draft_id: str, body: ReasonBody, request: Request
-) -> JSONResponse:
+async def publish_draft(draft_id: str, body: ReasonBody, request: Request) -> JSONResponse:
     rid = _rid(request)
     try:
         draft = _pipe(request).get(draft_id)
@@ -283,9 +267,7 @@ async def publish_draft(
 
 
 @router.post("/config/{kind}/rollback")
-async def rollback_config(
-    kind: str, body: RollbackBody, request: Request
-) -> JSONResponse:
+async def rollback_config(kind: str, body: RollbackBody, request: Request) -> JSONResponse:
     rid = _rid(request)
     try:
         action = WRITE_ACTION.get(kind)
@@ -337,14 +319,10 @@ async def start_wizard(body: WizardBody, request: Request) -> JSONResponse:
     try:
         action = _wizards(request).action_for(body.kind)
         _require(request, action)
-        item = _wizards(request).start(
-            kind=body.kind, target=body.target, reason=body.reason
-        )
+        item = _wizards(request).start(kind=body.kind, target=body.target, reason=body.reason)
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, item.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, item.as_dict()))
 
 
 @router.get("/wizards/{wizard_id}")
@@ -355,15 +333,11 @@ async def get_wizard(wizard_id: str, request: Request) -> JSONResponse:
         _require(request, _wizards(request).action_for(item.kind))
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, item.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, item.as_dict()))
 
 
 @router.post("/wizards/{wizard_id}/confirm")
-async def confirm_wizard(
-    wizard_id: str, body: ReasonBody, request: Request
-) -> JSONResponse:
+async def confirm_wizard(wizard_id: str, body: ReasonBody, request: Request) -> JSONResponse:
     rid = _rid(request)
     try:
         item = _wizards(request).get(wizard_id)
@@ -379,9 +353,7 @@ async def confirm_wizard(
         )
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, out.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, out.as_dict()))
 
 
 @router.post("/wizards/{wizard_id}/cancel")
@@ -393,9 +365,7 @@ async def cancel_wizard(wizard_id: str, request: Request) -> JSONResponse:
         out = _wizards(request).cancel(wizard_id)
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, out.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, out.as_dict()))
 
 
 @router.post("/sql")

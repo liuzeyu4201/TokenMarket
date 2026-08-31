@@ -4,13 +4,9 @@ from __future__ import annotations
 
 from typing import FrozenSet
 
-ROLES = frozenset(
-    {"support", "supply_ops", "pricing", "ledger", "security_audit"}
-)
+ROLES = frozenset({"support", "supply_ops", "pricing", "ledger", "security_audit"})
 
-NEVER: FrozenSet[str] = frozenset(
-    {"credential.read", "ledger.edit_balance", "audit.delete"}
-)
+NEVER: FrozenSet[str] = frozenset({"credential.read", "ledger.edit_balance", "audit.delete"})
 
 HIGH_RISK: FrozenSet[str] = frozenset(
     {
@@ -34,9 +30,7 @@ _MATRIX: dict[tuple[str, bool], FrozenSet[str]] = {
             "alert.read",
         }
     ),
-    ("support", True): frozenset(
-        {"user.lookup", "audit.read", "project.lookup", "alert.read"}
-    ),
+    ("support", True): frozenset({"user.lookup", "audit.read", "project.lookup", "alert.read"}),
     ("supply_ops", False): frozenset(
         {
             "connection.view_health",
@@ -45,9 +39,7 @@ _MATRIX: dict[tuple[str, bool], FrozenSet[str]] = {
             "alert.read",
         }
     ),
-    ("supply_ops", True): frozenset(
-        {"connection.view_health", "project.lookup", "alert.read"}
-    ),
+    ("supply_ops", True): frozenset({"connection.view_health", "project.lookup", "alert.read"}),
     ("pricing", False): frozenset(
         {
             "price.publish",

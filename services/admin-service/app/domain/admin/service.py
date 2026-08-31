@@ -33,9 +33,7 @@ def _now() -> datetime:
 
 
 def _digest(secret: str, salt: str) -> str:
-    raw = hashlib.pbkdf2_hmac(
-        "sha256", secret.encode("utf-8"), salt.encode("utf-8"), 120000
-    )
+    raw = hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"), salt.encode("utf-8"), 120000)
     return raw.hex()
 
 
@@ -160,9 +158,7 @@ class AdminService:
         if sid:
             self._sessions.pop(sid, None)
 
-    def resolve(
-        self, *, admin_token: str | None, user_cookie: str | None
-    ) -> AdminAccount:
+    def resolve(self, *, admin_token: str | None, user_cookie: str | None) -> AdminAccount:
         if user_cookie:
             raise AdminError(
                 USER_SESSION_REJECTED,
@@ -266,9 +262,7 @@ class AdminService:
             extra.update(self._open_break_glass(acc, reason))
         return extra
 
-    def close_break_glass(
-        self, *, admin_token: str, case_id: str, review: str
-    ) -> BreakGlassCase:
+    def close_break_glass(self, *, admin_token: str, case_id: str, review: str) -> BreakGlassCase:
         acc = self.resolve(admin_token=admin_token, user_cookie=None)
         case = self.break_glass.get(case_id)
         if case is None:

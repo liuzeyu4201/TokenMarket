@@ -115,15 +115,36 @@ describe('ProjectDetail', () => {
         { id: 'result', title: '查看用量与测试额度结果', done: false },
       ],
       samples: {
-        openai: { curl: 'curl /openai/v1/chat/completions -H Authorization: Bearer $TOKENMARKET_KEY', sdk: '', auth_header: 'Authorization: Bearer', path: '/openai/v1/chat/completions' },
-        anthropic: { curl: 'curl /anthropic/v1/messages -H x-api-key: $TOKENMARKET_KEY -H anthropic-version: 2023-06-01', sdk: '', auth_header: 'x-api-key', path: '/anthropic/v1/messages' },
-        vertex: { curl: 'curl ...:generateContent -H Authorization: Bearer $TOKENMARKET_KEY', sdk: '', auth_header: 'Authorization: Bearer', path: ':generateContent' },
+        openai: {
+          curl: 'curl /openai/v1/chat/completions -H Authorization: Bearer $TOKENMARKET_KEY',
+          sdk: '',
+          auth_header: 'Authorization: Bearer',
+          path: '/openai/v1/chat/completions',
+        },
+        anthropic: {
+          curl: 'curl /anthropic/v1/messages -H x-api-key: $TOKENMARKET_KEY -H anthropic-version: 2023-06-01',
+          sdk: '',
+          auth_header: 'x-api-key',
+          path: '/anthropic/v1/messages',
+        },
+        vertex: {
+          curl: 'curl ...:generateContent -H Authorization: Bearer $TOKENMARKET_KEY',
+          sdk: '',
+          auth_header: 'Authorization: Bearer',
+          path: ':generateContent',
+        },
       },
       disclaimer: '测试额度不可购买、转让、兑换或提现。',
     })
     listProjectUsage.mockReset()
     listProjectUsage.mockResolvedValue([
-      { request_id: 'un-1', key_id: 'k1', status: 'unresolved', amount_minor: 30, reason: 'PARSE_FAILED' },
+      {
+        request_id: 'un-1',
+        key_id: 'k1',
+        status: 'unresolved',
+        amount_minor: 30,
+        reason: 'PARSE_FAILED',
+      },
     ])
   })
 

@@ -91,9 +91,7 @@ async def get_slo(request: Request) -> JSONResponse:
         _require_alert_read(request)
         store = _store(request)
         data = {
-            plane: snapshot(
-                plane=plane, good=vals["good"], total=vals["total"]
-            ).as_dict()
+            plane: snapshot(plane=plane, good=vals["good"], total=vals["total"]).as_dict()
             for plane, vals in store.samples.items()
         }
     except AdminError as exc:
@@ -109,9 +107,7 @@ async def get_trace(request_id: str, request: Request) -> JSONResponse:
         hops = [h.as_dict() for h in _store(request).trace.correlate(request_id)]
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, {"hops": hops})
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, {"hops": hops}))
 
 
 @router.post("/slo/alerts/evaluate")
@@ -122,6 +118,4 @@ async def eval_alert(body: EvalBody, request: Request) -> JSONResponse:
         inst = evaluate_alert(body.kind, body.sample)
     except AdminError as exc:
         return _fail(exc, rid)
-    return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, inst.as_dict())
-    )
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, inst.as_dict()))

@@ -13,7 +13,14 @@ import {
   type ReplacePreview,
   type SdkHint,
 } from '../api/v1/bindings'
-import { getProjectBudget, getProjectGuide, listProjectUsage, type Guide, type QuotaOverview, type UsageItem } from '../api/v1/budget'
+import {
+  getProjectBudget,
+  getProjectGuide,
+  listProjectUsage,
+  type Guide,
+  type QuotaOverview,
+  type UsageItem,
+} from '../api/v1/budget'
 import { issueProjectKey, listProjectKeys, type ProxyKeyPublic } from '../api/v1/proxyKeys'
 import {
   MODE_CONSEQUENCE,
@@ -81,7 +88,8 @@ export function ProjectDetail() {
         setUsage(usageRows)
         setNotFound(false)
         const dedicated = rows.find(
-          (b) => b.supply_mode === 'dedicated' && (b.status === 'active' || b.status === 'degraded'),
+          (b) =>
+            b.supply_mode === 'dedicated' && (b.status === 'active' || b.status === 'degraded'),
         )
         if (dedicated) {
           void previewReplace(p.project_id, dedicated.binding_id)
@@ -280,9 +288,15 @@ export function ProjectDetail() {
           <h3>人工更换专享连接</h3>
           <p data-testid="replace-impact">
             不会迁移：
-            {(replacePreview?.non_migrating ?? ['files', 'batches', 'caches', 'fine_tuning', 'operations']).join(
-              '、',
-            )}
+            {(
+              replacePreview?.non_migrating ?? [
+                'files',
+                'batches',
+                'caches',
+                'fine_tuning',
+                'operations',
+              ]
+            ).join('、')}
             。旧资源仍走旧连接或明确不可用。
           </p>
           <form
@@ -290,7 +304,9 @@ export function ProjectDetail() {
             onSubmit={(e) => {
               e.preventDefault()
               const target = bindings.find(
-                (b) => b.supply_mode === 'dedicated' && (b.status === 'active' || b.status === 'degraded'),
+                (b) =>
+                  b.supply_mode === 'dedicated' &&
+                  (b.status === 'active' || b.status === 'degraded'),
               )
               if (!target) return
               void run(async () => {
@@ -395,7 +411,10 @@ export function ProjectDetail() {
       </ul>
       <section data-testid="quota-overview">
         <h2>测试额度</h2>
-        <p>不可购买、转让、兑换或提现。未决不是 0 成本。预算不是最终上限，reservation 之后可能异步调整。</p>
+        <p>
+          不可购买、转让、兑换或提现。未决不是 0 成本。预算不是最终上限，reservation
+          之后可能异步调整。
+        </p>
         {quota ? (
           <dl>
             <div>

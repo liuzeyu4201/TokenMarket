@@ -8,12 +8,7 @@ REPO = Path(__file__).resolve().parents[2]
 ALERTS = REPO / "ops" / "alerts" / "slo.yml"
 RUNBOOK = REPO / "ops" / "runbooks" / "slo-alerts.md"
 DASH = (
-    REPO
-    / "infra"
-    / "grafana"
-    / "provisioning"
-    / "dashboards"
-    / "v02-slo-overview.json"
+    REPO / "infra" / "grafana" / "provisioning" / "dashboards" / "v02-slo-overview.json"
 )
 
 

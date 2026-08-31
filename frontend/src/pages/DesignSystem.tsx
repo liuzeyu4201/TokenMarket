@@ -43,7 +43,11 @@ export function DesignSystem() {
       <PageState kind="offline" />
 
       <h2>表格</h2>
-      <Table caption="状态清单" headers={['组件', '状态']} rows={[['Button', 'default / focus / disabled / loading']]} />
+      <Table
+        caption="状态清单"
+        headers={['组件', '状态']}
+        rows={[['Button', 'default / focus / disabled / loading']]}
+      />
 
       <h2>即将开放</h2>
       <UnavailableAction label="示例业务" />

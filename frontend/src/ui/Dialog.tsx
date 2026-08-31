@@ -15,7 +15,8 @@ export function Dialog({ open, title, onClose, children }: DialogProps) {
 
   useEffect(() => {
     if (!open) return
-    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    previousFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
     const panel = panelRef.current
     const focusables = () =>
       panel?.querySelectorAll<HTMLElement>(

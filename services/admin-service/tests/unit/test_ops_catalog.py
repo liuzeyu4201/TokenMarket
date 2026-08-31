@@ -81,9 +81,7 @@ def test_patch_active_rejected_and_simulate_fail_keeps_active() -> None:
         pipe.publish(draft.draft_id)
     assert pub.value.code in {"SIMULATE_FAILED", "APPROVAL_REQUIRED"}
     assert pipe.active_version("price") == before
-    good = pipe.create_draft(
-        "price", {"buyer_bps": 9500, "seller_max_bps": 8000}
-    )
+    good = pipe.create_draft("price", {"buyer_bps": 9500, "seller_max_bps": 8000})
     assert pipe.diff(good.draft_id)["changes"]
     assert pipe.simulate(good.draft_id)["ok"] is True
     pipe.approve(good.draft_id)
@@ -116,10 +114,7 @@ def test_wizard_cancel_and_timeout_leave_no_success_audit() -> None:
             reason="abuse",
         )
     assert cancelled.value.code == "WIZARD_CANCELLED"
-    assert all(
-        not (r.action == "user.force_logout" and r.result == "ok")
-        for r in svc.audit.list()
-    )
+    assert all(not (r.action == "user.force_logout" and r.result == "ok") for r in svc.audit.list())
 
     other = wiz.start(kind="force_logout", target="sess-8", reason="idle")
     clock["t"] = clock["t"] + timedelta(minutes=10)
@@ -133,10 +128,7 @@ def test_wizard_cancel_and_timeout_leave_no_success_audit() -> None:
             reason="idle",
         )
     assert expired.value.code == "WIZARD_EXPIRED"
-    assert all(
-        not (r.action == "user.force_logout" and r.result == "ok")
-        for r in svc.audit.list()
-    )
+    assert all(not (r.action == "user.force_logout" and r.result == "ok") for r in svc.audit.list())
 
 
 def test_other_kinds_search_and_unknown() -> None:

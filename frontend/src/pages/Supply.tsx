@@ -1,11 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import {
-  listWorkbench,
-  setCapacity,
-  submitQuote,
-  type WorkbenchCard,
-} from '../api/v1/workbench'
+import { listWorkbench, setCapacity, submitQuote, type WorkbenchCard } from '../api/v1/workbench'
 import { Button } from '../ui/Button'
 import { FormField } from '../ui/FormField'
 import { Notice } from '../ui/Notice'
@@ -98,7 +93,17 @@ export function Supply() {
       ) : (
         <Table
           caption="我的供给"
-          headers={['连接', '健康', '生命周期', '报价', '容量', '接新请求', '已结算', '未决', '操作']}
+          headers={[
+            '连接',
+            '健康',
+            '生命周期',
+            '报价',
+            '容量',
+            '接新请求',
+            '已结算',
+            '未决',
+            '操作',
+          ]}
           empty="还没有连接。请先在提供商连接中登记。"
           rows={items.map((row) => [
             <span key={`${row.connection_id}-id`} data-testid="supply-connection">
@@ -119,9 +124,7 @@ export function Supply() {
                   id={`quote-${row.connection_id}`}
                   label="报价倍率 bps"
                   value={bps[row.connection_id] ?? ''}
-                  onChange={(ev) =>
-                    setBps((m) => ({ ...m, [row.connection_id]: ev.target.value }))
-                  }
+                  onChange={(ev) => setBps((m) => ({ ...m, [row.connection_id]: ev.target.value }))}
                   hint={`${row.bounds.seller_quote_min_bps}–${row.bounds.seller_quote_max_bps}`}
                 />
                 <Button type="submit" loading={busy}>
@@ -133,9 +136,7 @@ export function Supply() {
                   id={`cap-${row.connection_id}`}
                   label="声明容量"
                   value={cap[row.connection_id] ?? ''}
-                  onChange={(ev) =>
-                    setCap((m) => ({ ...m, [row.connection_id]: ev.target.value }))
-                  }
+                  onChange={(ev) => setCap((m) => ({ ...m, [row.connection_id]: ev.target.value }))}
                 />
                 <Button type="submit" loading={busy}>
                   更新容量

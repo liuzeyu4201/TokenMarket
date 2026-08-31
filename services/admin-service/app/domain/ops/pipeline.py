@@ -62,12 +62,8 @@ class ActiveConfig:
 class ConfigPipeline:
     def __init__(self) -> None:
         self._active: dict[str, ActiveConfig] = {
-            "price": ActiveConfig(
-                1, {"buyer_bps": 10000, "seller_max_bps": 8000}
-            ),
-            "route": ActiveConfig(
-                1, {"weights": {"health": 40, "latency": 30, "price": 30}}
-            ),
+            "price": ActiveConfig(1, {"buyer_bps": 10000, "seller_max_bps": 8000}),
+            "route": ActiveConfig(1, {"weights": {"health": 40, "latency": 30, "price": 30}}),
         }
         self._history: dict[str, list[ActiveConfig]] = {
             kind: [ActiveConfig(cfg.version, dict(cfg.payload))]

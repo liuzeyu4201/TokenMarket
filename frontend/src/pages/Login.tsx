@@ -399,8 +399,7 @@ export function Login() {
               auth.establishSession(sessionData)
               navigate(safeInternalPath(locationState?.from), { replace: true })
             } catch (err) {
-              const message =
-                err instanceof PhoneAuthClientError ? err.message : '完成注册失败'
+              const message = err instanceof PhoneAuthClientError ? err.message : '完成注册失败'
               setFormError(message)
               setErrorKind('unavailable')
             }
@@ -431,106 +430,106 @@ export function Login() {
       ) : null}
 
       {!profileStep ? (
-      <>
-      {/* Low-noise live region: state transitions only, not ticking seconds.
+        <>
+          {/* Low-noise live region: state transitions only, not ticking seconds.
           No role="status" here so the challenge accept status remains the sole status. */}
-      <div id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
-        {statusMessage}
-      </div>
-
-      {displayFormError ? (
-        <Notice
-          tone="error"
-          id={alertId}
-          ref={alertRef}
-          tabIndex={-1}
-          data-error-kind={displayErrorKind ?? undefined}
-        >
-          {displayFormError}
-          {requestId ? <div>请求标识：{requestId}</div> : null}
-        </Notice>
-      ) : null}
-
-      {activeChallenge ? (
-        <Notice tone="info" data-testid="challenge-status" role="presentation" aria-live="off">
-          {/* Static accept copy only inside status — countdown stays outside to avoid SR spam. */}
-          <div role="status" aria-live="polite" aria-atomic="true">
-            <p>
-              请求已受理。请向 <strong>{activeChallenge.phone_masked}</strong>{' '}
-              对应终端查收验证码（若可接收），并在有效期内完成登录。
-            </p>
-            <p className="hint">受理结果不表示账户是否存在，也不保证短信一定送达。</p>
+          <div id={statusId} className="sr-only" aria-live="polite" aria-atomic="true">
+            {statusMessage}
           </div>
-          {/* Visual countdown only — not aria-live (avoids per-second SR noise). */}
-          {!canResend ? (
-            <p data-testid="resend-countdown" aria-hidden="true">
-              {resendSeconds} 秒后可重新获取
-            </p>
-          ) : (
-            <p data-testid="resend-ready">可以重新获取验证码</p>
-          )}
-        </Notice>
-      ) : null}
 
-      <form
-        onSubmit={onSubmitLogin}
-        noValidate
-        aria-busy={busy || undefined}
-        aria-describedby={statusMessage ? statusId : undefined}
-      >
-        <FormField
-          ref={phoneRef}
-          id={phoneId}
-          name="phone"
-          label="手机号"
-          type="tel"
-          autoComplete="tel"
-          inputMode="tel"
-          value={phone}
-          onChange={(ev) => setPhone(ev.target.value)}
-          hint="中国大陆 11 位手机号，可含空格或 +86 前缀"
-          error={fieldErrors.phone}
-          disabled={busy}
-        />
+          {displayFormError ? (
+            <Notice
+              tone="error"
+              id={alertId}
+              ref={alertRef}
+              tabIndex={-1}
+              data-error-kind={displayErrorKind ?? undefined}
+            >
+              {displayFormError}
+              {requestId ? <div>请求标识：{requestId}</div> : null}
+            </Notice>
+          ) : null}
 
-        <div className="form-field form-field-inline">
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={() => void onRequestCode()}
-            disabled={busy || !canResend}
-            aria-busy={requestingCode || undefined}
+          {activeChallenge ? (
+            <Notice tone="info" data-testid="challenge-status" role="presentation" aria-live="off">
+              {/* Static accept copy only inside status — countdown stays outside to avoid SR spam. */}
+              <div role="status" aria-live="polite" aria-atomic="true">
+                <p>
+                  请求已受理。请向 <strong>{activeChallenge.phone_masked}</strong>{' '}
+                  对应终端查收验证码（若可接收），并在有效期内完成登录。
+                </p>
+                <p className="hint">受理结果不表示账户是否存在，也不保证短信一定送达。</p>
+              </div>
+              {/* Visual countdown only — not aria-live (avoids per-second SR noise). */}
+              {!canResend ? (
+                <p data-testid="resend-countdown" aria-hidden="true">
+                  {resendSeconds} 秒后可重新获取
+                </p>
+              ) : (
+                <p data-testid="resend-ready">可以重新获取验证码</p>
+              )}
+            </Notice>
+          ) : null}
+
+          <form
+            onSubmit={onSubmitLogin}
+            noValidate
+            aria-busy={busy || undefined}
+            aria-describedby={statusMessage ? statusId : undefined}
           >
-            {getCodeLabel}
-          </Button>
-        </div>
+            <FormField
+              ref={phoneRef}
+              id={phoneId}
+              name="phone"
+              label="手机号"
+              type="tel"
+              autoComplete="tel"
+              inputMode="tel"
+              value={phone}
+              onChange={(ev) => setPhone(ev.target.value)}
+              hint="中国大陆 11 位手机号，可含空格或 +86 前缀"
+              error={fieldErrors.phone}
+              disabled={busy}
+            />
 
-        <FormField
-          ref={otpRef}
-          id={codeId}
-          name="code"
-          label="验证码"
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="[0-9]*"
-          maxLength={6}
-          value={code}
-          onChange={(ev) => setCode(ev.target.value)}
-          hint="6 位数字，前导零有效"
-          error={fieldErrors.code}
-          disabled={busy}
-        />
+            <div className="form-field form-field-inline">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => void onRequestCode()}
+                disabled={busy || !canResend}
+                aria-busy={requestingCode || undefined}
+              >
+                {getCodeLabel}
+              </Button>
+            </div>
 
-        <Button type="submit" disabled={busy} aria-busy={loggingIn || undefined}>
-          {loggingIn ? '登录中…' : success ? '登录成功' : '登录'}
-        </Button>
-      </form>
+            <FormField
+              ref={otpRef}
+              id={codeId}
+              name="code"
+              label="验证码"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={code}
+              onChange={(ev) => setCode(ev.target.value)}
+              hint="6 位数字，前导零有效"
+              error={fieldErrors.code}
+              disabled={busy}
+            />
 
-      <p className="auth-footer">
-        还没有账户？<Link to="/register">前往注册</Link>（同一验证码流程）
-      </p>
-      </>
+            <Button type="submit" disabled={busy} aria-busy={loggingIn || undefined}>
+              {loggingIn ? '登录中…' : success ? '登录成功' : '登录'}
+            </Button>
+          </form>
+
+          <p className="auth-footer">
+            还没有账户？<Link to="/register">前往注册</Link>（同一验证码流程）
+          </p>
+        </>
       ) : null}
     </div>
   )

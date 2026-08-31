@@ -11,16 +11,12 @@ export function Home() {
       </p>
       <section aria-labelledby="product-boundary">
         <h2 id="product-boundary">产品边界</h2>
+        <p>数据面按 OpenAI、Anthropic、Google Vertex 各自原生协议透传，不做跨协议转换。</p>
         <p>
-          数据面按 OpenAI、Anthropic、Google Vertex
-          各自原生协议透传，不做跨协议转换。
+          Project
+          分为共享与专享：共享仅无状态调用；专享独占连接，故障时失败关闭，不会自动回退共享池。
         </p>
-        <p>
-          Project 分为共享与专享：共享仅无状态调用；专享独占连接，故障时失败关闭，不会自动回退共享池。
-        </p>
-        <p>
-          V0.2 仅提供测试额度，不可购买、转让、兑换或提现，也没有充值、支付或法币锚定。
-        </p>
+        <p>V0.2 仅提供测试额度，不可购买、转让、兑换或提现，也没有充值、支付或法币锚定。</p>
       </section>
       <section aria-labelledby="coming-soon">
         <h2 id="coming-soon">即将开放</h2>

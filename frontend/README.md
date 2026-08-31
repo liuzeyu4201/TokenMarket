@@ -22,13 +22,13 @@ make build
 
 ## Routes
 
-| Path         | Purpose                                              |
-| ------------ | ---------------------------------------------------- |
-| `/`          | Home placeholder (not the register form)             |
-| `/register`  | User registration form (does not issue a session)    |
-| `/login`     | Phone OTP login                                      |
+| Path         | Purpose                                                |
+| ------------ | ------------------------------------------------------ |
+| `/`          | Home placeholder (not the register form)               |
+| `/register`  | User registration form (does not issue a session)      |
+| `/login`     | Phone OTP login                                        |
 | `/dashboard` | Authenticated placeholder; no buyer/seller business UI |
-| `*`          | Not found / not yet open                             |
+| `*`          | Not found / not yet open                               |
 
 ## Local development
 

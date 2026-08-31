@@ -21,7 +21,7 @@ export const Notice = forwardRef<
       className={[CLASS[tone], rest.className].filter(Boolean).join(' ')}
       data-tone={tone}
       role={rest.role ?? (alert ? 'alert' : 'status')}
-      aria-live={alert ? undefined : rest['aria-live'] ?? 'polite'}
+      aria-live={alert ? undefined : (rest['aria-live'] ?? 'polite')}
       aria-busy={tone === 'loading' ? true : undefined}
     >
       {children}

@@ -15,9 +15,7 @@ ALLOWED = frozenset(
     }
 )
 
-FORBIDDEN = frozenset(
-    {"user_id", "project_id", "request_id", "account_id", "api_key"}
-)
+FORBIDDEN = frozenset({"user_id", "project_id", "request_id", "account_id", "api_key"})
 
 
 def allow_labels(labels: dict[str, str]) -> bool:

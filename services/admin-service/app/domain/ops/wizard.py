@@ -7,13 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from app.domain.admin.errors import (
-    MSG,
-    VALIDATION,
-    WIZARD_CANCELLED,
-    WIZARD_EXPIRED,
-    AdminError,
-)
+from app.domain.admin.errors import MSG, VALIDATION, WIZARD_CANCELLED, WIZARD_EXPIRED, AdminError
 from app.domain.admin.service import AdminService
 
 WIZARD_ACTION = {

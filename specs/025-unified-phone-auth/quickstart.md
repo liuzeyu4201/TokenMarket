@@ -2,7 +2,7 @@
 
 ```bash
 uv run --project services/api-service pytest \
-  services/api-service/tests/unit/test_unified_phone_auth.py \
+  services/api-service/tests/unit/test_unified_phone_auth_gates.py \
   services/api-service/tests/integration/test_unified_phone_auth.py -q
 cd frontend && npx vitest run src/pages/Login.test.tsx src/pages/Register.test.tsx
 ```

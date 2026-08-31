@@ -375,6 +375,26 @@ async def test_revoke_all_already_revoked_session() -> None:
 
 
 @pytest.mark.asyncio
+async def test_revoke_all_unknown_csrf_version_is_unavailable() -> None:
+    settings = _settings()
+    mat = settings.key_material("session")
+    token = generate_session_token(mat.version)
+    digest = token_digest(mat.current, token.opaque_secret)
+    user = _user()
+    row = _auth_session(user_id=user.id, token_digest_bytes=digest)
+    service = _revoke_all_service(settings, row=row, user=user)
+    result = await service.revoke_all_sessions(
+        cookie_value=token.cookie_value,
+        csrf_presented="99.unknown-csrf-version",
+        request_id="r-csrf-ver",
+    )
+    assert result.kind == "service_unavailable"
+    assert result.http_status == 503
+    service._repo.rollback.assert_awaited()
+    service._repo.bump_session_generation.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_revoke_all_csrf_invalid() -> None:
     settings = _settings()
     mat = settings.key_material("session")

@@ -97,7 +97,7 @@ describe('admin catalog', () => {
     await waitFor(() => {
       expect(screen.getByTestId('admin-catalog')).toBeInTheDocument()
     })
-    expect(screen.getByText(/共 100000/)).toBeInTheDocument()
+    expect(await screen.findByText(/共 100000/)).toBeInTheDocument()
     expect(screen.getByText('下一页')).toBeInTheDocument()
     expect(screen.getByTestId('health-unknown')).toHaveTextContent('未知（过期）')
     expect(container.textContent).not.toMatch(/sk-/)

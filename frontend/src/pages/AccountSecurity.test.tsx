@@ -85,8 +85,8 @@ describe('AccountSecurity', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: '账户安全' })).toBeInTheDocument()
     })
+    expect(await screen.findByText('abcd1234')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
-    expect(screen.getByText('abcd1234')).toBeInTheDocument()
     expect(screen.queryByText(/csrf/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '结束全部 Web 会话' })).toBeInTheDocument()
   })

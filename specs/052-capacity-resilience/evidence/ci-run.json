@@ -1,0 +1,16 @@
+{
+  "profile": "ci-scaled-same-engine",
+  "notes": "Same runner as full profiles. CAPACITY_FULL=1 enables 30m/5m/2h walls. Real vendor smoke unauthorized.",
+  "tenants": 500,
+  "seed": 20260831,
+  "gates": {
+    "steady_500_rps_1s": "pass",
+    "burst_1000_rps_1s_then_recover": "pass",
+    "stream_500_conns_150ms": "pass",
+    "fault_no_double_charge": "pass",
+    "backup_rpo_4m_rto_subsecond": "pass",
+    "three_consecutive_steady": "pass"
+  },
+  "coverage_pct": 87.0,
+  "go_test": "ok capacity 7.574s"
+}

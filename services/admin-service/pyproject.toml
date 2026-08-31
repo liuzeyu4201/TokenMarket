@@ -44,7 +44,7 @@ build-backend = "hatchling.build"
 packages = ["."]
 
 [tool.black]
-line-length = 100
+line-length = 88
 target-version = ["py311"]
 include = '\.pyi?$'
 extend-exclude = '''
@@ -57,7 +57,7 @@ extend-exclude = '''
 
 [tool.isort]
 profile = "black"
-line_length = 100
+line_length = 88
 known_first_party = ["app"]
 
 [tool.mypy]

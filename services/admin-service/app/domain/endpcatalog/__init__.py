@@ -20,7 +20,9 @@ class CatalogError(RuntimeError):
 def _walk_catalog(start: Path) -> Path | None:
     cur = start.resolve()
     for _ in range(8):
-        candidate = cur / "shared" / "contracts" / "endpoint-catalog" / "v1" / "catalog.json"
+        candidate = (
+            cur / "shared" / "contracts" / "endpoint-catalog" / "v1" / "catalog.json"
+        )
         if candidate.is_file():
             return candidate
         if cur.parent == cur:
@@ -46,10 +48,14 @@ def expected_major() -> int:
     try:
         return int(raw)
     except ValueError as exc:
-        raise CatalogError("CATALOG_VERSION_MISMATCH", "invalid TOKENMARKET_CATALOG_MAJOR") from exc
+        raise CatalogError(
+            "CATALOG_VERSION_MISMATCH", "invalid TOKENMARKET_CATALOG_MAJOR"
+        ) from exc
 
 
-def load_catalog(path: Path | None = None, want_major: int | None = None) -> dict[str, Any]:
+def load_catalog(
+    path: Path | None = None, want_major: int | None = None
+) -> dict[str, Any]:
     target = path or catalog_path()
     major = CATALOG_MAJOR if want_major is None else want_major
     try:

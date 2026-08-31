@@ -76,7 +76,9 @@ _SECRET_PARTS = (
 )
 
 _PROTOCOLS = ("openai", "anthropic", "vertex")
-_EXPORT_CONN = frozenset({"id", "fingerprint", "capabilities", "health", "freshness", "protocol"})
+_EXPORT_CONN = frozenset(
+    {"id", "fingerprint", "capabilities", "health", "freshness", "protocol"}
+)
 
 
 def _now() -> datetime:

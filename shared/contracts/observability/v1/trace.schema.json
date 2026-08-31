@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/observability/v1/trace.schema.json",
+  "schema_version": "1.0.0",
+  "title": "TraceHop",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "service", "stage", "kind", "freshness", "at"],
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "service": { "type": "string", "enum": ["gateway", "api", "billing", "admin", "worker"] },
+    "stage": {
+      "type": "string",
+      "enum": ["proxy", "route", "upstream", "usage", "ledger"]
+    },
+    "kind": { "type": "string", "enum": ["span", "link"] },
+    "freshness": { "type": "string", "enum": ["live", "stale", "unknown"] },
+    "at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tokenmarket.local/contracts/audit/v1/audit-event.schema.json",
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "title": "AuditEvent",
   "type": "object",
   "additionalProperties": false,
@@ -23,7 +23,21 @@
     "correlation_id": { "type": "string", "minLength": 1 },
     "payload": {
       "type": "object",
-      "description": "脱敏后的审计负载，不得含凭据明文或完整请求正文"
+      "description": "脱敏后的审计负载，不得含凭据明文或完整请求正文",
+      "properties": {
+        "actor_id": { "type": "string" },
+        "role": { "type": "string" },
+        "action": { "type": "string" },
+        "target": { "type": "string" },
+        "reason": { "type": "string" },
+        "request_id": { "type": "string" },
+        "before": { "type": "object" },
+        "after": { "type": "object" },
+        "result": { "type": "string" },
+        "source": { "type": "string" },
+        "prev_hash": { "type": "string" },
+        "record_hash": { "type": "string" }
+      }
     }
   }
 }

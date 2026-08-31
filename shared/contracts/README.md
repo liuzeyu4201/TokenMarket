@@ -39,7 +39,8 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.1.0 | JSON Schema |
 | `seller-workbench/v1/` | API Service + Frontend (seller quote workbench, SF17) | 1.0.0 | Markdown |
 | `ledger/v1/` | Billing Service (immutable ledger, SF28+) | 1.2.0 | JSON Schema |
-| `audit/v1/` | Admin Service (audit events, SF30+) | 1.0.0 | JSON Schema |
+| `admin-identity/v1/` | Admin Service (admin identity/RBAC, SF30) | 1.0.0 | Markdown |
+| `audit/v1/` | Admin Service (audit events, SF30+) | 1.1.0 | JSON Schema |
 | `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
 | `unified-phone-auth/v1/` | API Service (unified phone auth, SF06) | 1.0.0 | OpenAPI |
 | `single-session-auth/v1/` | API Service (single-session hardening, SF07) | 1.0.0 | OpenAPI |
@@ -86,7 +87,8 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   1.2.0 adds composite health/latency/capacity/price scoring on that set (SF24).
   `ledger/v1` 1.1.0 is append-only test-quota reserve/settle (SF28);
   1.2.0 adds unresolved cases, recon tickets, and late-event deltas (SF29).
-  Audit writers land in later SFs.
+  `admin-identity/v1` 1.0.0 is the isolated admin identity and RBAC matrix (SF30).
+  `audit/v1` 1.1.0 expands admin action payloads with hash-chain fields (SF30).
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation

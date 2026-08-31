@@ -176,7 +176,7 @@ class LedgerService:
         rec = self._require_res(request_id)
         if rec.status == "consumed":
             return Journal(journal_id=rec.journal_id, request_id=request_id)
-        if rec.status in ("released", "unresolved"):
+        if rec.status == "released":
             raise LedgerError(ALREADY_TERMINAL, MSG[ALREADY_TERMINAL])
         lock = getattr(self._store, "locked", None)
         ctx = lock() if callable(lock) else None
@@ -186,6 +186,8 @@ class LedgerService:
             rec = self._require_res(request_id)
             if rec.status == "consumed":
                 return Journal(journal_id=rec.journal_id, request_id=request_id)
+            if rec.status == "released":
+                raise LedgerError(ALREADY_TERMINAL, MSG[ALREADY_TERMINAL])
             journal = _new_id()
             buckets = self._buyer_buckets(rec.account_id, rec.project_id, rec.key_id)
             # Release the full hold, then post settled buyer debit.
@@ -286,6 +288,143 @@ class LedgerService:
         rec.unresolved_reason = reason or "unknown_cost"
         self._store.save_reservation(rec)
         return rec
+
+    def net_settled(self, request_id: str, kind: AccountKind) -> tuple[int, int]:
+        """Return (net_debit, net_credit) of settled minus reversed for kind."""
+        debit = 0
+        credit = 0
+        for e in self._store.list_entries():
+            if e.request_id != request_id or e.account_kind != kind:
+                continue
+            if e.status == "settled" and e.direction == "debit":
+                debit += e.amount_minor_units
+            elif e.status == "settled" and e.direction == "credit":
+                credit += e.amount_minor_units
+            elif e.status == "reversed" and e.direction == "credit":
+                debit -= e.amount_minor_units
+            elif e.status == "reversed" and e.direction == "debit":
+                credit -= e.amount_minor_units
+        return debit, credit
+
+    def apply_delta(
+        self,
+        *,
+        request_id: str,
+        buyer_debit: int,
+        seller_earning: int,
+        spread: int,
+        seller_id: str,
+        rate_version: str,
+        evidence_digest: str = "",
+    ) -> Journal:
+        if buyer_debit != seller_earning + spread:
+            raise LedgerError(UNBALANCED, MSG[UNBALANCED])
+        rec = self._require_res(request_id)
+        if rec.status != "consumed":
+            return self.settle(
+                request_id=request_id,
+                buyer_debit=buyer_debit,
+                seller_earning=seller_earning,
+                spread=spread,
+                seller_id=seller_id,
+                rate_version=rate_version,
+                evidence_digest=evidence_digest,
+            )
+        cur_buyer, _ = self.net_settled(request_id, "buyer_quota")
+        _, cur_seller = self.net_settled(request_id, "seller_earning")
+        _, cur_spread = self.net_settled(request_id, "platform_spread")
+        d_buyer = buyer_debit - cur_buyer
+        d_seller = seller_earning - cur_seller
+        d_spread = spread - cur_spread
+        if d_buyer == 0 and d_seller == 0 and d_spread == 0:
+            return Journal(journal_id=rec.journal_id, request_id=request_id)
+        if d_buyer != d_seller + d_spread:
+            raise LedgerError(UNBALANCED, MSG[UNBALANCED])
+        journal = _new_id()
+        buckets = self._buyer_buckets(rec.account_id, rec.project_id, rec.key_id)
+        if d_buyer > 0:
+            for acc, kind in buckets:
+                self._debit(
+                    journal_id=journal,
+                    request_id=request_id,
+                    account_id=acc,
+                    kind=kind,
+                    amount=d_buyer,
+                    status="settled",
+                    rate_version=rate_version,
+                    project_id=rec.project_id,
+                    key_id=rec.key_id,
+                    evidence_digest=evidence_digest,
+                )
+            if d_seller > 0:
+                self._credit(
+                    journal_id=journal,
+                    request_id=request_id,
+                    account_id=account_id_for("seller_earning", seller_id),
+                    kind="seller_earning",
+                    amount=d_seller,
+                    status="settled",
+                    rate_version=rate_version,
+                    evidence_digest=evidence_digest,
+                )
+            if d_spread > 0:
+                self._credit(
+                    journal_id=journal,
+                    request_id=request_id,
+                    account_id=account_id_for("platform_spread", "platform"),
+                    kind="platform_spread",
+                    amount=d_spread,
+                    status="settled",
+                    rate_version=rate_version,
+                    evidence_digest=evidence_digest,
+                )
+        else:
+            # Lower reported: append reverse legs for the absolute delta.
+            amt_b, amt_s, amt_p = -d_buyer, -d_seller, -d_spread
+            for acc, kind in buckets:
+                self._credit(
+                    journal_id=journal,
+                    request_id=request_id,
+                    account_id=acc,
+                    kind=kind,
+                    amount=amt_b,
+                    status="reversed",
+                    rate_version=rate_version,
+                    project_id=rec.project_id,
+                    key_id=rec.key_id,
+                    evidence_digest=evidence_digest,
+                )
+            if amt_s > 0:
+                self._debit(
+                    journal_id=journal,
+                    request_id=request_id,
+                    account_id=account_id_for("seller_earning", seller_id),
+                    kind="seller_earning",
+                    amount=amt_s,
+                    status="reversed",
+                    rate_version=rate_version,
+                    evidence_digest=evidence_digest,
+                )
+            if amt_p > 0:
+                self._debit(
+                    journal_id=journal,
+                    request_id=request_id,
+                    account_id=account_id_for("platform_spread", "platform"),
+                    kind="platform_spread",
+                    amount=amt_p,
+                    status="reversed",
+                    rate_version=rate_version,
+                    evidence_digest=evidence_digest,
+                )
+        rec.journal_id = journal
+        self._store.save_reservation(rec)
+        ids = [
+            e.entry_id for e in self._store.list_entries() if e.journal_id == journal
+        ]
+        return Journal(journal_id=journal, request_id=request_id, entry_ids=ids)
+
+    def list_reservations(self) -> list[Reservation]:
+        return self._store.list_reservations()
 
     def reverse(self, *, request_id: str, reason: str = "reverse") -> Journal:
         _ = reason

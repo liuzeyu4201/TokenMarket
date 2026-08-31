@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/ledger/v1/unresolved-case.schema.json",
+  "schema_version": "1.2.0",
+  "title": "UnresolvedCase",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "reason_code",
+    "amount_exposure_minor",
+    "next_action",
+    "owner",
+    "status"
+  ],
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "reason_code": {
+      "enum": ["MISSING_AMOUNT", "MISSING_USAGE", "PARSE_FAILED", "ASYNC_INCOMPLETE"]
+    },
+    "missing_evidence": { "type": "string" },
+    "amount_exposure_minor": { "type": "integer", "minimum": 0 },
+    "next_action": { "enum": ["wait_callback", "retry", "manual"] },
+    "retry_at": { "type": "string", "format": "date-time" },
+    "owner": { "type": "string" },
+    "sla_until": { "type": "string", "format": "date-time" },
+    "connection_id": { "type": "string" },
+    "rate_version": { "type": "string" },
+    "status": { "enum": ["open", "recovered", "manual"] },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "description": "长期未决不得记为零。金额暴露为预留占用，不是伪造花费。"
+}

@@ -91,7 +91,7 @@ describe('Supply workbench', () => {
     await waitFor(() => {
       expect(screen.getByTestId('supply-page')).toBeInTheDocument()
     })
-    expect(screen.getByText(/10000 bps/)).toBeInTheDocument()
+    expect(await screen.findByText(/10000 bps/)).toBeInTheDocument()
     expect(screen.getByText('parse_failed', { exact: false })).toBeInTheDocument()
     expect(container.textContent).not.toMatch(/buyer_multiplier/i)
     assertNoSeriousA11y(container)

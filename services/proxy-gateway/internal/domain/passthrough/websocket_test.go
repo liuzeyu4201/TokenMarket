@@ -76,6 +76,7 @@ func TestWebsocketUpgradeForwardedAndEcho(t *testing.T) {
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	// RFC 6455 sample nonce ("the sample nonce"); inert handshake fixture, not a credential.
 	req := fmt.Sprintf("GET /openai/v1/realtime HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", proxy.Listener.Addr().String())
 	if _, err := io.WriteString(conn, req); err != nil {
 		t.Fatal(err)

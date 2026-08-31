@@ -109,6 +109,21 @@ def test_fixtures_allowlisted_only_by_exact_inert_value(
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_rfc6455_sample_websocket_key_is_allowlisted(
+    gitleaks_available: bool, tmp_path: Path
+) -> None:
+    if not gitleaks_available:
+        pytest.skip("gitleaks not installed on this host")
+    repo_root = find_repo_root()
+    path = tmp_path / "handshake.txt"
+    path.write_text(
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\n",
+        encoding="utf-8",
+    )
+    result = _run_gitleaks(tmp_path, repo_root / ".gitleaks.toml")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_sf02_event_envelope_redacts_secrets_and_workspace_paths() -> None:
     """T081: poisoned lifecycle-shaped messages never retain secrets or paths."""
     secret = "tm_local_" + ("S" * 40)

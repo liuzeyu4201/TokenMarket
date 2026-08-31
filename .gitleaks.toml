@@ -23,4 +23,5 @@ regexes = [
   '''^tmk-0123456789abcdef0123456789abcdef$''',
   '''^sk-abcdefghijklmnopqrstuvwxyz1234$''',
   '''^sk-abcdefghijklmnopqrstuvwxyz1234567890$''',
+  '''^dGhlIHNhbXBsZSBub25jZQ==$''',  # RFC 6455 sample Sec-WebSocket-Key (not a credential)
 ]

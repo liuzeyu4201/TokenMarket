@@ -42,9 +42,15 @@ def test_provider_connection_has_no_plaintext_readback() -> None:
 
 def test_project_mode_not_patchable() -> None:
     text = load_text("shared", "contracts", "project", "v1", "project.openapi.yaml")
-    assert "\n    patch:" not in text.lower()
     assert "enum: [shared, dedicated]" in text
     assert "创建后不可变" in text
+    assert "MODE_IMMUTABLE" in text
+    patch = load_text("shared", "contracts", "project", "v1", "project.openapi.yaml")
+    start = patch.find("PatchProjectRequest:")
+    assert start > 0
+    block = patch[start : start + 400]
+    assert "display_name" in block
+    assert "mode:" not in block.split("ProtocolState:")[0]
 
 
 def test_ledger_append_only_and_no_fiat() -> None:

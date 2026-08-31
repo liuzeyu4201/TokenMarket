@@ -14,6 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/observability"
 )
 
 // Config holds server construction parameters.
@@ -216,6 +218,7 @@ func (s *Server) initMetrics() {
 	reg.MustRegister(info)
 	s.registerCount.Add(1)
 	info.WithLabelValues(s.config.Service, s.config.Version).Set(1)
+	observability.NewSLOMetrics().MustRegister(reg)
 	s.metricsReg = reg
 	s.metricsHandler = promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 }

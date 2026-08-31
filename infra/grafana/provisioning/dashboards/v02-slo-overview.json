@@ -1,0 +1,105 @@
+{
+  "uid": "tokenmarket-v02-slo",
+  "title": "v02-slo-overview",
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": ["tokenmarket", "slo"],
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Dataplane availability",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(proxy_slo_requests_total{plane=\"dataplane\",status=\"200\"}[30d])) / clamp_min(sum(rate(proxy_slo_requests_total{plane=\"dataplane\"}[30d])), 1e-9)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "noValue": "No data / scrape failed" } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Admin availability",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(proxy_slo_requests_total{plane=\"admin\",status=\"200\"}[30d])) / clamp_min(sum(rate(proxy_slo_requests_total{plane=\"admin\"}[30d])), 1e-9)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "noValue": "No data / scrape failed" } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Dataplane error budget remaining",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - ((1 - (sum(rate(proxy_slo_requests_total{plane=\"dataplane\",status=\"200\"}[30d])) / clamp_min(sum(rate(proxy_slo_requests_total{plane=\"dataplane\"}[30d])), 1e-9))) / 0.001)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "noValue": "No data / scrape failed" } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Platform vs upstream latency",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(proxy_platform_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "platform p95"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(proxy_upstream_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "upstream p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "noValue": "No data / scrape failed" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "SSE first event",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(proxy_stream_first_event_seconds_bucket[5m])) by (le))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "noValue": "No data / scrape failed" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Event backlog",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 14 },
+      "targets": [{ "refId": "A", "expr": "proxy_event_backlog" }],
+      "fieldConfig": { "defaults": { "unit": "short", "noValue": "No data / scrape failed" } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Unresolved cases",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 14 },
+      "targets": [{ "refId": "A", "expr": "proxy_unresolved_total" }],
+      "fieldConfig": { "defaults": { "unit": "short", "noValue": "No data / scrape failed" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Connection health",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 14 },
+      "targets": [{ "refId": "A", "expr": "proxy_connection_health" }],
+      "fieldConfig": { "defaults": { "unit": "short", "noValue": "No data / scrape failed" } }
+    }
+  ]
+}

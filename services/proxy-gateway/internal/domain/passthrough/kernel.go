@@ -16,6 +16,7 @@ import (
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/pricelock"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageobs"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageparse"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/observability"
 )
 
 // Limits bound body size and upstream wait.
@@ -58,6 +59,8 @@ type Kernel struct {
 	Capture   usageparse.Recorder
 	PriceLock *pricelock.Locker
 	Quota     Quota
+	SLO       *observability.SLOMetrics
+	Trace     *observability.TraceLog
 }
 
 func (k *Kernel) selector() Selector {
@@ -146,12 +149,16 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 
 	var up Upstream
 	var err error
+	fwdStart := k.now()
 	if pinConn != "" {
 		up, err = k.selector().SelectConnection(r.Context(), pinConn)
 	} else {
 		up, err = k.selector().Select(r.Context(), proto, endpointID)
 	}
 	if err != nil {
+		if k.SLO != nil {
+			k.SLO.ObserveNoCandidate()
+		}
 		if err == errDedicatedUnavailable {
 			writePlatform(w, r, http.StatusServiceUnavailable, CodeDedicatedUnavailable, "专享连接不可用")
 			return
@@ -220,6 +227,7 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 
 	register := affinityKind == "resource_id" && pinConn == "" && k.Affinity != nil && up.ConnectionID != ""
 	pw := &streamWriter{ResponseWriter: w, idle: idle, flush: flushEach}
+	var upstreamDur time.Duration
 
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -234,7 +242,7 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 			stripDenied(out.Header, inboundStripSet(isWS))
 			applyUpstreamAuth(out.Header, proto, up.Credential)
 		},
-		Transport:     k.transport(),
+		Transport:     timedRT{next: k.transport(), d: &upstreamDur},
 		FlushInterval: flushInterval(transportName),
 		ModifyResponse: func(resp *http.Response) error {
 			stripDenied(resp.Header, outboundDenied)
@@ -295,6 +303,41 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 		status = http.StatusOK
 	}
 	k.observeEnd(rid, status, "complete")
+	if k.SLO != nil {
+		plat := k.now().Sub(fwdStart) - upstreamDur
+		if plat < 0 {
+			plat = 0
+		}
+		k.SLO.ObserveRED(
+			"dataplane", proto, endpointID, strconv.Itoa(status), plat, upstreamDur,
+		)
+	}
+	if k.Trace != nil && rid != "" {
+		k.Trace.Append(observability.Hop{
+			RequestID: rid,
+			Service:   "gateway",
+			Stage:     "proxy",
+			Kind:      "span",
+			Freshness: "live",
+			At:        k.now(),
+		})
+		k.Trace.Append(observability.Hop{
+			RequestID: rid,
+			Service:   "gateway",
+			Stage:     "upstream",
+			Kind:      "span",
+			Freshness: "live",
+			At:        k.now(),
+		})
+		k.Trace.Append(observability.Hop{
+			RequestID: rid,
+			Service:   "worker",
+			Stage:     "usage",
+			Kind:      "link",
+			Freshness: "live",
+			At:        k.now(),
+		})
+	}
 }
 
 func (k *Kernel) lookupAffinity(proto, resourceID string) (affinity.Binding, error) {

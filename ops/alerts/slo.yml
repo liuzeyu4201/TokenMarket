@@ -1,0 +1,111 @@
+# Prometheus alert rules — SLO / full-path (SF32)
+# Each rule names impact, threshold, dashboard, runbook, owner, escalation.
+
+groups:
+  - name: tokenmarket-slo
+    rules:
+      - alert: TokenMarketUpstreamSlow
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(proxy_upstream_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          priority: p1
+          owner: proxy-gateway
+          kind: upstream_slow
+        annotations:
+          summary: 上游 p95 超过 2 秒
+          description: 数据面上游变慢，买家延迟上升。
+          impact: 数据面上游变慢，买家延迟上升
+          dashboard: v02-slo-overview
+          runbook: ops/runbooks/slo-alerts.md
+          escalation: P1 on-call
+
+      - alert: TokenMarketNoRouteCandidate
+        expr: increase(proxy_route_no_candidate_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          priority: p1
+          owner: proxy-gateway
+          kind: no_candidate
+        annotations:
+          summary: 出现无合格路由候选
+          description: 无合格路由候选，请求失败关闭。
+          impact: 无合格路由候选，请求失败关闭
+          dashboard: v02-slo-overview
+          runbook: ops/runbooks/slo-alerts.md
+          escalation: P1 on-call
+
+      - alert: TokenMarketEventBacklog
+        expr: proxy_event_backlog > 1000
+        for: 5m
+        labels:
+          severity: warning
+          priority: p1
+          owner: proxy-gateway
+          kind: event_backlog
+        annotations:
+          summary: 事件积压超过 1000
+          description: 用量/结算事件积压。
+          impact: 用量/结算事件积压
+          dashboard: v02-slo-overview
+          runbook: ops/runbooks/slo-alerts.md
+          escalation: P1 on-call
+
+      - alert: TokenMarketUnresolvedSpike
+        expr: increase(proxy_unresolved_total[15m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          priority: p1
+          owner: billing-service
+          kind: unresolved_spike
+        annotations:
+          summary: 未决账务 15 分钟增量超过 10
+          description: 未决账务突增。
+          impact: 未决账务突增
+          dashboard: v02-slo-overview
+          runbook: ops/runbooks/slo-alerts.md
+          escalation: P1 finance/ops
+
+      - alert: TokenMarketConnectionUnhealthy
+        expr: proxy_connection_health{state="unhealthy"} > 0
+        for: 5m
+        labels:
+          severity: warning
+          priority: p1
+          owner: supply_ops
+          kind: connection_unhealthy
+        annotations:
+          summary: 存在不健康连接
+          description: 连接健康失败。
+          impact: 连接健康失败
+          dashboard: v02-slo-overview
+          runbook: ops/runbooks/slo-alerts.md
+          escalation: P1 supply
+
+      - alert: TokenMarketDataplaneErrorBudgetLow
+        expr: |
+          (
+            1 - (
+              sum(increase(proxy_slo_requests_total{plane="dataplane",status="200"}[30d]))
+              /
+              clamp_min(sum(increase(proxy_slo_requests_total{plane="dataplane"}[30d])), 1)
+            )
+          ) / 0.001 > 0.80
+        for: 30m
+        labels:
+          severity: critical
+          priority: p0
+          owner: proxy-gateway
+          kind: error_budget_low
+        annotations:
+          summary: 数据面剩余错误预算低于 20%，冻结发布
+          impact: 错误预算将尽，停止发布
+          dashboard: v02-slo-overview
+          runbook: ops/runbooks/slo-alerts.md
+          escalation: P0 release freeze

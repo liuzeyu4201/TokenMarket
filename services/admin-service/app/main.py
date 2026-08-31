@@ -12,6 +12,8 @@ from starlette.responses import Response
 
 from .api.admin import router as admin_router
 from .api.ops import router as ops_router
+from .api.slo import SLOStore
+from .api.slo import router as slo_router
 from .domain.admin import AdminService
 from .domain.endpcatalog import CatalogError, must_load
 from .domain.ops import ConfigPipeline, OpsCatalog, WizardService
@@ -48,10 +50,12 @@ app.state.endpoint_catalog = _catalog
 app.include_router(health_router)
 app.include_router(admin_router)
 app.include_router(ops_router)
+app.include_router(slo_router)
 app.state.admin_service = AdminService()
 app.state.ops_catalog = OpsCatalog()
 app.state.config_pipeline = ConfigPipeline()
 app.state.wizard_service = WizardService()
+app.state.slo_store = SLOStore()
 
 
 @app.middleware("http")

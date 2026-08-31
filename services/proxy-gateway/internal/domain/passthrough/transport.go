@@ -18,6 +18,24 @@ var (
 	errUploadTimeout = errors.New("upload timeout")
 )
 
+type timedRT struct {
+	next http.RoundTripper
+	d    *time.Duration
+}
+
+func (t timedRT) RoundTrip(r *http.Request) (*http.Response, error) {
+	next := t.next
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	start := time.Now()
+	resp, err := next.RoundTrip(r)
+	if t.d != nil {
+		*t.d = time.Since(start)
+	}
+	return resp, err
+}
+
 func websocketUpgrade(r *http.Request) bool {
 	if r == nil {
 		return false

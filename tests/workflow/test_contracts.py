@@ -412,6 +412,10 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
         "Admin Service (ops console, SF31)",
         "1.0.0",
     ),
+    "observability/v1/": (
+        "Proxy Gateway + Admin Service (SLO/alerts, SF32)",
+        "1.0.0",
+    ),
     "audit/v1/": ("Admin Service (audit events, SF30+)", "1.1.0"),
     "usage-outbox/v1/": ("Proxy Gateway (usage outbox, SF04)", "1.0.0"),
     "unified-phone-auth/v1/": (

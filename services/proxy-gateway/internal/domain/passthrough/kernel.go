@@ -57,6 +57,7 @@ type Kernel struct {
 	Usage     usageobs.Sink
 	Capture   usageparse.Recorder
 	PriceLock *pricelock.Locker
+	Quota     Quota
 }
 
 func (k *Kernel) selector() Selector {
@@ -197,9 +198,28 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 		flushEach = true
 	}
 
+	rid := r.Header.Get("X-Request-ID")
+	forwarded := false
+	if k.Quota != nil {
+		amount := int64(1)
+		if raw := r.Header.Get("X-TokenMarket-Reserve-Minor"); raw != "" {
+			if n, perr := strconv.ParseInt(raw, 10, 64); perr == nil && n > 0 {
+				amount = n
+			}
+		}
+		if qerr := k.Quota.Reserve(r.Context(), rid, projectID, r.Header.Get("X-TokenMarket-Key-ID"), amount); qerr != nil {
+			writePlatform(w, r, http.StatusConflict, CodeInsufficientQuota, "测试额度不足")
+			return
+		}
+		defer func() {
+			if !forwarded {
+				_ = k.Quota.Abort(context.Background(), rid)
+			}
+		}()
+	}
+
 	register := affinityKind == "resource_id" && pinConn == "" && k.Affinity != nil && up.ConnectionID != ""
 	pw := &streamWriter{ResponseWriter: w, idle: idle, flush: flushEach}
-	rid := r.Header.Get("X-Request-ID")
 
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -268,6 +288,7 @@ func (k *Kernel) ServeHTTP(w http.ResponseWriter, r *http.Request, projectMode s
 			writePlatform(rw, req, http.StatusBadGateway, CodeTimeout, "上游传输失败")
 		},
 	}
+	forwarded = true
 	proxy.ServeHTTP(pw, r)
 	status := pw.status
 	if status == 0 {

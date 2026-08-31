@@ -14,6 +14,7 @@ const (
 	CodeUnresolved           = "PROTOCOL_UNRESOLVED"
 	CodeNoUpstream           = "NO_UPSTREAM"
 	CodeDedicatedUnavailable = "DEDICATED_UNAVAILABLE"
+	CodeInsufficientQuota    = "INSUFFICIENT_QUOTA"
 	CodeTooLarge             = "REQUEST_TOO_LARGE"
 	CodeTimeout              = "UPSTREAM_TIMEOUT"
 	CodeCanceled             = "CLIENT_CANCELED"

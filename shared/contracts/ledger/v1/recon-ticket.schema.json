@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmarket.local/contracts/ledger/v1/recon-ticket.schema.json",
+  "schema_version": "1.2.0",
+  "title": "ReconTicket",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ticket_id", "kind", "request_id", "created_at"],
+  "properties": {
+    "ticket_id": { "type": "string", "minLength": 1 },
+    "kind": { "enum": ["VARIANCE", "ORPHAN", "UNBALANCED"] },
+    "request_id": { "type": "string" },
+    "detail": { "type": "string" },
+    "reported_minor": { "type": "integer" },
+    "computed_minor": { "type": "integer" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

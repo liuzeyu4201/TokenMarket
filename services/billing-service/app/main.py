@@ -13,6 +13,7 @@ from prometheus_client import Info, generate_latest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .api.ledger import router as ledger_router
+from .api.recon import router as recon_router
 from .database import (
     InvalidDatabaseConfigError,
     ProbeErrorCategory,
@@ -101,6 +102,7 @@ app = FastAPI(title="TokenMarket Billing Service", version=VERSION, lifespan=lif
 app.state.version = VERSION
 app.include_router(health_router)
 app.include_router(ledger_router)
+app.include_router(recon_router)
 
 
 @app.middleware("http")

@@ -25,6 +25,8 @@ class LedgerStore(Protocol):
 
     def save_reservation(self, rec: Reservation) -> None: ...
 
+    def list_reservations(self) -> list[Reservation]: ...
+
     def mutate_entry(self, entry_id: str) -> None: ...
 
     def delete_entry(self, entry_id: str) -> None: ...
@@ -72,6 +74,10 @@ class MemoryLedgerStore:
             if rec.request_id not in self.reservations:
                 raise KeyError(rec.request_id)
             self.reservations[rec.request_id] = deepcopy(rec)
+
+    def list_reservations(self) -> list[Reservation]:
+        with self._lock:
+            return [deepcopy(r) for r in self.reservations.values()]
 
     def mutate_entry(self, entry_id: str) -> None:
         raise LedgerError(IMMUTABLE_ENTRY, MSG[IMMUTABLE_ENTRY])

@@ -55,8 +55,7 @@ def _insert_idempotency(
 ) -> uuid.UUID:
     row_id = uuid.uuid4()
     conn.execute(
-        text(
-            """
+        text("""
             INSERT INTO verification_request_idempotency_records (
                 id, operation, key_digest, key_version, phone_ref, state,
                 http_status, result_code, result_payload, created_at,
@@ -66,8 +65,7 @@ def _insert_idempotency(
                 :phone_ref, 'succeeded', 202, '0', '{}'::jsonb,
                 :created_at, :created_at, :replay_until, :delete_after
             )
-            """
-        ),
+            """),
         {
             "id": row_id,
             "key_digest": key_digest or uuid.uuid4().bytes + uuid.uuid4().bytes[:16],
@@ -95,8 +93,7 @@ def _insert_challenge(
     # Terminal ``expired`` rows must keep send_started_at NULL
     # (ck_vc_send_started_state only allows it for dispatching/delivered/failed).
     conn.execute(
-        text(
-            """
+        text("""
             INSERT INTO verification_challenges (
                 id, user_id, idempotency_record_id, phone_ref,
                 code_digest, code_salt, code_key_version, provider_request_ref,
@@ -112,8 +109,7 @@ def _insert_challenge(
                 :created_at, NULL, :expires_at, NULL,
                 NULL, :delete_after
             )
-            """
-        ),
+            """),
         {
             "id": row_id,
             "user_id": user_id,
@@ -143,8 +139,7 @@ def _insert_session(
 ) -> uuid.UUID:
     row_id = uuid.uuid4()
     conn.execute(
-        text(
-            """
+        text("""
             INSERT INTO auth_sessions (
                 id, user_id, token_digest, token_key_version, role_snapshot,
                 issued_at, expires_at, revoked_at, revocation_reason,
@@ -154,8 +149,7 @@ def _insert_session(
                 :issued_at, :expires_at, :revoked_at, :reason,
                 :request_id, :delete_after
             )
-            """
-        ),
+            """),
         {
             "id": row_id,
             "user_id": user_id,
@@ -182,8 +176,7 @@ def _insert_event(
 ) -> uuid.UUID:
     row_id = uuid.uuid4()
     conn.execute(
-        text(
-            """
+        text("""
             INSERT INTO authentication_security_events (
                 id, event_type, outcome, reason_code, request_id,
                 user_id, challenge_id, session_id, subject_ref,
@@ -193,8 +186,7 @@ def _insert_event(
                 :user_id, :challenge_id, :session_id, NULL,
                 '{}'::jsonb, :occurred_at, :delete_after
             )
-            """
-        ),
+            """),
         {
             "id": row_id,
             "request_id": f"evt-{row_id}",

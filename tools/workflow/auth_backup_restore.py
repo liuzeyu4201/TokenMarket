@@ -864,11 +864,7 @@ async def _insert_logical_rows_async(
     database_url: str,
     tables: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> None:
-    from .auth_backup_secure import (
-        confirm_restore_matches,
-        quote_ident,
-        validate_restore_tables,
-    )
+    from .auth_backup_secure import confirm_restore_matches, quote_ident, validate_restore_tables
 
     validate_restore_tables(tables)
     import asyncpg
@@ -922,8 +918,10 @@ async def _fetch_auth_tables_on_connection(conn: Any) -> dict[str, list[dict[str
 
 
 def _coerce_pg_value(value: Any) -> Any:
-    if isinstance(value, str) and len(value) == 32 and all(
-        c in "0123456789abcdef" for c in value.lower()
+    if (
+        isinstance(value, str)
+        and len(value) == 32
+        and all(c in "0123456789abcdef" for c in value.lower())
     ):
         # Heuristic: hex-encoded short digest → keep as string; real BYTEA restore
         # for evidence paths should use pg_dump. Logical path accepts text/nulls.

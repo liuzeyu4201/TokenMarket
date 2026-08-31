@@ -72,11 +72,7 @@ def valid_input(synthetic_secret_factory: Any) -> _ValidInput:
 
 
 def _render(values: Mapping[str, str], *, drop: tuple[str, ...] = ()) -> str:
-    lines = [
-        f"{key}={values[key]}"
-        for key in _FIELD_ORDER
-        if key in values and key not in drop
-    ]
+    lines = [f"{key}={values[key]}" for key in _FIELD_ORDER if key in values and key not in drop]
     return "\n".join(lines) + "\n"
 
 
@@ -119,9 +115,7 @@ class TestValidParsing:
         assert grafana.username == "admin"
         assert grafana.secret == valid_input.grafana_secret
 
-    def test_connections_cover_dependencies_in_order(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_connections_cover_dependencies_in_order(self, valid_input: _ValidInput) -> None:
         models = _models()
         parsed = _parse(valid_input.values)
         ids = [connection.dependency_id for connection in parsed.connections]
@@ -131,12 +125,8 @@ class TestValidParsing:
             models.DependencyId.GRAFANA,
         ]
 
-    def test_comments_and_blank_lines_are_ignored(
-        self, valid_input: _ValidInput
-    ) -> None:
-        text = (
-            "# leading comment\n\n" + _render(valid_input.values) + "   \n# trailing\n"
-        )
+    def test_comments_and_blank_lines_are_ignored(self, valid_input: _ValidInput) -> None:
+        text = "# leading comment\n\n" + _render(valid_input.values) + "   \n# trailing\n"
         parsed = _config().parse_local_environment(text)
         assert parsed.mode == "local"
 
@@ -146,16 +136,12 @@ class TestValidParsing:
         parsed = _config().parse_local_environment(text)
         assert parsed.mode == "local"
 
-    def test_non_default_distinct_ports_are_accepted(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_non_default_distinct_ports_are_accepted(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
         values["DATABASE_URL"] = (
             f"postgresql://app:{valid_input.pg_secret}@127.0.0.1:15432/tokenmarket"
         )
-        values["REDIS_URL"] = (
-            f"redis://default:{valid_input.redis_secret}@127.0.0.1:16379/0"
-        )
+        values["REDIS_URL"] = f"redis://default:{valid_input.redis_secret}@127.0.0.1:16379/0"
         values["GRAFANA_URL"] = "http://127.0.0.1:13000"
         models = _models()
         parsed = _parse(values)
@@ -165,12 +151,8 @@ class TestValidParsing:
 
     def test_boundary_ports_are_accepted(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
-        values["DATABASE_URL"] = (
-            f"postgresql://app:{valid_input.pg_secret}@127.0.0.1:1/tokenmarket"
-        )
-        values["REDIS_URL"] = (
-            f"redis://default:{valid_input.redis_secret}@127.0.0.1:65535/0"
-        )
+        values["DATABASE_URL"] = f"postgresql://app:{valid_input.pg_secret}@127.0.0.1:1/tokenmarket"
+        values["REDIS_URL"] = f"redis://default:{valid_input.redis_secret}@127.0.0.1:65535/0"
         parsed = _parse(values)
         models = _models()
         assert parsed.connection(models.DependencyId.POSTGRES).host_port == 1
@@ -178,9 +160,7 @@ class TestValidParsing:
 
     def test_redis_multi_digit_database_number(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
-        values["REDIS_URL"] = (
-            f"redis://default:{valid_input.redis_secret}@127.0.0.1:6379/12"
-        )
+        values["REDIS_URL"] = f"redis://default:{valid_input.redis_secret}@127.0.0.1:6379/12"
         models = _models()
         parsed = _parse(values)
         assert parsed.connection(models.DependencyId.REDIS).database == 12
@@ -188,9 +168,7 @@ class TestValidParsing:
     def test_repeated_parse_is_deterministic(self, valid_input: _ValidInput) -> None:
         text = _render(valid_input.values)
         config = _config()
-        assert config.parse_local_environment(text) == config.parse_local_environment(
-            text
-        )
+        assert config.parse_local_environment(text) == config.parse_local_environment(text)
 
 
 class TestStrictFileParsing:
@@ -201,9 +179,7 @@ class TestStrictFileParsing:
 
     def test_lowercase_key_is_rejected(self, valid_input: _ValidInput) -> None:
         text = _render(valid_input.values, drop=("DATABASE_URL",))
-        text += (
-            f"database_url=postgresql://app:{valid_input.pg_secret}@127.0.0.1:5432/db\n"
-        )
+        text += f"database_url=postgresql://app:{valid_input.pg_secret}@127.0.0.1:5432/db\n"
         with pytest.raises(_config().InvalidConfigError):
             _config().parse_local_environment(text)
 
@@ -214,9 +190,7 @@ class TestStrictFileParsing:
         with pytest.raises(_config().InvalidModeError):
             _config().parse_local_environment(text)
 
-    def test_leading_whitespace_line_is_rejected(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_leading_whitespace_line_is_rejected(self, valid_input: _ValidInput) -> None:
         text = _render(valid_input.values) + "  EXTRA_FIELD=value\n"
         with pytest.raises(_config().InvalidConfigError):
             _config().parse_local_environment(text)
@@ -232,13 +206,8 @@ class TestStrictFileParsing:
         with pytest.raises(_config().InvalidModeError):
             _config().parse_local_environment(text)
 
-    def test_duplicate_lifecycle_field_is_rejected(
-        self, valid_input: _ValidInput
-    ) -> None:
-        text = (
-            _render(valid_input.values)
-            + f"GRAFANA_URL={valid_input.values['GRAFANA_URL']}\n"
-        )
+    def test_duplicate_lifecycle_field_is_rejected(self, valid_input: _ValidInput) -> None:
+        text = _render(valid_input.values) + f"GRAFANA_URL={valid_input.values['GRAFANA_URL']}\n"
         with pytest.raises(_config().InvalidConfigError) as exc_info:
             _config().parse_local_environment(text)
         assert "GRAFANA_URL" in str(exc_info.value)
@@ -252,9 +221,7 @@ class TestModeOrigin:
         assert "MODE" in str(exc_info.value)
 
     @pytest.mark.parametrize("mode", ["prod", "test", "stage", "LOCAL", "Local"])
-    def test_non_local_mode_is_invalid_mode(
-        self, valid_input: _ValidInput, mode: str
-    ) -> None:
+    def test_non_local_mode_is_invalid_mode(self, valid_input: _ValidInput, mode: str) -> None:
         values = dict(valid_input.values)
         values["MODE"] = mode
         with pytest.raises(_config().InvalidModeError) as exc_info:
@@ -263,9 +230,7 @@ class TestModeOrigin:
         assert mode not in str(exc_info.value)
 
     @pytest.mark.parametrize("mode", ["", " local", "local ", '"local"', "local,test"])
-    def test_imprecise_mode_is_invalid_mode(
-        self, valid_input: _ValidInput, mode: str
-    ) -> None:
+    def test_imprecise_mode_is_invalid_mode(self, valid_input: _ValidInput, mode: str) -> None:
         values = dict(valid_input.values)
         values["MODE"] = mode
         with pytest.raises(_config().InvalidModeError):
@@ -276,18 +241,14 @@ class TestModeOrigin:
         with pytest.raises(_config().InvalidModeError):
             _config().parse_local_environment(text)
 
-    def test_mode_rejection_precedes_config_errors(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_mode_rejection_precedes_config_errors(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
         values["MODE"] = "prod"
         values["DATABASE_URL"] = "not a url at all"
         with pytest.raises(_config().InvalidModeError):
             _parse(values)
 
-    def test_mode_rejection_precedes_malformed_lines(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_mode_rejection_precedes_malformed_lines(self, valid_input: _ValidInput) -> None:
         text = "MODE=test\ngarbage line without separator\n"
         with pytest.raises(_config().InvalidModeError):
             _config().parse_local_environment(text)
@@ -323,13 +284,8 @@ class TestModeOrigin:
     def test_error_codes_match_event_v2_taxonomy(self) -> None:
         config = _config()
         events = importlib.import_module("workflow.events")
-        assert (
-            config.InvalidModeError.code == events.DiagnosticCodeV2.INVALID_MODE.value
-        )
-        assert (
-            config.InvalidConfigError.code
-            == events.DiagnosticCodeV2.INVALID_CONFIG.value
-        )
+        assert config.InvalidModeError.code == events.DiagnosticCodeV2.INVALID_MODE.value
+        assert config.InvalidConfigError.code == events.DiagnosticCodeV2.INVALID_CONFIG.value
 
     def test_errors_extend_models_taxonomy(self) -> None:
         config = _config()
@@ -403,9 +359,7 @@ class TestRedisUrlGrammar:
             "redis://default:{rd}@127.0.0.1:70000/0",
         ],
     )
-    def test_invalid_redis_urls_are_rejected(
-        self, valid_input: _ValidInput, bad_url: str
-    ) -> None:
+    def test_invalid_redis_urls_are_rejected(self, valid_input: _ValidInput, bad_url: str) -> None:
         values = dict(valid_input.values)
         values["REDIS_URL"] = bad_url.format(rd=valid_input.redis_secret)
         with pytest.raises(_config().InvalidConfigError) as exc_info:
@@ -455,9 +409,7 @@ class TestGrafanaUrlGrammar:
             _parse(valid_input.values, drop=("GRAFANA_URL",))
         assert "GRAFANA_URL" in str(exc_info.value)
 
-    def test_missing_grafana_admin_password_is_rejected(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_missing_grafana_admin_password_is_rejected(self, valid_input: _ValidInput) -> None:
         with pytest.raises(_config().InvalidConfigError) as exc_info:
             _parse(valid_input.values, drop=("GRAFANA_ADMIN_PASSWORD",))
         assert "GRAFANA_ADMIN_PASSWORD" in str(exc_info.value)
@@ -484,9 +436,7 @@ class TestLoopbackOnly:
     ) -> None:
         values = dict(valid_input.values)
         if field == "DATABASE_URL":
-            values[field] = (
-                f"postgresql://app:{valid_input.pg_secret}@{host}:5432/tokenmarket"
-            )
+            values[field] = f"postgresql://app:{valid_input.pg_secret}@{host}:5432/tokenmarket"
         elif field == "REDIS_URL":
             values[field] = f"redis://default:{valid_input.redis_secret}@{host}:6379/0"
         else:
@@ -513,9 +463,7 @@ class TestPlaceholders:
         self, valid_input: _ValidInput, password: str
     ) -> None:
         values = dict(valid_input.values)
-        values["DATABASE_URL"] = (
-            f"postgresql://app:{password}@127.0.0.1:5432/tokenmarket"
-        )
+        values["DATABASE_URL"] = f"postgresql://app:{password}@127.0.0.1:5432/tokenmarket"
         with pytest.raises(_config().InvalidConfigError) as exc_info:
             _parse(values)
         assert "DATABASE_URL" in str(exc_info.value)
@@ -526,9 +474,7 @@ class TestPlaceholders:
         with pytest.raises(_config().InvalidConfigError):
             _config().parse_local_environment(text)
 
-    @pytest.mark.parametrize(
-        "field", ["DATABASE_URL", "REDIS_URL", "GRAFANA_ADMIN_PASSWORD"]
-    )
+    @pytest.mark.parametrize("field", ["DATABASE_URL", "REDIS_URL", "GRAFANA_ADMIN_PASSWORD"])
     def test_example_secret_placeholders_are_unusable(
         self, valid_input: _ValidInput, field: str
     ) -> None:
@@ -600,25 +546,19 @@ class TestSecretGrammar:
     ) -> None:
         suffix = "a" * 20 + bad_char + "b" * 20
         values = dict(valid_input.values)
-        values["DATABASE_URL"] = (
-            f"postgresql://app:tm_local_{suffix}@127.0.0.1:5432/tokenmarket"
-        )
+        values["DATABASE_URL"] = f"postgresql://app:tm_local_{suffix}@127.0.0.1:5432/tokenmarket"
         with pytest.raises(_config().InvalidConfigError) as exc_info:
             _parse(values)
         assert "DATABASE_URL" in str(exc_info.value)
 
-    def test_grafana_admin_password_is_not_percent_decoded(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_grafana_admin_password_is_not_percent_decoded(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
         values["GRAFANA_ADMIN_PASSWORD"] = "tm_local_" + "%2D" + "a" * 37
         with pytest.raises(_config().InvalidConfigError) as exc_info:
             _parse(values)
         assert "GRAFANA_ADMIN_PASSWORD" in str(exc_info.value)
 
-    def test_redis_password_cannot_inject_configuration(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_redis_password_cannot_inject_configuration(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
         injected = "tm_local_" + "a" * 39 + ";" + "requirepass other"
         values["REDIS_URL"] = f"redis://default:{injected}@127.0.0.1:6379/0"
@@ -627,22 +567,16 @@ class TestSecretGrammar:
 
 
 class TestPercentDecoding:
-    def test_percent_encoded_password_decodes_to_grammar(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_percent_encoded_password_decodes_to_grammar(self, valid_input: _ValidInput) -> None:
         secret = "tm_local_" + "aB3_-xY9" * 5
         encoded = secret.replace("-", "%2D").replace("_", "%5F")
         values = dict(valid_input.values)
-        values["DATABASE_URL"] = (
-            f"postgresql://app:{encoded}@127.0.0.1:5432/tokenmarket"
-        )
+        values["DATABASE_URL"] = f"postgresql://app:{encoded}@127.0.0.1:5432/tokenmarket"
         models = _models()
         parsed = _parse(values)
         assert parsed.connection(models.DependencyId.POSTGRES).secret == secret
 
-    @pytest.mark.parametrize(
-        "token", ["%40", "%2F", "%0A", "%00", "%20", "%25", "%3B", "%C3%A9"]
-    )
+    @pytest.mark.parametrize("token", ["%40", "%2F", "%0A", "%00", "%20", "%25", "%3B", "%C3%A9"])
     def test_decoding_outside_the_grammar_is_rejected(
         self, valid_input: _ValidInput, token: str
     ) -> None:
@@ -686,19 +620,12 @@ class TestPercentDecoding:
         self, valid_input: _ValidInput
     ) -> None:
         values = dict(valid_input.values)
-        values["DATABASE_URL"] = (
-            f"postgresql://app:tm_local_%2D{'a' * 31}@127.0.0.1:5432/db"
-        )
+        values["DATABASE_URL"] = f"postgresql://app:tm_local_%2D{'a' * 31}@127.0.0.1:5432/db"
         models = _models()
         parsed = _parse(values)
-        assert (
-            parsed.connection(models.DependencyId.POSTGRES).secret
-            == "tm_local_-" + "a" * 31
-        )
+        assert parsed.connection(models.DependencyId.POSTGRES).secret == "tm_local_-" + "a" * 31
 
-    def test_percent_encoding_in_host_is_not_decoded(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_percent_encoding_in_host_is_not_decoded(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
         values["DATABASE_URL"] = (
             f"postgresql://app:{valid_input.pg_secret}@%31%32%37.0.0.1:5432/tokenmarket"
@@ -726,9 +653,7 @@ class TestPorts:
                     f"postgresql://app:{valid_input.pg_secret}@127.0.0.1:40000/tokenmarket"
                 )
             elif field == "REDIS_URL":
-                values[field] = (
-                    f"redis://default:{valid_input.redis_secret}@127.0.0.1:40000/0"
-                )
+                values[field] = f"redis://default:{valid_input.redis_secret}@127.0.0.1:40000/0"
             else:
                 values[field] = "http://127.0.0.1:40000"
         with pytest.raises(_config().InvalidConfigError) as exc_info:
@@ -738,9 +663,7 @@ class TestPorts:
 
 
 class TestDerivedConnections:
-    def test_container_urls_replace_only_host_and_port(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_container_urls_replace_only_host_and_port(self, valid_input: _ValidInput) -> None:
         models = _models()
         parsed = _parse(valid_input.values)
         postgres = parsed.connection(models.DependencyId.POSTGRES)
@@ -749,9 +672,7 @@ class TestDerivedConnections:
         assert postgres.container_url == (
             f"postgresql://app:{valid_input.pg_secret}@postgres:5432/tokenmarket"
         )
-        assert redis.container_url == (
-            f"redis://default:{valid_input.redis_secret}@redis:6379/0"
-        )
+        assert redis.container_url == (f"redis://default:{valid_input.redis_secret}@redis:6379/0")
         assert grafana.container_url == "http://grafana:3000"
 
     def test_container_endpoints_are_canonical(self, valid_input: _ValidInput) -> None:
@@ -767,9 +688,7 @@ class TestDerivedConnections:
             assert connection.container_host == host
             assert connection.container_port == port
 
-    def test_custom_host_port_never_changes_container_port(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_custom_host_port_never_changes_container_port(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
         values["DATABASE_URL"] = (
             f"postgresql://app:{valid_input.pg_secret}@127.0.0.1:25432/tokenmarket"
@@ -783,9 +702,7 @@ class TestDerivedConnections:
             f"postgresql://app:{valid_input.pg_secret}@postgres:5432/tokenmarket"
         )
 
-    def test_displayed_endpoints_strip_user_info(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_displayed_endpoints_strip_user_info(self, valid_input: _ValidInput) -> None:
         parsed = _parse(valid_input.values)
         endpoints = parsed.displayed_endpoints()
         assert endpoints == {
@@ -803,9 +720,7 @@ class TestDerivedConnections:
         for secret in secrets:
             assert all(secret not in endpoint for endpoint in endpoints.values())
 
-    def test_repr_and_str_exclude_secrets_and_urls(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_repr_and_str_exclude_secrets_and_urls(self, valid_input: _ValidInput) -> None:
         models = _models()
         parsed = _parse(valid_input.values)
         surface = repr(parsed) + str(parsed)
@@ -820,9 +735,7 @@ class TestDerivedConnections:
         postgres = parsed.connection(models.DependencyId.POSTGRES)
         assert postgres.container_url not in surface
 
-    def test_secret_bytes_are_excluded_from_equality(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_secret_bytes_are_excluded_from_equality(self, valid_input: _ValidInput) -> None:
         first = _parse(valid_input.values)
         other = dict(valid_input.values)
         other["GRAFANA_ADMIN_PASSWORD"] = "tm_local_" + "z" * 40
@@ -838,9 +751,7 @@ class TestDerivedConnections:
 
 
 class TestFieldNameOnlyErrors:
-    def test_database_url_error_names_field_not_value(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_database_url_error_names_field_not_value(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
         values["DATABASE_URL"] = (
             "postgresql://app:totally-bogus-secret-value@127.0.0.1:5432/tokenmarket"
@@ -851,9 +762,7 @@ class TestFieldNameOnlyErrors:
         assert "DATABASE_URL" in message
         assert "totally-bogus-secret-value" not in message
 
-    def test_grafana_admin_error_names_field_not_value(
-        self, valid_input: _ValidInput
-    ) -> None:
+    def test_grafana_admin_error_names_field_not_value(self, valid_input: _ValidInput) -> None:
         values = dict(valid_input.values)
         values["GRAFANA_ADMIN_PASSWORD"] = "bogus-admin-value-that-must-not-leak"
         with pytest.raises(_config().InvalidConfigError) as exc_info:
@@ -871,9 +780,7 @@ class TestFieldNameOnlyErrors:
     @pytest.mark.parametrize(
         "field", ["DATABASE_URL", "REDIS_URL", "GRAFANA_URL", "GRAFANA_ADMIN_PASSWORD"]
     )
-    def test_missing_field_names_only_itself(
-        self, valid_input: _ValidInput, field: str
-    ) -> None:
+    def test_missing_field_names_only_itself(self, valid_input: _ValidInput, field: str) -> None:
         with pytest.raises(_config().InvalidConfigError) as exc_info:
             _parse(valid_input.values, drop=(field,))
         message = str(exc_info.value)
@@ -883,9 +790,7 @@ class TestFieldNameOnlyErrors:
                 assert other not in message
 
 
-def _connection(
-    config: Any, models: Any, dependency: str, *, host_port: int, secret: str
-) -> Any:
+def _connection(config: Any, models: Any, dependency: str, *, host_port: int, secret: str) -> Any:
     if dependency == "postgres":
         return config.DerivedConnection(
             dependency_id=models.DependencyId.POSTGRES,
@@ -932,22 +837,16 @@ class TestEntityInvariants:
 
         config = _config()
         models = _models()
-        postgres = _connection(
-            config, models, "postgres", host_port=5432, secret=synthetic_secret
-        )
+        postgres = _connection(config, models, "postgres", host_port=5432, secret=synthetic_secret)
         with pytest.raises(ValueError):
             dataclasses.replace(postgres, host_address="0.0.0.0")
 
-    def test_non_canonical_container_endpoint_is_rejected(
-        self, synthetic_secret: str
-    ) -> None:
+    def test_non_canonical_container_endpoint_is_rejected(self, synthetic_secret: str) -> None:
         import dataclasses
 
         config = _config()
         models = _models()
-        postgres = _connection(
-            config, models, "postgres", host_port=5432, secret=synthetic_secret
-        )
+        postgres = _connection(config, models, "postgres", host_port=5432, secret=synthetic_secret)
         with pytest.raises(ValueError):
             dataclasses.replace(postgres, container_port=15432)
 
@@ -955,18 +854,14 @@ class TestEntityInvariants:
         config = _config()
         models = _models()
         with pytest.raises(ValueError):
-            _connection(
-                config, models, "postgres", host_port=0, secret=synthetic_secret
-            )
+            _connection(config, models, "postgres", host_port=0, secret=synthetic_secret)
 
     def test_wrong_database_type_is_rejected(self, synthetic_secret: str) -> None:
         import dataclasses
 
         config = _config()
         models = _models()
-        redis = _connection(
-            config, models, "redis", host_port=6379, secret=synthetic_secret
-        )
+        redis = _connection(config, models, "redis", host_port=6379, secret=synthetic_secret)
         with pytest.raises(ValueError):
             dataclasses.replace(redis, database="zero")
 
@@ -974,50 +869,30 @@ class TestEntityInvariants:
         config = _config()
         models = _models()
         connections = (
-            _connection(
-                config, models, "postgres", host_port=5432, secret=synthetic_secret
-            ),
-            _connection(
-                config, models, "redis", host_port=6379, secret=synthetic_secret
-            ),
-            _connection(
-                config, models, "grafana", host_port=3000, secret=synthetic_secret
-            ),
+            _connection(config, models, "postgres", host_port=5432, secret=synthetic_secret),
+            _connection(config, models, "redis", host_port=6379, secret=synthetic_secret),
+            _connection(config, models, "grafana", host_port=3000, secret=synthetic_secret),
         )
         with pytest.raises(ValueError):
             config.LocalEnvironmentConfiguration(mode="test", connections=connections)
 
-    def test_configuration_requires_all_three_dependencies(
-        self, synthetic_secret: str
-    ) -> None:
+    def test_configuration_requires_all_three_dependencies(self, synthetic_secret: str) -> None:
         config = _config()
         models = _models()
         connections = (
-            _connection(
-                config, models, "postgres", host_port=5432, secret=synthetic_secret
-            ),
-            _connection(
-                config, models, "redis", host_port=6379, secret=synthetic_secret
-            ),
+            _connection(config, models, "postgres", host_port=5432, secret=synthetic_secret),
+            _connection(config, models, "redis", host_port=6379, secret=synthetic_secret),
         )
         with pytest.raises(ValueError):
             config.LocalEnvironmentConfiguration(mode="local", connections=connections)
 
-    def test_configuration_rejects_duplicate_host_ports(
-        self, synthetic_secret: str
-    ) -> None:
+    def test_configuration_rejects_duplicate_host_ports(self, synthetic_secret: str) -> None:
         config = _config()
         models = _models()
         connections = (
-            _connection(
-                config, models, "postgres", host_port=5432, secret=synthetic_secret
-            ),
-            _connection(
-                config, models, "redis", host_port=5432, secret=synthetic_secret
-            ),
-            _connection(
-                config, models, "grafana", host_port=3000, secret=synthetic_secret
-            ),
+            _connection(config, models, "postgres", host_port=5432, secret=synthetic_secret),
+            _connection(config, models, "redis", host_port=5432, secret=synthetic_secret),
+            _connection(config, models, "grafana", host_port=3000, secret=synthetic_secret),
         )
         with pytest.raises(ValueError):
             config.LocalEnvironmentConfiguration(mode="local", connections=connections)

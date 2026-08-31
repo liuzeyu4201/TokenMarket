@@ -15,6 +15,7 @@ from typing import Any, Iterable, Mapping, MutableSet
 
 from .mode import ModeError
 
+
 def _canonical(payload: Mapping[str, Any]) -> bytes:
     body = {
         "action": payload["action"],
@@ -401,9 +402,10 @@ def verify_approval(
             "PROD_APPROVAL_INVALID",
             "approval is bound to a different run",
         )
-    if expected_manifest_digest is not None and str(
-        proof.get("manifest_digest") or ""
-    ) != expected_manifest_digest:
+    if (
+        expected_manifest_digest is not None
+        and str(proof.get("manifest_digest") or "") != expected_manifest_digest
+    ):
         raise ModeError(
             "PROD_APPROVAL_INVALID",
             "approval is bound to a different deploy manifest",

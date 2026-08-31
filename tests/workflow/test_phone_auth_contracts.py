@@ -93,16 +93,16 @@ def test_shared_contracts_match_feature_sources() -> None:
         copy = root.joinpath(*SHARED_CONTRACTS, name)
         assert source.is_file(), f"feature contract source missing: {source}"
         assert copy.is_file(), f"shared contract missing: {copy}"
-        assert source.read_bytes() == copy.read_bytes(), (
-            f"{copy.relative_to(root)} drifted from {source.relative_to(root)}"
-        )
+        assert (
+            source.read_bytes() == copy.read_bytes()
+        ), f"{copy.relative_to(root)} drifted from {source.relative_to(root)}"
 
 
 def test_openapi_is_version_3_1() -> None:
     text = _openapi_text()
-    assert re.search(r"(?m)^openapi:\s*3\.1(\.0)?\s*$", text), (
-        "phone-auth OpenAPI must declare openapi: 3.1.x"
-    )
+    assert re.search(
+        r"(?m)^openapi:\s*3\.1(\.0)?\s*$", text
+    ), "phone-auth OpenAPI must declare openapi: 3.1.x"
     assert "title: TokenMarket Phone Authentication and Session API" in text
     assert re.search(r"(?m)^  version:\s*1\.0\.0\s*$", text)
 
@@ -121,9 +121,9 @@ def test_openapi_local_component_refs_resolve() -> None:
         section_header = f"  {section}:"
         assert section_header in text, f"missing components section for {ref}"
         # Name appears as a component key under that section.
-        assert re.search(rf"(?m)^    {re.escape(name)}:\s*$", text), (
-            f"unresolved local $ref: #/{ref}"
-        )
+        assert re.search(
+            rf"(?m)^    {re.escape(name)}:\s*$", text
+        ), f"unresolved local $ref: #/{ref}"
 
 
 def test_openapi_defines_four_auth_operations() -> None:
@@ -147,9 +147,7 @@ def test_challenge_accepts_202_before_dispatch_semantics() -> None:
     assert "'202':" in text or '"202":' in text or "        '202':" in text
     # Explicit 202-before-dispatch / no wait for delivery language
     lowered = text.lower()
-    assert ("before" in lowered and "dispatch" in lowered) or (
-        "before this response" in lowered
-    )
+    assert ("before" in lowered and "dispatch" in lowered) or ("before this response" in lowered)
     assert "never waits" in lowered or "returned before recipient-specific" in lowered
     assert "does not assert account existence" in lowered or (
         "does not assert" in lowered and "account" in lowered
@@ -159,9 +157,9 @@ def test_challenge_accepts_202_before_dispatch_semantics() -> None:
 def test_stable_business_codes_are_documented() -> None:
     codes = load_text(*SHARED_CONTRACTS, BUSINESS_CODES_NAME)
     for code in STABLE_BUSINESS_CODES:
-        assert f"`{code}`" in codes or f"| `{code}`" in codes or code in codes, (
-            f"stable business code missing from business-codes.md: {code}"
-        )
+        assert (
+            f"`{code}`" in codes or f"| `{code}`" in codes or code in codes
+        ), f"stable business code missing from business-codes.md: {code}"
 
 
 def test_cookie_credential_never_in_response_body_schemas() -> None:
@@ -211,9 +209,9 @@ def test_generated_phone_auth_types_have_no_drift() -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 0, (
-        f"generate:phone-auth-types failed:\n{result.stdout}\n{result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"generate:phone-auth-types failed:\n{result.stdout}\n{result.stderr}"
     after = gen.read_bytes()
     after_hash = hashlib.sha256(after).hexdigest()
     # Restore committed content if generator rewrote (should be identical)

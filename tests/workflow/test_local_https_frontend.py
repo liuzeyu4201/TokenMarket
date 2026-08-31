@@ -48,7 +48,9 @@ def test_package_json_pins_basic_ssl_2_3_0() -> None:
     dev = pkg.get("devDependencies") or {}
     assert "@vitejs/plugin-basic-ssl" in dev
     raw = str(dev["@vitejs/plugin-basic-ssl"]).lstrip("^~=")
-    assert raw == "2.3.0", f"expected @vitejs/plugin-basic-ssl@2.3.0, got {dev['@vitejs/plugin-basic-ssl']!r}"
+    assert (
+        raw == "2.3.0"
+    ), f"expected @vitejs/plugin-basic-ssl@2.3.0, got {dev['@vitejs/plugin-basic-ssl']!r}"
     runtime = pkg.get("dependencies") or {}
     assert "@vitejs/plugin-basic-ssl" not in runtime
 
@@ -68,9 +70,9 @@ def test_compose_local_excludes_business_services() -> None:
         "proxy-gateway",
         "frontend",
     ):
-        assert not re.search(rf"(?m)^\s*{re.escape(service)}\s*:", text), (
-            f"compose.local.yml must not define business service {service}"
-        )
+        assert not re.search(
+            rf"(?m)^\s*{re.escape(service)}\s*:", text
+        ), f"compose.local.yml must not define business service {service}"
 
     for marker in (
         "TOKENMARKET_DEPLOY_IMAGE_FRONTEND",

@@ -222,9 +222,7 @@ def assert_no_findings(findings: list[ScanFinding], *, context: str = "") -> Non
     """Fail the test if any sentinel leaks were recorded."""
     if not findings:
         return
-    detail = "; ".join(
-        f"{f.surface}:{f.sentinel_name} in {f.context!r}" for f in findings[:8]
-    )
+    detail = "; ".join(f"{f.surface}:{f.sentinel_name} in {f.context!r}" for f in findings[:8])
     prefix = f"{context}: " if context else ""
     raise AssertionError(f"{prefix}privacy sentinel leak(s): {detail}")
 

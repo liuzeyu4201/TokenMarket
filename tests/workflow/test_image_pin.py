@@ -25,6 +25,7 @@ def test_tag_only_production_image_refs_are_rejected() -> None:
 
 def test_rewritten_tag_after_approval_fails_digest_verification() -> None:
     approved = (GOOD,)
+
     def inspect(_name: str) -> str:
         return "sha256:" + ("b" * 64)
 

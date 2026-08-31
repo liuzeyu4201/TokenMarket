@@ -170,7 +170,9 @@ async def test_keyboard_interrupt_maps_to_interrupted_with_retained_state(
     world = FakeDownWorld(monotonic_clock)
     world.seed_running(identity)
 
-    def interrupting_factory(manifest: Any, identity: Any, project_dir: Path, repo_root: Path) -> Any:
+    def interrupting_factory(
+        manifest: Any, identity: Any, project_dir: Path, repo_root: Path
+    ) -> Any:
         adapter = world.factory(manifest, identity, project_dir, repo_root)
         real = adapter.reconcile_down
 
@@ -217,11 +219,7 @@ async def test_start_keyboard_interrupt_maps_to_interrupted_with_lock_release(
     synthetic_secret_factory: Any,
 ) -> None:
     """T082: start_local_environment interrupt retains state and frees the lock."""
-    from .test_local_env_lifecycle import (
-        CONFIG_PORTS,
-        FakeDockerWorld,
-        _config_text_with_ports,
-    )
+    from .test_local_env_lifecycle import CONFIG_PORTS, FakeDockerWorld, _config_text_with_ports
 
     world = FakeDockerWorld(monotonic_clock)
     world.seed_images()
@@ -232,7 +230,9 @@ async def test_start_keyboard_interrupt_maps_to_interrupted_with_lock_release(
     }
     config_text = _config_text_with_ports(CONFIG_PORTS, secrets_map)
 
-    def interrupting_factory(manifest: Any, identity: Any, project_dir: Path, repo_root: Path) -> Any:
+    def interrupting_factory(
+        manifest: Any, identity: Any, project_dir: Path, repo_root: Path
+    ) -> Any:
         adapter = world.factory(manifest, identity, project_dir, repo_root)
         real = adapter.reconcile_up
 

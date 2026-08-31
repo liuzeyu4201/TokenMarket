@@ -240,7 +240,9 @@ def test_auth_release_manifest_from_env(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.delenv("AUTH_RELEASE_MANIFEST", raising=False)
     monkeypatch.delenv("auth_release_manifest", raising=False)
     assert auth_release_manifest_from_env() is None
-    monkeypatch.setenv("AUTH_RELEASE_MANIFEST", "tests/workflow/fixtures/auth-release/valid/candidate.json")
+    monkeypatch.setenv(
+        "AUTH_RELEASE_MANIFEST", "tests/workflow/fixtures/auth-release/valid/candidate.json"
+    )
     assert auth_release_manifest_from_env() is not None
 
 
@@ -254,6 +256,7 @@ def test_deploy_up_invokes_auth_gate_before_docker(
         "AUTH_RELEASE_MANIFEST",
         str(_fixture("hash-mismatch")),
     )
+
     # If docker is contacted, fail the test.
     def _boom() -> None:
         raise AssertionError("docker must not be contacted when auth gate fails")

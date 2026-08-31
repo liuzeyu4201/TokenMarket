@@ -112,9 +112,7 @@ def mapping_pct(bindings: list[SFBinding]) -> float:
     return 100.0 * ok / len(bindings)
 
 
-def decide(
-    claim: str, bindings: list[SFBinding], evidence: EvidencePack
-) -> ReleaseDecision:
+def decide(claim: str, bindings: list[SFBinding], evidence: EvidencePack) -> ReleaseDecision:
     pct = mapping_pct(bindings)
     blockers = list(evidence.blockers)
     if not evidence.pentest_closed:

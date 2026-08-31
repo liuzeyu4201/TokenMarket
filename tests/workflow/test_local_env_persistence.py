@@ -85,9 +85,7 @@ async def test_ten_down_restart_cycles_retain_named_volumes(
 
     assert set(marker_volume_ids) == {"postgres-data", "redis-data"}
     assert "grafana" not in world.volumes
-    assert all(
-        name.startswith(f"{identity.project_id}_") for name in marker_volume_ids.values()
-    )
+    assert all(name.startswith(f"{identity.project_id}_") for name in marker_volume_ids.values())
 
 
 async def test_empty_redis_tolerance_and_no_schema_actions(

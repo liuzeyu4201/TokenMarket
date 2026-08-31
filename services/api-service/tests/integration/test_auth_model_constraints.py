@@ -33,8 +33,7 @@ def _insert_idempotency(
     row_id = uuid.uuid4()
     now = _utcnow()
     conn.execute(
-        text(
-            """
+        text("""
             INSERT INTO verification_request_idempotency_records (
                 id, operation, key_digest, key_version, phone_ref, state,
                 http_status, result_code, result_payload, created_at,
@@ -45,8 +44,7 @@ def _insert_idempotency(
                 CAST(:payload AS jsonb),
                 :created_at, :completed_at, :replay_until, :delete_after
             )
-            """
-        ),
+            """),
         {
             "id": row_id,
             "key_digest": key_digest,
@@ -81,8 +79,7 @@ def _insert_challenge(
     row_id = uuid.uuid4()
     now = _utcnow()
     conn.execute(
-        text(
-            """
+        text("""
             INSERT INTO verification_challenges (
                 id, user_id, idempotency_record_id, phone_ref,
                 code_digest, code_salt, code_key_version, provider_request_ref,
@@ -98,8 +95,7 @@ def _insert_challenge(
                 :created_at, :delivered_at, :expires_at, :consumed_at,
                 NULL, :delete_after
             )
-            """
-        ),
+            """),
         {
             "id": row_id,
             "user_id": user_id,
@@ -147,8 +143,7 @@ def _insert_session(
     if effective_revoked is not None and effective_revoked < now:
         effective_revoked = now
     conn.execute(
-        text(
-            """
+        text("""
             INSERT INTO auth_sessions (
                 id, user_id, token_digest, token_key_version, role_snapshot,
                 issued_at, expires_at, revoked_at, revocation_reason,
@@ -158,8 +153,7 @@ def _insert_session(
                 :issued_at, :expires_at, :revoked_at, :revocation_reason,
                 :request_id, :delete_after
             )
-            """
-        ),
+            """),
         {
             "id": row_id,
             "user_id": user_id,
@@ -215,8 +209,7 @@ def test_idempotency_processing_terminal_check(
                 row_id = uuid.uuid4()
                 now = _utcnow()
                 conn.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO verification_request_idempotency_records (
                             id, operation, key_digest, key_version, phone_ref, state,
                             http_status, result_code, created_at, completed_at,
@@ -226,8 +219,7 @@ def test_idempotency_processing_terminal_check(
                             'processing', 202, 'OK', :now, :now,
                             :replay, :delete_after
                         )
-                        """
-                    ),
+                        """),
                     {
                         "id": row_id,
                         "kd": b"\x44" * 32,
@@ -431,8 +423,7 @@ def test_audit_on_delete_set_null(
         session_id = _insert_session(conn, user_id=user.id, token_digest=b"\xf3" * 32)
         event_id = uuid.uuid4()
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO authentication_security_events (
                     id, event_type, outcome, reason_code, request_id,
                     user_id, challenge_id, session_id, subject_ref,
@@ -442,8 +433,7 @@ def test_audit_on_delete_set_null(
                     :user_id, :challenge_id, :session_id, NULL,
                     '{}'::jsonb, :now, :delete_after
                 )
-                """
-            ),
+                """),
             {
                 "id": event_id,
                 "req": f"req-{uuid.uuid4()}",

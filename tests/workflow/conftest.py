@@ -1223,7 +1223,9 @@ def count_exact_test_resources(
             f"resource counts are confined to {TEST_PROJECT_PREFIX} projects; "
             f"got {project_id!r}"
         )
-    use_docker = shutil.which("docker") is not None if docker_available is None else docker_available
+    use_docker = (
+        shutil.which("docker") is not None if docker_available is None else docker_available
+    )
     if not use_docker:
         return ResourceCountSnapshot(containers=0, networks=0, volumes=0)
 

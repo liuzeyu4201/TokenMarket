@@ -562,9 +562,5 @@ def test_frozen_bootstrap_is_idempotent(cli: Any, tmp_path: Path) -> None:
     second_resolution = cli.resolve_fingerprint(component)
 
     assert first_hash == original_hash, "frozen bootstrap changed uv.lock on first run"
-    assert (
-        second_hash == original_hash
-    ), "frozen bootstrap changed uv.lock on second run"
-    assert (
-        first_resolution == second_resolution
-    ), "dependency resolution fingerprint drifted"
+    assert second_hash == original_hash, "frozen bootstrap changed uv.lock on second run"
+    assert first_resolution == second_resolution, "dependency resolution fingerprint drifted"

@@ -22,9 +22,7 @@ from .mode import ModeError, require_production_approval, validate_mode
 
 # Ephemeral integration fixture only (never development/production hosts).
 _INTEGRATION_CONTAINER = "tm-migrate-integration-check"
-_INTEGRATION_ADMIN_URL = (
-    "postgresql+psycopg2://postgres:synthetic@127.0.0.1:15432/postgres"
-)
+_INTEGRATION_ADMIN_URL = "postgresql+psycopg2://postgres:synthetic@127.0.0.1:15432/postgres"
 _INTEGRATION_PG_IMAGE = "postgres:15.18-bookworm"
 _DB_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 _RUN_TOKEN_RE = re.compile(r"^[a-z0-9]{8,16}$")
@@ -109,9 +107,7 @@ def check_migrations(
     try:
         selection = validate_mode(mode, mode_origin)
         if selection.mode == "prod":
-            selection = require_production_approval(
-                selection, approval_proof=approval_proof
-            )
+            selection = require_production_approval(selection, approval_proof=approval_proof)
 
         validate_owner_graphs(repo_root)
 
@@ -206,9 +202,7 @@ def replace_database_name(url: str, database: str) -> str:
         )
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
-        raise MigrationError(
-            "MIGRATION_INVALID", "DATABASE_URL is missing scheme or host"
-        )
+        raise MigrationError("MIGRATION_INVALID", "DATABASE_URL is missing scheme or host")
     # Keep empty host edge cases out of integration fixture URLs.
     if not parsed.hostname and "@" not in parsed.netloc:
         raise MigrationError("MIGRATION_INVALID", "DATABASE_URL is missing host")
@@ -407,9 +401,7 @@ def wait_for_integration_postgres_ready(
 
     while clock() < deadline:
         if not _integration_container_running(container_name):
-            logs = _redact_integration_diagnostics(
-                _integration_docker_logs(container_name)
-            )
+            logs = _redact_integration_diagnostics(_integration_docker_logs(container_name))
             raise MigrationError(
                 "STEP_FAILED",
                 (
@@ -457,9 +449,7 @@ def create_owner_database(
     not need an extra driver. Identifier is validated before interpolation.
     """
     if not _RUN_TOKEN_RE.fullmatch(re.sub(r"[^a-z0-9]", "", run_token.lower())):
-        raise MigrationError(
-            "MIGRATION_INVALID", "invalid run token for CREATE DATABASE"
-        )
+        raise MigrationError("MIGRATION_INVALID", "invalid run token for CREATE DATABASE")
     if not _DB_NAME_RE.fullmatch(database):
         raise MigrationError(
             "MIGRATION_INVALID",

@@ -136,9 +136,7 @@ def ownership_labels(identity: WorkspaceIdentity) -> dict[str, str]:
     }
 
 
-def authorize_label_mutation(
-    identity: WorkspaceIdentity, labels: Mapping[str, str]
-) -> None:
+def authorize_label_mutation(identity: WorkspaceIdentity, labels: Mapping[str, str]) -> None:
     """Authorize mutation from a resource's ownership labels.
 
     Requires exact ``workspace-id`` plus full ``workspace-fingerprint`` match.
@@ -239,14 +237,10 @@ def classify_repository_resources(
                 guidance=_moved_workspace_guidance(observed_project_id),
             )
         )
-    return RepositoryResourceClassification(
-        owned=tuple(owned), moved=tuple(moved)
-    )
+    return RepositoryResourceClassification(owned=tuple(owned), moved=tuple(moved))
 
 
-def _require_secure_directory(
-    path: Path, *, euid: int, lstat: StatFn, what: str
-) -> None:
+def _require_secure_directory(path: Path, *, euid: int, lstat: StatFn, what: str) -> None:
     """Verify a directory is real (no symlink), owned by euid, owner-only."""
     try:
         st = lstat(path)
@@ -262,9 +256,7 @@ def _require_secure_directory(
 
 def _is_valid_per_user_dir(path: Path, *, euid: int, lstat: StatFn) -> bool:
     try:
-        _require_secure_directory(
-            path, euid=euid, lstat=lstat, what="per-user runtime base"
-        )
+        _require_secure_directory(path, euid=euid, lstat=lstat, what="per-user runtime base")
     except LockSafetyError:
         return False
     return True
@@ -321,24 +313,16 @@ def secure_runtime_base(
         return candidate
 
     if effective_platform.startswith("linux"):
-        run_user = (
-            Path("/run/user") / str(effective_euid)
-            if run_user_dir is None
-            else run_user_dir
-        )
+        run_user = Path("/run/user") / str(effective_euid) if run_user_dir is None else run_user_dir
         if _is_valid_per_user_dir(run_user, euid=effective_euid, lstat=lstat):
             return run_user
         tmp = Path("/tmp") if tmp_dir is None else tmp_dir
         try:
             tmp_stat = lstat(tmp)
         except FileNotFoundError:
-            raise LockSafetyError(
-                "no secure runtime base: /tmp is unavailable"
-            ) from None
+            raise LockSafetyError("no secure runtime base: /tmp is unavailable") from None
         if not stat.S_ISDIR(tmp_stat.st_mode):
-            raise LockSafetyError(
-                "no secure runtime base: /tmp must be a real directory"
-            )
+            raise LockSafetyError("no secure runtime base: /tmp must be a real directory")
         if tmp_stat.st_uid != 0 or not tmp_stat.st_mode & stat.S_ISVTX:
             raise LockSafetyError(
                 "no secure runtime base: /tmp must be root-owned with the sticky bit set"
@@ -372,9 +356,7 @@ def ensure_project_runtime_dir(
     effective_euid = os.geteuid() if euid is None else euid
     if not _PROJECT_ID_PATTERN.fullmatch(project_id):
         raise LockSafetyError("project_id is not a safe runtime path component")
-    _require_secure_directory(
-        base, euid=effective_euid, lstat=lstat, what="runtime base"
-    )
+    _require_secure_directory(base, euid=effective_euid, lstat=lstat, what="runtime base")
     project_dir = _ensure_owned_child(
         base / project_id,
         euid=effective_euid,
@@ -468,9 +450,7 @@ def acquire_project_lock(
         if st.st_uid != effective_euid:
             raise LockSafetyError("lock file owner drift detected; failing closed")
         if stat.S_IMODE(st.st_mode) != 0o600:
-            raise LockSafetyError(
-                "lock file mode drift detected; expected exactly 0600"
-            )
+            raise LockSafetyError("lock file mode drift detected; expected exactly 0600")
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:

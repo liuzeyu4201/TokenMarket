@@ -57,9 +57,7 @@ _URI_SCHEMES = frozenset(
     }
 )
 
-_KV_PRIMARY_KEYS = frozenset(
-    {"host", "port", "user", "password", "dbname", "database"}
-)
+_KV_PRIMARY_KEYS = frozenset({"host", "port", "user", "password", "dbname", "database"})
 
 _KW_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*=")
 

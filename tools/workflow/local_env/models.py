@@ -283,10 +283,7 @@ class LifecycleOperation:
             raise ValueError("duration_ms must be non-negative")
         if (self.readiness_started_at is None) != (self.readiness_deadline is None):
             raise ValueError("readiness start and deadline must be set together")
-        if (
-            self.readiness_deadline is not None
-            and self.readiness_started_at is not None
-        ):
+        if self.readiness_deadline is not None and self.readiness_started_at is not None:
             if self.readiness_deadline < self.readiness_started_at:
                 raise ValueError("readiness deadline must not precede its start")
 
@@ -311,9 +308,7 @@ class LifecycleOperation:
             self,
             status=status,
             phase=self.phase if phase is None else phase,
-            diagnostic_code=(
-                self.diagnostic_code if diagnostic_code is None else diagnostic_code
-            ),
+            diagnostic_code=(self.diagnostic_code if diagnostic_code is None else diagnostic_code),
             duration_ms=self.duration_ms if duration_ms is None else duration_ms,
         )
 
@@ -478,13 +473,9 @@ class ComposeSecretMaterial:
         if not self.project_id:
             raise ValueError("project_id is required")
         if not _SOURCE_FIELD_PATTERN.fullmatch(self.source_field):
-            raise ValueError(
-                "source_field must be a configuration field name, never a value"
-            )
+            raise ValueError("source_field must be a configuration field name, never a value")
         if self.container_owner_uid < 1 or self.container_owner_gid < 1:
-            raise ValueError(
-                "container secret owner must be a verified non-root UID/GID"
-            )
+            raise ValueError("container secret owner must be a verified non-root UID/GID")
         if self.container_file_mode != "0400":
             raise ValueError("container secret files must be mode 0400")
         if self.cleanup_state == SecretCleanupState.IN_MEMORY and not self.secret:
@@ -498,9 +489,7 @@ class ComposeSecretMaterial:
 
     def container_removed(self) -> ComposeSecretMaterial:
         """Record that the Compose-mounted file disappeared with its container."""
-        return replace(
-            self, secret="", cleanup_state=SecretCleanupState.CONTAINER_REMOVED
-        )
+        return replace(self, secret="", cleanup_state=SecretCleanupState.CONTAINER_REMOVED)
 
 
 # ---------------------------------------------------------------------------
@@ -559,9 +548,7 @@ class ServiceReadinessResult:
             if self.http_status != 503:
                 raise ValueError("a not_ready result must use HTTP 503")
             if len(self.dependencies) != 1:
-                raise ValueError(
-                    "SF02 reports exactly one PostgreSQL dependency result"
-                )
+                raise ValueError("SF02 reports exactly one PostgreSQL dependency result")
             entry = self.dependencies[0]
             if entry.name != DependencyId.POSTGRES:
                 raise ValueError("SF02 readiness tracks only the postgres dependency")
@@ -769,9 +756,7 @@ def _parse_ephemeral_storage(value: Any, path: str) -> EphemeralStorageDefinitio
     )
 
 
-def _parse_dependency(
-    value: Any, index: int, expected_id: str
-) -> LocalDependencyDefinition:
+def _parse_dependency(value: Any, index: int, expected_id: str) -> LocalDependencyDefinition:
     path = f"$.dependencies[{index}]"
     dependency = _as_mapping(value, path)
     _exact_keys(
@@ -793,20 +778,14 @@ def _parse_dependency(
     )
 
     index_digest = _digest(dependency["index_digest"], f"{path}.index_digest")
-    platform_map = _as_mapping(
-        dependency["platform_digests"], f"{path}.platform_digests"
-    )
+    platform_map = _as_mapping(dependency["platform_digests"], f"{path}.platform_digests")
     _exact_keys(
         platform_map,
         f"{path}.platform_digests",
         required={"linux_amd64", "linux_arm64"},
     )
-    linux_amd64 = _digest(
-        platform_map["linux_amd64"], f"{path}.platform_digests.linux_amd64"
-    )
-    linux_arm64 = _digest(
-        platform_map["linux_arm64"], f"{path}.platform_digests.linux_arm64"
-    )
+    linux_amd64 = _digest(platform_map["linux_amd64"], f"{path}.platform_digests.linux_amd64")
+    linux_arm64 = _digest(platform_map["linux_arm64"], f"{path}.platform_digests.linux_arm64")
     if index_digest in (linux_amd64, linux_arm64):
         _fail(
             f"{path}.index_digest",
@@ -837,9 +816,7 @@ def _parse_dependency(
         volume = _parse_volume(dependency["volume"], f"{path}.volume", expected_id)
     else:
         if "volume" in dependency:
-            _fail(
-                path, "grafana must declare tmpfs ephemeral storage, not a named volume"
-            )
+            _fail(path, "grafana must declare tmpfs ephemeral storage, not a named volume")
         if "ephemeral_storage" not in dependency:
             _fail(
                 f"{path}.ephemeral_storage",
@@ -854,9 +831,7 @@ def _parse_dependency(
         repository=consts["repository"],
         version_tag=consts["version_tag"],
         index_digest=index_digest,
-        platform_digests=PlatformDigests(
-            linux_amd64=linux_amd64, linux_arm64=linux_arm64
-        ),
+        platform_digests=PlatformDigests(linux_amd64=linux_amd64, linux_arm64=linux_arm64),
         required_platforms=_REQUIRED_PLATFORMS,
         service_name=consts["service_name"],
         host_url_field=consts["host_url_field"],
@@ -905,18 +880,14 @@ def parse_manifest(data: Any) -> LocalDependencyManifest:
         _const(timeouts, key, expected, "$.timeouts")
 
     raw_dependencies = root["dependencies"]
-    if not isinstance(raw_dependencies, list) or len(raw_dependencies) != len(
-        _DEPENDENCY_ORDER
-    ):
+    if not isinstance(raw_dependencies, list) or len(raw_dependencies) != len(_DEPENDENCY_ORDER):
         _fail(
             "$.dependencies",
             "must contain exactly postgres, redis, grafana in schema order",
         )
     dependencies = tuple(
         _parse_dependency(value, index, expected_id)
-        for index, (value, expected_id) in enumerate(
-            zip(raw_dependencies, _DEPENDENCY_ORDER)
-        )
+        for index, (value, expected_id) in enumerate(zip(raw_dependencies, _DEPENDENCY_ORDER))
     )
 
     return LocalDependencyManifest(
@@ -954,11 +925,7 @@ def load_manifest(path: Path) -> LocalDependencyManifest:
         with path.open("r", encoding="utf-8") as handle:
             data: Any = json.load(handle)
     except OSError as exc:
-        raise ManifestValidationError(
-            "$", f"manifest unreadable: {type(exc).__name__}"
-        ) from exc
+        raise ManifestValidationError("$", f"manifest unreadable: {type(exc).__name__}") from exc
     except json.JSONDecodeError as exc:
-        raise ManifestValidationError(
-            "$", f"manifest is not valid JSON: {exc.msg}"
-        ) from exc
+        raise ManifestValidationError("$", f"manifest is not valid JSON: {exc.msg}") from exc
     return parse_manifest(data)

@@ -40,9 +40,9 @@ def _init_git_repo(root: Path) -> None:
         encoding="utf-8",
     )
     (root / "shared" / "contracts" / "phone-auth-session" / "v1").mkdir(parents=True)
-    (
-        root / "shared" / "contracts" / "phone-auth-session" / "v1" / "business-codes.md"
-    ).write_text("# codes\n", encoding="utf-8")
+    (root / "shared" / "contracts" / "phone-auth-session" / "v1" / "business-codes.md").write_text(
+        "# codes\n", encoding="utf-8"
+    )
     subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
     subprocess.run(
         ["git", "commit", "-m", "init"],
@@ -121,9 +121,7 @@ def test_verify_succeeds_without_rebuild(tmp_path: Path) -> None:
 def test_verify_detects_tampered_manifest(tmp_path: Path) -> None:
     _init_git_repo(tmp_path)
     out = tmp_path / "candidate.json"
-    capture(
-        CaptureConfig(increment="p1", output=out, repo_root=tmp_path, require_clean=True)
-    )
+    capture(CaptureConfig(increment="p1", output=out, repo_root=tmp_path, require_clean=True))
     # Tamper JSON without updating companion
     data = json.loads(out.read_text(encoding="utf-8"))
     data["commit_sha"] = "0" * 40
@@ -136,9 +134,7 @@ def test_verify_detects_tampered_manifest(tmp_path: Path) -> None:
 def test_verify_detects_lock_hash_mismatch(tmp_path: Path) -> None:
     _init_git_repo(tmp_path)
     out = tmp_path / "candidate.json"
-    capture(
-        CaptureConfig(increment="p1", output=out, repo_root=tmp_path, require_clean=True)
-    )
+    capture(CaptureConfig(increment="p1", output=out, repo_root=tmp_path, require_clean=True))
     # Change lock content and amend would change commit; instead rewrite lock only
     # and skip git check — hash recheck must still fail.
     (tmp_path / "services" / "api-service" / "uv.lock").write_text(

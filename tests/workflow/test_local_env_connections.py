@@ -24,7 +24,9 @@ def _config_text(*, pg_port: int = 5432, redis_port: int = 6379, grafana_port: i
 
 
 def test_host_urls_are_sole_port_facts() -> None:
-    config = parse_local_environment(_config_text(pg_port=15432, redis_port=16379, grafana_port=13000))
+    config = parse_local_environment(
+        _config_text(pg_port=15432, redis_port=16379, grafana_port=13000)
+    )
     assert config.connection(DependencyId.POSTGRES).host_port == 15432
     assert config.connection(DependencyId.REDIS).host_port == 16379
     assert config.connection(DependencyId.GRAFANA).host_port == 13000

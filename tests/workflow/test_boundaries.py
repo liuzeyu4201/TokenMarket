@@ -89,9 +89,7 @@ def test_compose_down_never_uses_destructive_volume_flags() -> None:
                 raise AssertionError("compose adapter must never invoke prune")
 
 
-def test_public_dev_targets_no_longer_emit_sf02_not_ready(
-    monkeypatch, capsys
-) -> None:
+def test_public_dev_targets_no_longer_emit_sf02_not_ready(monkeypatch, capsys) -> None:
     """T074: public dev/dev-down dispatch the real lifecycle, not SF02_NOT_READY."""
     from workflow import cli as workflow_cli
 
@@ -106,12 +104,8 @@ def test_public_dev_targets_no_longer_emit_sf02_not_ready(
     async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
         return _Outcome()
 
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.start_local_environment", _fake_start
-    )
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
-    )
+    monkeypatch.setattr("workflow.local_env.lifecycle.start_local_environment", _fake_start)
+    monkeypatch.setattr("workflow.local_env.lifecycle.stop_local_environment", _fake_stop)
 
     for action in ("dev", "dev-down"):
         code = workflow_cli.execute_action(
@@ -182,9 +176,7 @@ def test_public_dev_does_not_dispatch_deploy_stack(monkeypatch, capsys) -> None:
     async def _fake_start(**kwargs):  # type: ignore[no-untyped-def]
         return _Outcome()
 
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.start_local_environment", _fake_start
-    )
+    monkeypatch.setattr("workflow.local_env.lifecycle.start_local_environment", _fake_start)
 
     code = workflow_cli.execute_action(
         "dev",

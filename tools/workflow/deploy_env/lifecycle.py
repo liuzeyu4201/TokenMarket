@@ -291,9 +291,7 @@ def verify_auth_release_manifest(
                 "AUTH_EVIDENCE_MISSING",
                 f"evidence.{key} path is missing",
             )
-        file_path = _resolve_evidence_file(
-            rel, manifest_path=manifest_path, repo_root=repo_root
-        )
+        file_path = _resolve_evidence_file(rel, manifest_path=manifest_path, repo_root=repo_root)
         if not file_path.is_file():
             raise DeployError(
                 "AUTH_EVIDENCE_MISSING",
@@ -307,7 +305,10 @@ def verify_auth_release_manifest(
                 f"evidence.{key} hash does not match the file",
             )
 
-    if expected_commit_sha is not None and str(payload.get("commit_sha") or "") != expected_commit_sha:
+    if (
+        expected_commit_sha is not None
+        and str(payload.get("commit_sha") or "") != expected_commit_sha
+    ):
         raise DeployError(
             "AUTH_COMMIT_MISMATCH",
             "auth release commit does not match the clean checkout",
@@ -710,9 +711,7 @@ def deploy_up(
                 )
 
         run_id = (
-            os.environ.get("TOKENMARKET_DEPLOY_RUN_ID")
-            or os.environ.get("GITHUB_RUN_ID")
-            or ""
+            os.environ.get("TOKENMARKET_DEPLOY_RUN_ID") or os.environ.get("GITHUB_RUN_ID") or ""
         ).strip()
         auth_manifest = auth_release_manifest_from_env()
         auth_report: dict[str, Any] | None = None
@@ -799,7 +798,6 @@ def deploy_up(
 
         # Bounded readiness: wait for compose health or container running.
         deadline = time.monotonic() + 90
-        last = ""
         while time.monotonic() < deadline:
             ps = _run(
                 _compose_cmd(repo_root, cfg.project_name, "ps", "--format", "json"),
@@ -807,7 +805,6 @@ def deploy_up(
                 cwd=repo_root / DOCKER_DIR,
                 timeout=60,
             )
-            last = (ps.stdout or "")[:500]
             # Prefer healthy when available; accept running for services without health.
             if ps.returncode == 0 and "running" in (ps.stdout or "").lower():
                 # Count services roughly.
@@ -816,11 +813,12 @@ def deploy_up(
                 ) >= 5:
                     # Probe a few loopback endpoints.
                     if _host_probes_ok(cfg):
+                        gw = cfg.child_env["TOKENMARKET_DEPLOY_GATEWAY_HOST_PORT"]
+                        fe = cfg.child_env["TOKENMARKET_DEPLOY_FRONTEND_HOST_PORT"]
                         _print(
                             plain,
                             f"[PASSED] deploy project={cfg.project_name} "
-                            f"gateway=127.0.0.1:{cfg.child_env['TOKENMARKET_DEPLOY_GATEWAY_HOST_PORT']} "
-                            f"frontend=127.0.0.1:{cfg.child_env['TOKENMARKET_DEPLOY_FRONTEND_HOST_PORT']}",
+                            f"gateway=127.0.0.1:{gw} frontend=127.0.0.1:{fe}",
                         )
                         return 0
             time.sleep(3)
@@ -938,7 +936,8 @@ def _host_probes_ok(cfg: DeployConfig) -> bool:
         ),
         (
             "frontend",
-            f"http://127.0.0.1:{cfg.child_env['TOKENMARKET_DEPLOY_FRONTEND_HOST_PORT']}/health/live",
+            "http://127.0.0.1:"
+            f"{cfg.child_env['TOKENMARKET_DEPLOY_FRONTEND_HOST_PORT']}/health/live",
         ),
     ]
     ok = 0

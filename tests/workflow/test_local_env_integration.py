@@ -134,9 +134,9 @@ def _assert_redis_image_ref_present(factory: RealComposeProjectFactory) -> str:
         "arm64",
     }, "redis image must report a native architecture"
     repo_digests = document.get("RepoDigests")
-    assert isinstance(repo_digests, list) and repo_digests, (
-        "redis image must expose RepoDigests for digest identity verification"
-    )
+    assert (
+        isinstance(repo_digests, list) and repo_digests
+    ), "redis image must expose RepoDigests for digest identity verification"
     return redis_ref
 
 
@@ -151,12 +151,7 @@ def _is_docker_image_inspect(argv: Sequence[str], image_ref: str) -> bool:
 
 
 def _is_docker_pull(argv: Sequence[str], image_ref: str) -> bool:
-    return (
-        len(argv) >= 3
-        and argv[0] == "docker"
-        and argv[1] == "pull"
-        and image_ref in argv
-    )
+    return len(argv) >= 3 and argv[0] == "docker" and argv[1] == "pull" and image_ref in argv
 
 
 def _no_such_image_result(argv: list[str], image_ref: str) -> subprocess.CompletedProcess[str]:
@@ -179,9 +174,7 @@ class _RedisInspectMissUntilPullRun:
         self._hide_inspect = True
         self.pull_succeeded = False
 
-    def __call__(
-        self, args: Sequence[str], **kwargs: Any
-    ) -> subprocess.CompletedProcess[str]:
+    def __call__(self, args: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         argv = [str(arg) for arg in args]
         if _is_docker_image_inspect(argv, self._redis_image_ref) and self._hide_inspect:
             return _no_such_image_result(argv, self._redis_image_ref)
@@ -201,9 +194,7 @@ class _RedisInspectMissTimeoutPullRun:
         self._redis_image_ref = redis_image_ref
         self.timeout_raised = False
 
-    def __call__(
-        self, args: Sequence[str], **kwargs: Any
-    ) -> subprocess.CompletedProcess[str]:
+    def __call__(self, args: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         argv = [str(arg) for arg in args]
         if _is_docker_image_inspect(argv, self._redis_image_ref):
             return _no_such_image_result(argv, self._redis_image_ref)
@@ -235,9 +226,7 @@ class _ComposeUpPortRaceRun:
     def __init__(self) -> None:
         self.compose_up_injections = 0
 
-    def __call__(
-        self, args: Sequence[str], **kwargs: Any
-    ) -> subprocess.CompletedProcess[str]:
+    def __call__(self, args: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         argv = [str(arg) for arg in args]
         if _is_compose_up_detach_pull_never(argv):
             self.compose_up_injections += 1
@@ -748,12 +737,12 @@ async def test_port_bind_race_during_reconcile_is_classified_and_retained(
                 run=compose_run,
             ),
         )
-        assert compose_run.compose_up_injections == 1, (
-            "exactly one compose up --detach --pull never injection is expected"
-        )
-        assert bind_calls["count"] > 6, (
-            "attribution must invoke real bind_check after the six preflight skips"
-        )
+        assert (
+            compose_run.compose_up_injections == 1
+        ), "exactly one compose up --detach --pull never injection is expected"
+        assert (
+            bind_calls["count"] > 6
+        ), "attribution must invoke real bind_check after the six preflight skips"
         assert outcome.status == "FAILED"
         assert outcome.diagnostic_code == "PORT_CONFLICT"
         conflicts = [
@@ -780,9 +769,9 @@ async def test_port_bind_race_during_reconcile_is_classified_and_retained(
     # Default adapter (no run/bind seams): ports free after impostors close.
     converged = await real_compose_project_factory.start(project)
     assert converged.status == "PASSED"
-    assert compose_run.compose_up_injections == 1, (
-        "converged start must not reuse the injected compose-up run seam"
-    )
+    assert (
+        compose_run.compose_up_injections == 1
+    ), "converged start must not reuse the injected compose-up run seam"
     final = real_compose_project_factory.snapshot(project)
     assert len(final.containers) == 3
     assert len(final.volumes) == 2

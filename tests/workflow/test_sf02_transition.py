@@ -178,9 +178,7 @@ def cli() -> Any:
     try:
         import workflow.cli as cli_module  # type: ignore[import-not-found]
     except ImportError as exc:
-        pytest.fail(
-            f"workflow.cli is unavailable; the SF02 gate cannot be evaluated: {exc}"
-        )
+        pytest.fail(f"workflow.cli is unavailable; the SF02 gate cannot be evaluated: {exc}")
     return cli_module
 
 
@@ -216,12 +214,8 @@ def test_dev_no_longer_emits_sf02_not_ready(monkeypatch: pytest.MonkeyPatch) -> 
     async def _fake_start(**kwargs):  # type: ignore[no-untyped-def]
         return _Outcome()
 
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.start_local_environment", _fake_start
-    )
-    code = workflow_cli.execute_action(
-        "dev", repo_root=find_repo_root(), plain=True
-    )
+    monkeypatch.setattr("workflow.local_env.lifecycle.start_local_environment", _fake_start)
+    code = workflow_cli.execute_action("dev", repo_root=find_repo_root(), plain=True)
     assert code == 0
 
 
@@ -239,12 +233,8 @@ def test_dev_down_no_longer_emits_sf02_not_ready(
     async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
         return _Outcome()
 
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
-    )
-    code = workflow_cli.execute_action(
-        "dev-down", repo_root=find_repo_root(), plain=True
-    )
+    monkeypatch.setattr("workflow.local_env.lifecycle.stop_local_environment", _fake_stop)
+    code = workflow_cli.execute_action("dev-down", repo_root=find_repo_root(), plain=True)
     assert code == 0
 
 
@@ -264,9 +254,7 @@ def test_public_dev_dispatches_lifecycle(
         called.update(kwargs)
         return _Outcome()
 
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.start_local_environment", _fake_start
-    )
+    monkeypatch.setattr("workflow.local_env.lifecycle.start_local_environment", _fake_start)
     code = cli.execute_action("dev", repo_root=find_repo_root(), plain=True)
     assert code == 0
     assert called.get("repo_root") == find_repo_root()
@@ -286,18 +274,12 @@ def test_dev_down_has_no_repository_root_side_effects(
     async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
         return _Outcome()
 
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
-    )
+    monkeypatch.setattr("workflow.local_env.lifecycle.stop_local_environment", _fake_stop)
     before = _root_snapshot()
-    code = workflow_cli.execute_action(
-        "dev-down", repo_root=find_repo_root(), plain=True
-    )
+    code = workflow_cli.execute_action("dev-down", repo_root=find_repo_root(), plain=True)
     after = _root_snapshot()
     assert code == 0
-    assert (
-        before == after
-    ), f"dev-down changed repository-root entries: {before ^ after}"
+    assert before == after, f"dev-down changed repository-root entries: {before ^ after}"
 
 
 @pytest.mark.parametrize("action", PUBLIC_TARGETS)
@@ -321,12 +303,8 @@ def test_execute_action_no_longer_uses_sf02_not_ready_gate(
     async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
         return _Outcome()
 
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.start_local_environment", _fake_start
-    )
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
-    )
+    monkeypatch.setattr("workflow.local_env.lifecycle.start_local_environment", _fake_start)
+    monkeypatch.setattr("workflow.local_env.lifecycle.stop_local_environment", _fake_stop)
     result = cli.execute_action(action, repo_root=find_repo_root(), plain=True)
     output = capsys.readouterr().out
     assert result == 0, f"execute_action({action!r}) should succeed with injected lifecycle"
@@ -347,9 +325,7 @@ def test_public_target_names_remain_stable() -> None:
     result = _run_make("help")
     assert result.returncode == 0, "make help must succeed"
     for action in PUBLIC_TARGETS:
-        assert (
-            f"make {action}" in result.stdout
-        ), f"make help must document `make {action}`"
+        assert f"make {action}" in result.stdout, f"make help must document `make {action}`"
 
 
 # ---------------------------------------------------------------------------
@@ -362,9 +338,7 @@ def test_activation_gate_requires_every_capability() -> None:
     capabilities = _activation_capabilities()
     assert capabilities, "capability checklist must not be empty"
     full = dict.fromkeys(capabilities, True)
-    assert _activation_gate_open(
-        full
-    ), "gate must open only when every capability holds"
+    assert _activation_gate_open(full), "gate must open only when every capability holds"
     for missing in full:
         partial = dict(full)
         partial[missing] = False
@@ -378,9 +352,7 @@ def test_consumer_migration_enumeration_is_not_vacuous() -> None:
     """Every consumer the migration gate enumerates must exist on disk."""
     tests_dir = repo_path("tests", "workflow")
     for name in V2_EVENT_CONSUMERS:
-        assert (
-            tests_dir / name
-        ).is_file(), f"enumerated v2 event consumer missing: {name}"
+        assert (tests_dir / name).is_file(), f"enumerated v2 event consumer missing: {name}"
 
 
 def test_activation_gate_is_open_after_t074() -> None:
@@ -400,8 +372,7 @@ def test_runtime_behavior_matches_open_activation_gate(
     monkeypatch.delenv("NO_COLOR", raising=False)
     capabilities = _activation_capabilities()
     assert _activation_gate_open(capabilities), (
-        "activation gate must be open after T074; "
-        f"capabilities: {capabilities}"
+        "activation gate must be open after T074; " f"capabilities: {capabilities}"
     )
 
     class _Outcome:
@@ -415,12 +386,8 @@ def test_runtime_behavior_matches_open_activation_gate(
     async def _fake_stop(**kwargs):  # type: ignore[no-untyped-def]
         return _Outcome()
 
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.start_local_environment", _fake_start
-    )
-    monkeypatch.setattr(
-        "workflow.local_env.lifecycle.stop_local_environment", _fake_stop
-    )
+    monkeypatch.setattr("workflow.local_env.lifecycle.start_local_environment", _fake_start)
+    monkeypatch.setattr("workflow.local_env.lifecycle.stop_local_environment", _fake_stop)
     for action in PUBLIC_TARGETS:
         result = cli.execute_action(action, repo_root=find_repo_root(), plain=True)
         output = capsys.readouterr().out

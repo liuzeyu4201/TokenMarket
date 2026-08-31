@@ -38,7 +38,7 @@ def test_deploy_targets_fail_closed_before_docker(target: str, tmp_path: Path) -
     fake_bin.mkdir()
     docker_shim = fake_bin / "docker"
     docker_shim.write_text(
-        "#!/bin/sh\necho wrapped > \"$DEPLOY_GATE_MARKER\"\nexit 99\n",
+        '#!/bin/sh\necho wrapped > "$DEPLOY_GATE_MARKER"\nexit 99\n',
         encoding="utf-8",
     )
     docker_shim.chmod(0o755)

@@ -145,13 +145,8 @@ class DerivedConnection:
         if expected is None:
             raise ValueError("unknown dependency for a derived connection")
         container_host, container_port = expected
-        if (
-            self.container_host != container_host
-            or self.container_port != container_port
-        ):
-            raise ValueError(
-                "container host/port must be the canonical dependency endpoint"
-            )
+        if self.container_host != container_host or self.container_port != container_port:
+            raise ValueError("container host/port must be the canonical dependency endpoint")
         if self.host_address != LOOPBACK_HOST:
             raise ValueError("host address must be the loopback literal 127.0.0.1")
         if not _MIN_PORT <= self.host_port <= _MAX_PORT:
@@ -160,9 +155,7 @@ class DerivedConnection:
             raise ValueError("container_url is required")
         if not self.secret:
             raise ValueError("a validated local secret is required")
-        if self.dependency_id is DependencyId.POSTGRES and not isinstance(
-            self.database, str
-        ):
+        if self.dependency_id is DependencyId.POSTGRES and not isinstance(self.database, str):
             raise ValueError("postgres connections require a database name")
         if self.dependency_id is DependencyId.REDIS and (
             isinstance(self.database, bool) or not isinstance(self.database, int)
@@ -272,9 +265,7 @@ def parse_local_environment(text: str) -> LocalEnvironmentConfiguration:
                 username=pg_user,
                 database=pg_database,
                 secret=pg_secret,
-                container_url=(
-                    f"postgresql://{pg_user}:{pg_secret}@postgres:5432/{pg_database}"
-                ),
+                container_url=(f"postgresql://{pg_user}:{pg_secret}@postgres:5432/{pg_database}"),
             ),
             DerivedConnection(
                 dependency_id=DependencyId.REDIS,
@@ -314,8 +305,7 @@ def _validate_mode(text: str) -> None:
             values.append(line.partition("=")[2])
     if not values:
         raise InvalidModeError(
-            "MODE must be declared exactly as 'local' in .env.local; "
-            "add MODE=local and retry"
+            "MODE must be declared exactly as 'local' in .env.local; " "add MODE=local and retry"
         )
     if len(values) > 1:
         raise InvalidModeError(
@@ -346,9 +336,7 @@ def _parse_assignments(text: str) -> dict[str, str]:
         key, value = match.group(1), match.group(2)
         if key in _LIFECYCLE_FIELDS:
             if key in seen_lifecycle:
-                raise InvalidConfigError(
-                    key, "must be declared exactly once in .env.local"
-                )
+                raise InvalidConfigError(key, "must be declared exactly once in .env.local")
             seen_lifecycle.add(key)
         assignments[key] = value
     return assignments
@@ -370,23 +358,18 @@ def _reject_unsafe_url_chars(field_name: str, value: str) -> None:
         if ord(char) < 0x21 or char in _UNSAFE_URL_CHARS:
             raise InvalidConfigError(
                 field_name,
-                "must not contain whitespace, quotes, backslashes, or "
-                "control characters",
+                "must not contain whitespace, quotes, backslashes, or " "control characters",
             )
 
 
 def _parse_loopback_authority(field_name: str, split: SplitResult) -> int:
     """Validate the loopback-literal host and return its explicit port."""
     if split.hostname != LOOPBACK_HOST:
-        raise InvalidConfigError(
-            field_name, "host must be the IPv4 loopback literal 127.0.0.1"
-        )
+        raise InvalidConfigError(field_name, "host must be the IPv4 loopback literal 127.0.0.1")
     try:
         port = split.port
     except ValueError:
-        raise InvalidConfigError(
-            field_name, "port must be a number within 1..65535"
-        ) from None
+        raise InvalidConfigError(field_name, "port must be a number within 1..65535") from None
     if port is None:
         raise InvalidConfigError(field_name, "must include an explicit host port")
     if not _MIN_PORT <= port <= _MAX_PORT:
@@ -423,9 +406,7 @@ def _single_path_segment(field_name: str, path: str, what: str) -> str:
         raise InvalidConfigError(field_name, f"must include a {what}")
     segment = path[1:]
     if not segment or "/" in segment:
-        raise InvalidConfigError(
-            field_name, f"must include exactly one {what} path segment"
-        )
+        raise InvalidConfigError(field_name, f"must include exactly one {what} path segment")
     return segment
 
 
@@ -438,19 +419,13 @@ def _parse_database_url(value: str) -> tuple[str, str, int, str]:
     port = _parse_loopback_authority(field_name, split)
     username = split.username
     if not username or not _IDENTIFIER_PATTERN.fullmatch(username):
-        raise InvalidConfigError(
-            field_name, "user must be a non-empty local identifier"
-        )
+        raise InvalidConfigError(field_name, "user must be a non-empty local identifier")
     secret = _decode_password(field_name, split.password)
     if split.query or split.fragment:
-        raise InvalidConfigError(
-            field_name, "must not contain a query string or fragment"
-        )
+        raise InvalidConfigError(field_name, "must not contain a query string or fragment")
     database = _single_path_segment(field_name, split.path, "database name")
     if not _IDENTIFIER_PATTERN.fullmatch(database):
-        raise InvalidConfigError(
-            field_name, "database must be a non-empty local identifier"
-        )
+        raise InvalidConfigError(field_name, "database must be a non-empty local identifier")
     return username, secret, port, database
 
 
@@ -465,9 +440,7 @@ def _parse_redis_url(value: str) -> tuple[str, int, int]:
         raise InvalidConfigError(field_name, "user must be the fixed name 'default'")
     secret = _decode_password(field_name, split.password)
     if split.query or split.fragment:
-        raise InvalidConfigError(
-            field_name, "must not contain a query string or fragment"
-        )
+        raise InvalidConfigError(field_name, "must not contain a query string or fragment")
     segment = _single_path_segment(field_name, split.path, "database number")
     if not _REDIS_DB_PATTERN.fullmatch(segment):
         raise InvalidConfigError(field_name, "database must be a non-negative integer")
@@ -490,9 +463,7 @@ def _parse_grafana_url(value: str) -> int:
     if split.path not in ("", "/"):
         raise InvalidConfigError(field_name, "path must be empty or the root '/' only")
     if split.query or split.fragment:
-        raise InvalidConfigError(
-            field_name, "must not contain a query string or fragment"
-        )
+        raise InvalidConfigError(field_name, "must not contain a query string or fragment")
     return port
 
 

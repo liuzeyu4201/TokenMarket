@@ -8,7 +8,6 @@ Web Storage, or BroadcastChannel (those land in later user-story layers).
 from __future__ import annotations
 
 import pytest
-
 from tests.workflow.auth_privacy_scanner import (
     AllowlistBoundary,
     AuthSentinels,
@@ -106,7 +105,7 @@ def test_non_set_cookie_header_rejects_session_and_csrf() -> None:
 
 def test_log_text_rejects_phone_otp_session() -> None:
     s = make_unique_sentinels()
-    log = f'auth challenge phone={s.phone} otp={s.otp} session={s.session_token}'
+    log = f"auth challenge phone={s.phone} otp={s.otp} session={s.session_token}"
     findings = scan_log_text(log, s)
     assert {f.sentinel_name for f in findings} >= {"phone", "otp", "session_token"}
     with pytest.raises(AssertionError):
@@ -115,7 +114,7 @@ def test_log_text_rejects_phone_otp_session() -> None:
 
 def test_log_text_clean_passes() -> None:
     s = make_unique_sentinels()
-    log = 'auth challenge result=accepted request_id=abc phone_masked=*******8000'
+    log = "auth challenge result=accepted request_id=abc phone_masked=*******8000"
     assert_no_findings(scan_log_text(log, s))
 
 

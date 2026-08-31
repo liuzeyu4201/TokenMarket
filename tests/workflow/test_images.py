@@ -273,11 +273,7 @@ def _fail(stderr: str = "error") -> subprocess.CompletedProcess[str]:
 
 
 def test_smoke_network_and_container_names_are_unique_and_safe() -> None:
-    from workflow.images import (
-        new_smoke_run_token,
-        smoke_container_name,
-        smoke_network_name,
-    )
+    from workflow.images import new_smoke_run_token, smoke_container_name, smoke_network_name
 
     a = new_smoke_run_token()
     b = new_smoke_run_token()
@@ -302,10 +298,22 @@ def test_runtime_smoke_uses_shared_network_and_defers_cleanup(
 
     calls: list[list[str]] = []
     components = [
-        {"id": "proxy-gateway", "path": "services/proxy-gateway", "deliverables": ["container-image"]},
+        {
+            "id": "proxy-gateway",
+            "path": "services/proxy-gateway",
+            "deliverables": ["container-image"],
+        },
         {"id": "api-service", "path": "services/api-service", "deliverables": ["container-image"]},
-        {"id": "billing-service", "path": "services/billing-service", "deliverables": ["container-image"]},
-        {"id": "admin-service", "path": "services/admin-service", "deliverables": ["container-image"]},
+        {
+            "id": "billing-service",
+            "path": "services/billing-service",
+            "deliverables": ["container-image"],
+        },
+        {
+            "id": "admin-service",
+            "path": "services/admin-service",
+            "deliverables": ["container-image"],
+        },
         {"id": "frontend", "path": "frontend", "deliverables": ["static-site-image"]},
     ]
 
@@ -398,9 +406,10 @@ def test_runtime_smoke_uses_shared_network_and_defers_cleanup(
         payload = ev.get("payload", ev)
         if payload.get("phase") == "aggregate":
             assert payload["status"] == "PASSED"
-        if payload.get("status") in ("PASSED", "FAILED", "SKIPPED") and payload.get(
-            "component"
-        ) != "repository":
+        if (
+            payload.get("status") in ("PASSED", "FAILED", "SKIPPED")
+            and payload.get("component") != "repository"
+        ):
             statuses.append(payload["status"])
     assert statuses.count("PASSED") == 5
     assert statuses.count("FAILED") == 0
@@ -413,7 +422,11 @@ def test_runtime_smoke_failure_still_cleans_network_and_containers(
 
     calls: list[list[str]] = []
     components = [
-        {"id": "proxy-gateway", "path": "services/proxy-gateway", "deliverables": ["container-image"]},
+        {
+            "id": "proxy-gateway",
+            "path": "services/proxy-gateway",
+            "deliverables": ["container-image"],
+        },
         {"id": "api-service", "path": "services/api-service", "deliverables": ["container-image"]},
         {"id": "frontend", "path": "frontend", "deliverables": ["static-site-image"]},
     ]
@@ -482,7 +495,11 @@ def test_runtime_smoke_plain_mode_reads_payload_without_keyerror(
     from workflow import images as images_mod
 
     components = [
-        {"id": "proxy-gateway", "path": "services/proxy-gateway", "deliverables": ["container-image"]},
+        {
+            "id": "proxy-gateway",
+            "path": "services/proxy-gateway",
+            "deliverables": ["container-image"],
+        },
     ]
 
     def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -554,7 +571,11 @@ def test_runtime_smoke_rejects_root_user(
     from workflow import images as images_mod
 
     components = [
-        {"id": "proxy-gateway", "path": "services/proxy-gateway", "deliverables": ["container-image"]},
+        {
+            "id": "proxy-gateway",
+            "path": "services/proxy-gateway",
+            "deliverables": ["container-image"],
+        },
     ]
 
     def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:

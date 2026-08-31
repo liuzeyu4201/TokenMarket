@@ -63,17 +63,13 @@ def test_ledger_append_only_and_no_fiat() -> None:
 
 
 def test_usage_unresolved_not_zero() -> None:
-    text = load_text(
-        "shared", "contracts", "usage", "v1", "usage-observation.schema.json"
-    )
+    text = load_text("shared", "contracts", "usage", "v1", "usage-observation.schema.json")
     assert "unresolved" in text
     assert "不得把 reported_cost_minor_units 记为 0" in text or "unresolved" in text
 
 
 def test_route_self_trade_excluded() -> None:
-    text = load_text(
-        "shared", "contracts", "route-decision", "v1", "route-decision.schema.json"
-    )
+    text = load_text("shared", "contracts", "route-decision", "v1", "route-decision.schema.json")
     assert '"self_trade_excluded"' in text
     assert '"const": true' in text
     assert '"scores"' in text
@@ -81,9 +77,7 @@ def test_route_self_trade_excluded() -> None:
 
 
 def test_dedicated_unavailable_platform_error() -> None:
-    text = load_text(
-        "shared", "contracts", "native-passthrough", "v1", "platform-errors.md"
-    )
+    text = load_text("shared", "contracts", "native-passthrough", "v1", "platform-errors.md")
     assert "DEDICATED_UNAVAILABLE" in text
 
 

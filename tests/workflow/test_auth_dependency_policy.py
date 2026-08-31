@@ -54,9 +54,9 @@ def test_frontend_pins_openapi_typescript_and_basic_ssl() -> None:
     for name, version in FRONTEND_PINS.items():
         assert name in dev, f"{name} must be pinned in frontend devDependencies"
         raw = str(dev[name]).lstrip("^~=")
-        assert raw == version or dev[name] == version, (
-            f"{name} must be exactly {version}, got {dev[name]!r}"
-        )
+        assert (
+            raw == version or dev[name] == version
+        ), f"{name} must be exactly {version}, got {dev[name]!r}"
 
 
 def test_frontend_package_lock_pins_exact_versions() -> None:
@@ -92,27 +92,29 @@ def test_frontend_generate_and_drift_scripts_exist() -> None:
 def test_api_service_pins_testcontainers_postgres_redis() -> None:
     text = _api_pyproject()
     # Exact optional/dev pin with extras
-    assert 'testcontainers[postgres,redis]==4.14.2' in text or (
+    assert "testcontainers[postgres,redis]==4.14.2" in text or (
         "testcontainers" in text and "4.14.2" in text
     ), "api-service must pin testcontainers[postgres,redis]==4.14.2 in dev deps"
     # Must be under optional-dependencies.dev, not runtime dependencies
     # Split roughly: runtime [project] dependencies before optional-dependencies
     runtime_section = text.split("[project.optional-dependencies]")[0]
-    assert "testcontainers" not in runtime_section.split("dependencies = [")[-1].split("]")[0], (
-        "testcontainers must not be a production runtime dependency"
-    )
+    assert (
+        "testcontainers" not in runtime_section.split("dependencies = [")[-1].split("]")[0]
+    ), "testcontainers must not be a production runtime dependency"
 
 
 def test_api_service_uv_lock_contains_testcontainers_version() -> None:
     lock = _api_uv_lock()
     assert 'name = "testcontainers"' in lock
     # version nearby
-    assert re.search(
-        r'name = "testcontainers"\nversion = "4\.14\.2"',
-        lock,
-    ) or 'version = "4.14.2"' in lock and "testcontainers" in lock, (
-        "uv.lock must lock testcontainers==4.14.2"
-    )
+    assert (
+        re.search(
+            r'name = "testcontainers"\nversion = "4\.14\.2"',
+            lock,
+        )
+        or 'version = "4.14.2"' in lock
+        and "testcontainers" in lock
+    ), "uv.lock must lock testcontainers==4.14.2"
 
 
 def test_dependency_policy_module_allows_only_approved_licenses() -> None:

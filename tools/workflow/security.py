@@ -322,9 +322,7 @@ def iter_python_lock_projects(repo_root: Path) -> list[Path]:
         else:
             found.append(root / rel)
     if missing:
-        raise RuntimeError(
-            "python lock missing for pip-audit: " + ", ".join(missing)
-        )
+        raise RuntimeError("python lock missing for pip-audit: " + ", ".join(missing))
     if len(found) != len(PYTHON_LOCK_PROJECTS):
         raise RuntimeError("python lock audit coverage is incomplete")
     return found
@@ -345,6 +343,8 @@ def python_lock_audit_plan(repo_root: Path) -> list[dict[str, Any]]:
                     "--frozen",
                     "--project",
                     str(project),
+                    "--all-extras",
+                    "--all-groups",
                     "--no-hashes",
                 ],
                 "audit_cmd_prefix": [
@@ -401,8 +401,7 @@ def audit_python_locks(repo_root: Path, *, max_retries: int = 1) -> None:
                     last_error = None
                     break
                 last_error = RuntimeError(
-                    f"pip-audit scan failed for {item['project']} "
-                    f"(exit {result.returncode})"
+                    f"pip-audit scan failed for {item['project']} " f"(exit {result.returncode})"
                 )
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
@@ -430,7 +429,6 @@ def run_security_checks(repo_root: Any, *, max_retries: int = 1) -> None:
     import os
     import shutil
     import subprocess
-    import tempfile
 
     repo_root = Path(repo_root)
 

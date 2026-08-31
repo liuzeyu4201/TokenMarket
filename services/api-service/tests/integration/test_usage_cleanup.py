@@ -33,8 +33,7 @@ def test_usage_cleanup_cli_deletes_old_rows(
     try:
         with engine.begin() as conn:
             conn.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO usage_logs (
                         usage_id, request_id, platform, model, usage_source,
                         partial, latency_ms, status_code, end_reason, created_at,
@@ -44,8 +43,7 @@ def test_usage_cleanup_cli_deletes_old_rows(
                         false, 1, 200, 'success', :created,
                         1, 1, 2
                     )
-                    """
-                ),
+                    """),
                 {
                     "uid": old_id,
                     "rid": "old-rid",
@@ -53,8 +51,7 @@ def test_usage_cleanup_cli_deletes_old_rows(
                 },
             )
             conn.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO usage_logs (
                         usage_id, request_id, platform, model, usage_source,
                         partial, latency_ms, status_code, end_reason, created_at,
@@ -64,8 +61,7 @@ def test_usage_cleanup_cli_deletes_old_rows(
                         false, 1, 200, 'success', :created,
                         1, 1, 2
                     )
-                    """
-                ),
+                    """),
                 {"uid": fresh_id, "rid": "fresh-rid", "created": now},
             )
         proc = subprocess.run(

@@ -163,7 +163,7 @@ def test_pg_dump_artifact_is_encrypted_without_plaintext(
 ) -> None:
     """tm-pgdump-plaintext."""
     import workflow.auth_backup_restore as mod
-    from workflow.auth_backup_secure import decrypt_bytes, backup_encryption_key
+    from workflow.auth_backup_secure import backup_encryption_key, decrypt_bytes
 
     plaintext = b"PGDMP-custom-format-not-a-secret-schema"
 
@@ -422,7 +422,7 @@ def test_sql_fragments_in_keys_rejected_before_connection() -> None:
         validate_restore_tables(
             {
                 "auth_sessions": [
-                    { 'id"; DROP TABLE users--': "1" },
+                    {'id"; DROP TABLE users--': "1"},
                 ]
             }
         )

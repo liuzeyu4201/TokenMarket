@@ -208,11 +208,7 @@ def test_event_log_records_step_order() -> None:
     assert _payload(events[0])["status"] == "STARTED"
     assert _payload(events[1])["status"] == "PASSED"
     assert _payload(events[0])["action"] == _payload(events[1])["action"] == "bootstrap"
-    assert (
-        _payload(events[0])["component"]
-        == _payload(events[1])["component"]
-        == "proxy-gateway"
-    )
+    assert _payload(events[0])["component"] == _payload(events[1])["component"] == "proxy-gateway"
 
 
 def test_event_log_skips_remaining_steps_after_failure() -> None:

@@ -125,17 +125,13 @@ def validate_auth_dev_dependencies(repo_root: Path) -> None:
             raise ValueError(f"{name} must be pinned in frontend devDependencies")
         pinned = str(dev[name]).lstrip("^~=")
         if pinned != version and dev[name] != version:
-            raise ValueError(
-                f"{name} must be exactly {version}, found {dev[name]!r}"
-            )
+            raise ValueError(f"{name} must be exactly {version}, found {dev[name]!r}")
         if name in runtime:
             raise ValueError(f"{name} must not appear in frontend production dependencies")
         key = f"node_modules/{name}"
         entry = packages.get(key)
         if not entry or entry.get("version") != version:
-            raise ValueError(
-                f"frontend package-lock.json must lock {name}@{version}"
-            )
+            raise ValueError(f"frontend package-lock.json must lock {name}@{version}")
 
     scripts = package.get("scripts") or {}
     if "generate:phone-auth-types" not in scripts:
@@ -154,15 +150,11 @@ def validate_auth_dev_dependencies(repo_root: Path) -> None:
 
     py_text = pyproject.read_text(encoding="utf-8")
     if "testcontainers" not in py_text or "4.14.2" not in py_text:
-        raise ValueError(
-            "services/api-service must pin testcontainers 4.14.2 in dev dependencies"
-        )
+        raise ValueError("services/api-service must pin testcontainers 4.14.2 in dev dependencies")
     if "postgres" not in py_text or "redis" not in py_text:
         # extras may be written as testcontainers[postgres,redis]
         if "testcontainers[postgres,redis]" not in py_text:
-            raise ValueError(
-                "testcontainers must request postgres and redis extras"
-            )
+            raise ValueError("testcontainers must request postgres and redis extras")
 
     # Ensure testcontainers is not in the primary runtime dependency table.
     runtime_match = re.search(

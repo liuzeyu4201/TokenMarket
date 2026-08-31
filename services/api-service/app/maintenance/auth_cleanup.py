@@ -113,16 +113,14 @@ def _delete_batch(conn: Connection, table: str, batch_size: int) -> int:
         return 0
 
     # Identifier interpolation is safe: table is restricted to CLEANUP_TABLES.
-    select_sql = text(
-        f"""
+    select_sql = text(f"""
         SELECT id
         FROM {table}
         WHERE delete_after <= NOW()
         ORDER BY delete_after ASC
         FOR UPDATE SKIP LOCKED
         LIMIT :limit
-        """
-    )
+        """)
     ids = [row[0] for row in conn.execute(select_sql, {"limit": batch_size}).fetchall()]
     if not ids:
         return 0
@@ -130,15 +128,13 @@ def _delete_batch(conn: Connection, table: str, batch_size: int) -> int:
     # Pass UUID strings as a text[] for psycopg2 compatibility.
     id_list = [str(i) for i in ids]
     result = conn.execute(
-        text(
-            f"""
+        text(f"""
             DELETE FROM {table}
             WHERE id IN (
                 SELECT CAST(x AS uuid)
                 FROM unnest(CAST(:ids AS text[])) AS x
             )
-            """
-        ),
+            """),
         {"ids": id_list},
     )
     return int(result.rowcount or 0)
@@ -148,15 +144,11 @@ def _oldest_due_age_seconds(conn: Connection) -> float | None:
     """Return age in seconds of the oldest still-due row across cleanup tables."""
     ages: list[float] = []
     for table in CLEANUP_TABLES:
-        row = conn.execute(
-            text(
-                f"""
+        row = conn.execute(text(f"""
                 SELECT EXTRACT(EPOCH FROM (NOW() - MIN(delete_after)))
                 FROM {table}
                 WHERE delete_after <= NOW()
-                """
-            )
-        ).scalar()
+                """)).scalar()
         if row is not None:
             ages.append(float(row))
     if not ages:

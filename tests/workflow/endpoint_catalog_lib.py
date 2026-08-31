@@ -66,11 +66,7 @@ def _ep(
     if opt_in is None:
         opt_in = stability in {"preview", "beta"}
     normalized = (
-        path.strip("/")
-        .replace("/", ".")
-        .replace("{", "")
-        .replace("}", "")
-        .replace(":", ".")
+        path.strip("/").replace("/", ".").replace("{", "").replace("}", "").replace(":", ".")
     )
     slug = f"{provider}.{method.lower()}.{normalized}"
     slug = re.sub(r"[^a-z0-9._-]+", "-", slug.lower()).strip("-")
@@ -125,12 +121,8 @@ def openai_records() -> list[dict[str, Any]]:
             transport="sse",
         ),
         _oa("GET", "/v1/responses", stateful=True, affinity="resource_id"),
-        _oa(
-            "GET", "/v1/responses/{response_id}", stateful=True, affinity="resource_id"
-        ),
-        _oa(
-            "POST", "/v1/responses/{response_id}", stateful=True, affinity="resource_id"
-        ),
+        _oa("GET", "/v1/responses/{response_id}", stateful=True, affinity="resource_id"),
+        _oa("POST", "/v1/responses/{response_id}", stateful=True, affinity="resource_id"),
         _oa(
             "DELETE",
             "/v1/responses/{response_id}",
@@ -1268,10 +1260,7 @@ def validate_catalog(catalog: dict[str, Any]) -> None:
             raise CatalogError("provider")
         if not rec["path_template"].startswith("/"):
             raise CatalogError("path_template")
-        if (
-            rec["stability"] in {"preview", "beta"}
-            and not rec["requires_project_opt_in"]
-        ):
+        if rec["stability"] in {"preview", "beta"} and not rec["requires_project_opt_in"]:
             raise CatalogError("preview must opt-in")
         if not _SLUG_RE.match(rec["id"]):
             raise CatalogError("id")
@@ -1326,8 +1315,7 @@ def write_catalog_artifacts(repo_root: Path) -> dict[str, Any]:
     targets = [
         repo_root / "shared/contracts/endpoint-catalog/v1/catalog.json",
         repo_root / "specs/020-endpoint-catalog-governance/contracts/catalog.json",
-        repo_root
-        / "services/proxy-gateway/internal/domain/endpcatalog/catalog.snapshot.json",
+        repo_root / "services/proxy-gateway/internal/domain/endpcatalog/catalog.snapshot.json",
     ]
     md_targets = [
         repo_root / "shared/contracts/endpoint-catalog/v1/CATALOG.md",

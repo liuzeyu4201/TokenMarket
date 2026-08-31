@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .helpers import load_text, repo_path
 
-
 APP_SERVICES = (
     "proxy-gateway",
     "api-service",

@@ -239,7 +239,14 @@ def verify(
     payload = read_manifest(manifest_path)
     digest = verify_companion(manifest_path)
 
-    required = ("schema_version", "kind", "increment", "commit_sha", "lock_hashes", "contract_hashes")
+    required = (
+        "schema_version",
+        "kind",
+        "increment",
+        "commit_sha",
+        "lock_hashes",
+        "contract_hashes",
+    )
     for key in required:
         if key not in payload:
             raise ReleaseCandidateError("MANIFEST_INVALID", f"missing field {key!r}")
@@ -287,8 +294,7 @@ def verify(
             if disallowed:
                 raise ReleaseCandidateError(
                     "EVIDENCE_ONLY_VIOLATION",
-                    "source commit..HEAD has non-evidence changes: "
-                    + ", ".join(disallowed[:10]),
+                    "source commit..HEAD has non-evidence changes: " + ", ".join(disallowed[:10]),
                 )
             evidence_only = True
         else:

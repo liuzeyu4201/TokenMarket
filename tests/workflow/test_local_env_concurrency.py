@@ -157,11 +157,7 @@ async def test_hundred_start_contentions_are_retryable_losers(
     synthetic_secret_factory: Any,
 ) -> None:
     """100 concurrent start attempts under a held lock: all losers, zero mutation."""
-    from .test_local_env_lifecycle import (
-        CONFIG_PORTS,
-        FakeDockerWorld,
-        _config_text_with_ports,
-    )
+    from .test_local_env_lifecycle import CONFIG_PORTS, FakeDockerWorld, _config_text_with_ports
 
     world = FakeDockerWorld(monotonic_clock)
     world.seed_images()
@@ -206,11 +202,7 @@ async def test_start_vs_down_contention_zero_side_effects_for_losers(
     manifest: Any,
     synthetic_secret_factory: Any,
 ) -> None:
-    from .test_local_env_lifecycle import (
-        CONFIG_PORTS,
-        FakeDockerWorld,
-        _config_text_with_ports,
-    )
+    from .test_local_env_lifecycle import CONFIG_PORTS, FakeDockerWorld, _config_text_with_ports
 
     start_world = FakeDockerWorld(monotonic_clock)
     start_world.seed_images()
@@ -267,7 +259,9 @@ async def test_lock_holder_interruption_releases_for_retry(
     world = FakeDownWorld(monotonic_clock)
     world.seed_running(identity)
 
-    def interrupting_factory(manifest: Any, identity: Any, project_dir: Path, repo_root: Path) -> Any:
+    def interrupting_factory(
+        manifest: Any, identity: Any, project_dir: Path, repo_root: Path
+    ) -> Any:
         adapter = world.factory(manifest, identity, project_dir, repo_root)
         original = adapter.verify_runtime
 

@@ -5,9 +5,15 @@ from __future__ import annotations
 import copy
 import json
 
-from .endpoint_catalog_lib import (CATALOG_MAJOR, REQUIRED, CatalogError,
-                                   build_catalog, dump_catalog,
-                                   render_markdown, validate_catalog)
+from .endpoint_catalog_lib import (
+    CATALOG_MAJOR,
+    REQUIRED,
+    CatalogError,
+    build_catalog,
+    dump_catalog,
+    render_markdown,
+    validate_catalog,
+)
 from .helpers import find_repo_root
 
 
@@ -31,8 +37,7 @@ def test_unique_keys_and_ids() -> None:
 def test_three_vendor_stable_families_covered() -> None:
     catalog = _catalog()
     paths = {
-        (r["provider"], r["method"], r["path_template"], r["stability"])
-        for r in catalog["records"]
+        (r["provider"], r["method"], r["path_template"], r["stability"]) for r in catalog["records"]
     }
     assert ("openai", "POST", "/v1/chat/completions", "stable") in paths
     assert ("openai", "POST", "/v1/responses", "stable") in paths
@@ -122,9 +127,7 @@ def test_duplicate_key_rejected() -> None:
 
 def test_preview_requires_opt_in() -> None:
     catalog = _catalog()
-    preview = next(
-        r for r in catalog["records"] if r["stability"] in {"preview", "beta"}
-    )
+    preview = next(r for r in catalog["records"] if r["stability"] in {"preview", "beta"})
     preview["requires_project_opt_in"] = False
     try:
         validate_catalog(catalog)
@@ -152,34 +155,29 @@ def test_catalog_markdown_deterministic() -> None:
 def test_committed_catalog_matches_generator() -> None:
     catalog = _catalog()
     expected = dump_catalog(catalog)
-    committed = (
-        find_repo_root() / "shared/contracts/endpoint-catalog/v1/catalog.json"
-    ).read_text(encoding="utf-8")
+    committed = (find_repo_root() / "shared/contracts/endpoint-catalog/v1/catalog.json").read_text(
+        encoding="utf-8"
+    )
     assert committed == expected
     listing = render_markdown(catalog)
-    md = (
-        find_repo_root() / "shared/contracts/endpoint-catalog/v1/CATALOG.md"
-    ).read_text(encoding="utf-8")
+    md = (find_repo_root() / "shared/contracts/endpoint-catalog/v1/CATALOG.md").read_text(
+        encoding="utf-8"
+    )
     assert md == listing
 
 
 def test_snapshot_and_spec_copies_byte_identical() -> None:
     root = find_repo_root()
     src = (root / "shared/contracts/endpoint-catalog/v1/catalog.json").read_bytes()
-    spec = (
-        root / "specs/020-endpoint-catalog-governance/contracts/catalog.json"
-    ).read_bytes()
+    spec = (root / "specs/020-endpoint-catalog-governance/contracts/catalog.json").read_bytes()
     snap = (
-        root
-        / "services/proxy-gateway/internal/domain/endpcatalog/catalog.snapshot.json"
+        root / "services/proxy-gateway/internal/domain/endpcatalog/catalog.snapshot.json"
     ).read_bytes()
     assert src == spec == snap
     schema_src = (
         root / "specs/020-endpoint-catalog-governance/contracts/catalog.schema.json"
     ).read_bytes()
-    schema_shared = (
-        root / "shared/contracts/endpoint-catalog/v1/catalog.schema.json"
-    ).read_bytes()
+    schema_shared = (root / "shared/contracts/endpoint-catalog/v1/catalog.schema.json").read_bytes()
     assert schema_src == schema_shared
 
 

@@ -16,10 +16,7 @@ COMPOSE_DEPLOY = repo_path("infra", "docker", "compose.deploy.yml")
 MAKEFILE = repo_path("Makefile")
 ALERTS = repo_path("ops", "alerts", "authentication.yml")
 
-ENTRYPOINT = (
-    "python -m app.maintenance.auth_cleanup "
-    "--batch-size 500 --max-runtime-seconds 900"
-)
+ENTRYPOINT = "python -m app.maintenance.auth_cleanup " "--batch-size 500 --max-runtime-seconds 900"
 CRON = "17 * * * *"
 
 
@@ -44,7 +41,10 @@ def test_command_matches_stable_entrypoint() -> None:
     # Collapsed entrypoint field for exact match when present.
     if "entrypoint:" in text:
         collapsed = " ".join(text.split())
-        assert "python -m app.maintenance.auth_cleanup --batch-size 500 --max-runtime-seconds 900" in collapsed
+        assert (
+            "python -m app.maintenance.auth_cleanup --batch-size 500 --max-runtime-seconds 900"
+            in collapsed
+        )
 
 
 def test_test_and_prod_only_local_disabled() -> None:

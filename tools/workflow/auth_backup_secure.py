@@ -10,6 +10,7 @@ import stat
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+
 def _error(code: str, message: str) -> Exception:
     from .auth_backup_restore import AuthBackupError
 
@@ -20,6 +21,7 @@ def _tables() -> tuple[str, ...]:
     from .auth_backup_restore import AUTH_TABLES
 
     return AUTH_TABLES
+
 
 SAFE_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 FORBIDDEN_FRAGMENTS = ('"', "'", ";", "--", "/*", "*/", " ", "\t", "\n")
@@ -193,9 +195,7 @@ def secure_write_bytes(path: Path, data: bytes) -> None:
     try:
         fd = os.open(path, flags, 0o600)
     except OSError as exc:
-        raise _error(
-            "UNTRUSTED_PATH", f"refusing to write {path}: {type(exc).__name__}"
-        ) from exc
+        raise _error("UNTRUSTED_PATH", f"refusing to write {path}: {type(exc).__name__}") from exc
     try:
         os.write(fd, data)
         os.fchmod(fd, 0o600)

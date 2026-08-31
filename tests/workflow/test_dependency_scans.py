@@ -75,6 +75,7 @@ def test_python_lock_audit_covers_all_four_projects() -> None:
     for item in plan:
         export = item["export_cmd"]
         assert "uv" in export and "export" in export and "--frozen" in export
+        assert "--all-extras" in export and "--all-groups" in export
         assert str(root / item["project"]) in export or item["project"] in " ".join(export)
         prefix = item["audit_cmd_prefix"]
         assert prefix[-1] == "pip-audit"

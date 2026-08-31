@@ -286,7 +286,7 @@ def test_exactly_the_three_canonical_services(compose_model: dict[str, Any]) -> 
 
 
 def test_images_match_the_reviewed_manifest_index_digests(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     services = compose_model["services"]
     for dependency_id, definition in DEPENDENCIES.items():
@@ -324,7 +324,7 @@ def test_single_project_scoped_default_network(compose_model: dict[str, Any]) ->
 
 
 def test_named_volumes_are_project_scoped_and_labeled(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     volumes = compose_model["volumes"]
     assert set(volumes) == {"postgres-data", "redis-data"}
@@ -334,7 +334,7 @@ def test_named_volumes_are_project_scoped_and_labeled(
 
 
 def test_postgres_and_redis_mount_their_named_volumes(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     expectations = {
         "postgres": ("postgres-data", "/var/lib/postgresql/data"),
@@ -373,7 +373,7 @@ def test_grafana_uses_tmpfs_plus_readonly_provisioning(
 
 
 def test_services_run_as_the_verified_non_root_users(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     for dependency_id, definition in DEPENDENCIES.items():
         service = compose_model["services"][dependency_id]
@@ -386,14 +386,14 @@ def test_services_run_as_the_verified_non_root_users(
 
 
 def test_services_carry_workspace_ownership_labels(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     for service in compose_model["services"].values():
         assert service["labels"] == EXPECTED_LABELS
 
 
 def test_top_level_secrets_use_environment_sources_only(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     secrets = compose_model["secrets"]
     assert set(secrets) == set(EXPECTED_SECRET_SOURCES)
@@ -403,7 +403,7 @@ def test_top_level_secrets_use_environment_sources_only(
 
 
 def test_service_secret_mounts_are_0400_owned_files(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     for dependency_id, mounts in EXPECTED_SECRET_MOUNTS.items():
         definition = DEPENDENCIES[dependency_id]
@@ -433,7 +433,7 @@ def _assert_short_healthcheck_timing(
 
 
 def test_postgres_healthcheck_is_an_authenticated_select(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     command = _healthcheck_command(compose_model, "postgres")
     assert "PGPASSWORD" in command
@@ -483,7 +483,7 @@ def test_stop_grace_periods_match_the_manifest(compose_model: dict[str, Any]) ->
 
 
 def test_postgres_environment_wires_the_password_file(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     environment = compose_model["services"]["postgres"]["environment"]
     assert environment["POSTGRES_USER"] == POSTGRES_USER
@@ -493,7 +493,7 @@ def test_postgres_environment_wires_the_password_file(
 
 
 def test_grafana_environment_wires_the_password_file(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     environment = compose_model["services"]["grafana"]["environment"]
     assert environment["GF_SECURITY_ADMIN_USER"] == "admin"
@@ -506,7 +506,7 @@ def test_grafana_environment_wires_the_password_file(
 
 
 def test_redis_command_loads_only_the_secret_config_file(
-    compose_model: dict[str, Any]
+    compose_model: dict[str, Any],
 ) -> None:
     command = compose_model["services"]["redis"].get("command")
     assert command == ["redis-server", "/run/secrets/redis.conf"]

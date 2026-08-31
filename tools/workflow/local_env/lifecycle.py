@@ -73,13 +73,13 @@ from .config import (
     parse_local_environment,
 )
 from .identity import (
+    ResourceObservation,
     WorkspaceIdentity,
     acquire_project_lock,
     classify_repository_resources,
     ensure_project_runtime_dir,
     secure_runtime_base,
     workspace_identity,
-    ResourceObservation,
 )
 from .models import (
     DependencyHealthResult,
@@ -343,9 +343,7 @@ def _interrupted_outcome(
     )
 
 
-def _validate_effective_mode(
-    mode: str | None, mode_origin: str, *, action: str = "dev"
-) -> None:
+def _validate_effective_mode(mode: str | None, mode_origin: str, *, action: str = "dev") -> None:
     """Accept only an omitted mode or command-line ``mode=local`` (contract).
 
     Any other value or origin fails closed before ``.env.local``, coordination
@@ -1138,8 +1136,7 @@ async def stop_local_environment(
             status="PASSED",
             code="OK",
             message=(
-                "workspace identity resolved; exact project ownership boundary "
-                f"is {project_id}"
+                "workspace identity resolved; exact project ownership boundary " f"is {project_id}"
             ),
         )
 
@@ -1160,9 +1157,7 @@ async def stop_local_environment(
                 code="OK",
                 message="project lock acquired; stop path may proceed",
             )
-            operation = operation.transition(
-                OperationStatus.RUNNING, phase=LifecyclePhase.STOPPING
-            )
+            operation = operation.transition(OperationStatus.RUNNING, phase=LifecyclePhase.STOPPING)
 
             # 5. Read-only runtime check, then exact-project discovery.
             phase = LifecyclePhase.PREFLIGHT
@@ -1172,9 +1167,7 @@ async def stop_local_environment(
 
             containers = [r for r in resources if _kind_is(r, ResourceKind.CONTAINER)]
             networks = [r for r in resources if _kind_is(r, ResourceKind.NETWORK)]
-            volumes_before = {
-                r.name for r in resources if _kind_is(r, ResourceKind.VOLUME)
-            }
+            volumes_before = {r.name for r in resources if _kind_is(r, ResourceKind.VOLUME)}
 
             already_stopped = not containers and not networks
             retained = True
@@ -1225,24 +1218,16 @@ async def stop_local_environment(
                             phase=LifecyclePhase.STOPPING,
                             diagnostic_code=exc.code,
                         )
-                    return _fail(
-                        primary_code=exc.code, message=exc.message, keep=True
-                    )
+                    return _fail(primary_code=exc.code, message=exc.message, keep=True)
                 finally:
                     placeholders = placeholders.release()
 
             # 6. Post-stop verification: containers/networks gone, volumes kept.
             after = adapter.project_resources()
             adapter.assert_exact_resource_ownership(after)
-            remaining_containers = [
-                r for r in after if _kind_is(r, ResourceKind.CONTAINER)
-            ]
-            remaining_networks = [
-                r for r in after if _kind_is(r, ResourceKind.NETWORK)
-            ]
-            volumes_after = {
-                r.name for r in after if _kind_is(r, ResourceKind.VOLUME)
-            }
+            remaining_containers = [r for r in after if _kind_is(r, ResourceKind.CONTAINER)]
+            remaining_networks = [r for r in after if _kind_is(r, ResourceKind.NETWORK)]
+            volumes_after = {r.name for r in after if _kind_is(r, ResourceKind.VOLUME)}
 
             if remaining_containers or remaining_networks:
                 for resource in remaining_containers:
@@ -1306,8 +1291,7 @@ async def stop_local_environment(
                         "volumes are retained"
                         if not already_stopped
                         else (
-                            f"{dependency.value} is already stopped; named "
-                            "volumes are retained"
+                            f"{dependency.value} is already stopped; named " "volumes are retained"
                         )
                     ),
                     duration_ms=_elapsed_ms(now, started),
@@ -1338,9 +1322,7 @@ async def stop_local_environment(
                     "local dependency runtime instances are stopped; named "
                     "volumes are retained for the next start"
                 )
-            operation = operation.transition(
-                OperationStatus.SUCCEEDED, phase=LifecyclePhase.FINAL
-            )
+            operation = operation.transition(OperationStatus.SUCCEEDED, phase=LifecyclePhase.FINAL)
             emitter.emit(
                 phase=LifecyclePhase.FINAL,
                 status="PASSED",
@@ -1372,9 +1354,7 @@ async def stop_local_environment(
         elif event_phase in _DEPENDENCY_SCOPED_PHASES:
             event_phase = LifecyclePhase.FINAL
         event_code = (
-            DiagnosticCodeV2.STEP_FAILED.value
-            if code in _DEPENDENCY_SCOPED_CODES
-            else code
+            DiagnosticCodeV2.STEP_FAILED.value if code in _DEPENDENCY_SCOPED_CODES else code
         )
         emitter.emit(
             phase=event_phase,

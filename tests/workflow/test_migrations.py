@@ -70,9 +70,7 @@ def components_manifest() -> dict[str, Any]:
     return load_json("ops", "workflow", "components.json")
 
 
-def test_migration_owners_exactly_api_then_billing(
-    owners_manifest: dict[str, Any]
-) -> None:
+def test_migration_owners_exactly_api_then_billing(owners_manifest: dict[str, Any]) -> None:
     owners = owners_manifest["owners"]
     assert len(owners) == 2
     assert owners[0]["component_id"] == "api-service"
@@ -81,9 +79,7 @@ def test_migration_owners_exactly_api_then_billing(
     assert owners[1]["order"] == 2
 
 
-def test_non_owners_list_contains_admin_service(
-    owners_manifest: dict[str, Any]
-) -> None:
+def test_non_owners_list_contains_admin_service(owners_manifest: dict[str, Any]) -> None:
     assert "admin-service" in owners_manifest["non_owners"]
 
 
@@ -119,9 +115,7 @@ def test_migrate_check_does_not_call_make_dev() -> None:
 
 
 def test_migrate_integration_check_runs_pg15_round_trip() -> None:
-    result = run(
-        ["make", "migrate-integration-check"], cwd=find_repo_root(), check=False
-    )
+    result = run(["make", "migrate-integration-check"], cwd=find_repo_root(), check=False)
     assert (
         result.returncode == 0
     ), f"make migrate-integration-check failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
@@ -138,18 +132,14 @@ def test_migrate_integration_check_runs_pg15_round_trip() -> None:
 
 
 def test_migrate_integration_check_uses_isolated_database() -> None:
-    result = run(
-        ["make", "migrate-integration-check"], cwd=find_repo_root(), check=False
-    )
+    result = run(["make", "migrate-integration-check"], cwd=find_repo_root(), check=False)
     output = result.stdout + result.stderr
     assert "shared database" not in output.lower()
     assert "make dev" not in output.lower()
     assert result.returncode == 0
     # Distinct per-owner database names appear in the event stream.
     api_dbs = re.findall(r"api-service->(tm_mig_[a-z0-9]+_api_service)", output)
-    billing_dbs = re.findall(
-        r"billing-service->(tm_mig_[a-z0-9]+_billing_service)", output
-    )
+    billing_dbs = re.findall(r"billing-service->(tm_mig_[a-z0-9]+_billing_service)", output)
     assert api_dbs, output
     assert billing_dbs, output
     assert api_dbs[0] != billing_dbs[0]
@@ -192,9 +182,7 @@ def test_plan_owner_databases_isolates_names_and_urls(
         assert parsed.username == "postgres"
         # Password remains percent-encoded in netloc; must not be mangled.
         assert parsed.password in {"syn/pass", "syn%2Fpass"}
-        assert (
-            "syn%2Fpass" in entry["database_url"] or "syn/pass" in entry["database_url"]
-        )
+        assert "syn%2Fpass" in entry["database_url"] or "syn/pass" in entry["database_url"]
         assert parsed.path == f"/{entry['database']}"
         assert parsed.query == "sslmode=disable"
         # Same owner always maps to one URL for forward/backout/retry.
@@ -293,9 +281,7 @@ def test_make_migrate_path_does_not_create_owner_databases() -> None:
     assert "def check_migrations" in mig_src
     # Final-ready waiter is only for the integration fixture path.
     check_src = inspect.getsource(
-        __import__(
-            "workflow.migrations", fromlist=["check_migrations"]
-        ).check_migrations
+        __import__("workflow.migrations", fromlist=["check_migrations"]).check_migrations
     )
     assert "wait_for_integration_postgres_ready" not in check_src
     assert "create_owner_database" not in check_src
@@ -380,12 +366,8 @@ def test_create_database_not_reached_before_init_complete_log() -> None:
     assert "FAILED" in _event_statuses(log)
     messages = _event_messages(log)
     assert "finally ready" in messages
-    assert any(
-        list(c.args[0])[:2] == ["docker", "stop"] for c in run_mock.call_args_list
-    )
-    assert any(
-        list(c.args[0])[:3] == ["docker", "rm", "-f"] for c in run_mock.call_args_list
-    )
+    assert any(list(c.args[0])[:2] == ["docker", "stop"] for c in run_mock.call_args_list)
+    assert any(list(c.args[0])[:3] == ["docker", "rm", "-f"] for c in run_mock.call_args_list)
 
 
 def test_wait_requires_init_complete_then_select_one() -> None:
@@ -434,9 +416,7 @@ def test_wait_retries_failed_sql_probes() -> None:
             "workflow.migrations._integration_docker_logs",
             return_value=f"{_PG_INIT_COMPLETE_MARKER}\n",
         ),
-        patch(
-            "workflow.migrations._integration_sql_probe", side_effect=probes
-        ) as probe_mock,
+        patch("workflow.migrations._integration_sql_probe", side_effect=probes) as probe_mock,
     ):
         wait_for_integration_postgres_ready(
             "tm-migrate-integration-check",
@@ -474,11 +454,7 @@ def test_wait_fail_closed_when_container_exits() -> None:
 
 def test_wait_timeout_includes_truncated_diagnostic_logs() -> None:
     clock = _FakeClock()
-    noisy = (
-        "x" * 100
-        + "postgresql://postgres:super-secret@127.0.0.1:5432/postgres "
-        + "y" * 100
-    )
+    noisy = "x" * 100 + "postgresql://postgres:super-secret@127.0.0.1:5432/postgres " + "y" * 100
     with (
         patch("workflow.migrations._integration_container_running", return_value=True),
         patch("workflow.migrations._integration_docker_logs", return_value=noisy),
@@ -495,10 +471,7 @@ def test_wait_timeout_includes_truncated_diagnostic_logs() -> None:
     assert excinfo.value.code == "STEP_FAILED"
     assert "docker logs (truncated)" in excinfo.value.message
     assert "super-secret" not in excinfo.value.message
-    assert (
-        "postgresql://postgres:***@" in excinfo.value.message
-        or "***" in excinfo.value.message
-    )
+    assert "postgresql://postgres:***@" in excinfo.value.message or "***" in excinfo.value.message
 
 
 def test_owner_databases_created_only_after_final_ready() -> None:
@@ -517,9 +490,7 @@ def test_owner_databases_created_only_after_final_ready() -> None:
 
     with (
         patch("workflow.migrations.subprocess.run") as run_mock,
-        patch(
-            "workflow.migrations.wait_for_integration_postgres_ready", side_effect=ready
-        ),
+        patch("workflow.migrations.wait_for_integration_postgres_ready", side_effect=ready),
         patch("workflow.migrations.create_owner_database", side_effect=create_db),
         patch("workflow.migrations.load_owners") as load_mock,
         patch("workflow.migrations._run_owner_round_trip", side_effect=trip),

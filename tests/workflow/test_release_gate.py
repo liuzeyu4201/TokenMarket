@@ -7,9 +7,9 @@ from pathlib import Path
 from workflow.release_gate import (
     CONVERGED,
     DEFAULT_PUBLIC_BLOCKERS,
+    SF_SPEC_DIRS,
     EvidencePack,
     SFBinding,
-    SF_SPEC_DIRS,
     decide,
     mapping_pct,
     scan_bindings,
@@ -23,11 +23,7 @@ def test_all_thirty_four_sfs_mapped_on_disk() -> None:
     assert len(SF_SPEC_DIRS) == 34
     bindings = scan_bindings(root)
     assert len(bindings) == 34
-    missing = [
-        b.sf_id
-        for b in bindings
-        if not (b.has_spec and b.has_tasks)
-    ]
+    missing = [b.sf_id for b in bindings if not (b.has_spec and b.has_tasks)]
     assert missing == [], missing
     dirs = {b.spec_dir for b in bindings}
     assert len(dirs) == 34
@@ -62,10 +58,7 @@ def test_public_launch_nogo_without_pentest() -> None:
 
 
 def test_p0_forces_nogo() -> None:
-    bindings = [
-        SFBinding(sf, dirname, True, True, True)
-        for sf, dirname in SF_SPEC_DIRS.items()
-    ]
+    bindings = [SFBinding(sf, dirname, True, True, True) for sf, dirname in SF_SPEC_DIRS.items()]
     decision = decide(
         "implementation",
         bindings,
@@ -75,10 +68,7 @@ def test_p0_forces_nogo() -> None:
 
 
 def test_implementation_go_with_blockers() -> None:
-    bindings = [
-        SFBinding(sf, dirname, True, True, True)
-        for sf, dirname in SF_SPEC_DIRS.items()
-    ]
+    bindings = [SFBinding(sf, dirname, True, True, True) for sf, dirname in SF_SPEC_DIRS.items()]
     pack = EvidencePack(
         p0_p1=0,
         security_critical_high=0,

@@ -25,9 +25,7 @@ from .helpers import find_repo_root, load_json, load_text, repo_path
 
 
 def test_contract_manifest_exists_and_valid() -> None:
-    manifest = repo_path(
-        "shared", "contracts", "_meta", "contract-manifest.schema.json"
-    )
+    manifest = repo_path("shared", "contracts", "_meta", "contract-manifest.schema.json")
     assert manifest.is_file()
 
 
@@ -160,9 +158,7 @@ def test_manifest_schema_declares_version_constants() -> None:
     properties = schema["properties"]
     assert properties["schema_version"] == {"const": "1.0.0"}
     assert properties["diagnostic_contract_version"] == {"const": "2.0.0"}
-    assert schema["$id"].endswith(
-        "/local-environment/v1/local-dependency-manifest.schema.json"
-    )
+    assert schema["$id"].endswith("/local-environment/v1/local-dependency-manifest.schema.json")
 
 
 def test_workflow_event_v2_declares_envelope_version_constants() -> None:
@@ -220,9 +216,7 @@ def test_v1_make_and_event_artifacts_are_immutable_since_head(
 # ---------------------------------------------------------------------------
 
 EXPECTED_200_REQUIRED = {"service", "status", "version", "request_id"}
-HEALTH_CONTRACT_REL = (
-    "shared/contracts/repository-workflow/v1/service-health.openapi.yaml"
-)
+HEALTH_CONTRACT_REL = "shared/contracts/repository-workflow/v1/service-health.openapi.yaml"
 
 
 def _health_contract_text() -> str:
@@ -291,9 +285,7 @@ def test_health_v1_1_keeps_200_response_shapes() -> None:
     """
     text = _health_contract_text()
     head_text = _health_contract_head_text()
-    assert re.search(
-        r"(?m)^ {2}version: 1\.1\.0$", text
-    ), "health contract must be 1.1.0"
+    assert re.search(r"(?m)^ {2}version: 1\.1\.0$", text), "health contract must be 1.1.0"
     assert re.search(
         r"(?m)^ {2}version: 1\.1\.0$", head_text
     ), "committed HEAD health contract must already be the 1.1.0 minor update"
@@ -339,10 +331,7 @@ def test_health_v1_1_adds_only_api_billing_postgres_503_readiness() -> None:
     assert "- INVALID_CONFIG" in result
     assert "- DEPENDENCY_NOT_READY" in result
     # The minor update must not introduce a new success shape.
-    assert (
-        _required_fields(_yaml_block(text, "    ReadinessResponse:"))
-        == EXPECTED_200_REQUIRED
-    )
+    assert _required_fields(_yaml_block(text, "    ReadinessResponse:")) == EXPECTED_200_REQUIRED
 
 
 def test_health_v1_1_gateway_admin_gain_no_dependency_probe() -> None:
@@ -465,18 +454,14 @@ def test_contract_catalog_registers_exactly_on_disk_contracts() -> None:
     )
     contracts_root = repo_path("shared", "contracts")
     for entry in registered:
-        assert (
-            contracts_root / entry.rstrip("/")
-        ).exists(), f"phantom catalog entry: {entry}"
+        assert (contracts_root / entry.rstrip("/")).exists(), f"phantom catalog entry: {entry}"
     for group_dir in sorted(contracts_root.iterdir()):
         if not group_dir.is_dir() or group_dir.name == "_meta":
             continue
         for version_dir in sorted(group_dir.iterdir()):
             if version_dir.is_dir() and any(version_dir.iterdir()):
                 key = f"{group_dir.name}/{version_dir.name}/"
-                assert (
-                    key in registered
-                ), f"contract on disk missing from catalog: {key}"
+                assert key in registered, f"contract on disk missing from catalog: {key}"
 
 
 def test_contract_catalog_rows_carry_owner_version_and_format() -> None:
@@ -493,9 +478,7 @@ def test_contract_catalog_rows_carry_owner_version_and_format() -> None:
         assert row[2].startswith(version), f"{path} version drifted: {row[2]!r}"
         assert row[3], f"{path} format cell must not be empty"
     v2_row = next(row for row in rows if row[0] == "`repository-workflow/v2/`")
-    assert (
-        "activated" in v2_row[2].lower()
-    ), "workflow v2 must be marked activated after T074"
+    assert "activated" in v2_row[2].lower(), "workflow v2 must be marked activated after T074"
 
 
 def test_contract_catalog_records_compatibility_and_deprecation_status() -> None:

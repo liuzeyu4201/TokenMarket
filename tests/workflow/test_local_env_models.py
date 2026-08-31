@@ -92,13 +92,9 @@ class TestManifestEntities:
 
     def test_manifest_equality(self, manifest: Any) -> None:
         models = _models()
-        again = models.load_manifest(
-            repo_path("ops", "workflow", "local-dependencies.json")
-        )
+        again = models.load_manifest(repo_path("ops", "workflow", "local-dependencies.json"))
         assert manifest == again
-        other = models.load_manifest(
-            repo_path("ops", "workflow", "local-dependencies.json")
-        )
+        other = models.load_manifest(repo_path("ops", "workflow", "local-dependencies.json"))
         changed = dataclasses.replace(other.timeouts, readiness_budget_seconds=61)
         assert manifest != dataclasses.replace(other, timeouts=changed)
 
@@ -229,9 +225,7 @@ class TestDependencyInstance:
     def test_published_port_bounds(self) -> None:
         models = _models()
         with pytest.raises(ValueError):
-            models.DependencyInstance(
-                dependency_id=models.DependencyId.POSTGRES, published_port=0
-            )
+            models.DependencyInstance(dependency_id=models.DependencyId.POSTGRES, published_port=0)
         with pytest.raises(ValueError):
             models.DependencyInstance(
                 dependency_id=models.DependencyId.POSTGRES, published_port=65536
@@ -284,9 +278,7 @@ class TestDependencyHealthResult:
         with pytest.raises(ValueError):
             self._result(
                 models,
-                checked_at=datetime(
-                    2026, 7, 16, 12, 0, 0, tzinfo=timezone(timedelta(hours=8))
-                ),
+                checked_at=datetime(2026, 7, 16, 12, 0, 0, tzinfo=timezone(timedelta(hours=8))),
             )
 
     def test_safe_reason_is_bounded(self) -> None:
@@ -317,18 +309,14 @@ class TestComposeSecretMaterial:
         assert synthetic_secret not in str(material)
         assert synthetic_secret not in f"{material!r}"
 
-    def test_secret_excluded_from_equality_and_hash(
-        self, synthetic_secret_factory: Any
-    ) -> None:
+    def test_secret_excluded_from_equality_and_hash(self, synthetic_secret_factory: Any) -> None:
         models = _models()
         first = self._material(models, synthetic_secret_factory.new())
         second = self._material(models, synthetic_secret_factory.new())
         assert first == second
         assert hash(first) == hash(second)
 
-    def test_metadata_difference_still_unequal(
-        self, synthetic_secret_factory: Any
-    ) -> None:
+    def test_metadata_difference_still_unequal(self, synthetic_secret_factory: Any) -> None:
         models = _models()
         first = self._material(models, synthetic_secret_factory.new())
         second = self._material(
@@ -349,9 +337,7 @@ class TestComposeSecretMaterial:
         # Frozen entities: the original mapping is unchanged.
         assert material.cleanup_state == models.SecretCleanupState.IN_MEMORY
 
-    def test_source_field_must_be_a_name_not_a_value(
-        self, synthetic_secret: str
-    ) -> None:
+    def test_source_field_must_be_a_name_not_a_value(self, synthetic_secret: str) -> None:
         models = _models()
         with pytest.raises(ValueError):
             self._material(
@@ -437,9 +423,7 @@ class TestServiceReadinessResult:
                 models,
                 status=not_ready,
                 http_status=503,
-                dependencies=(
-                    self._dependency(models, name=models.DependencyId.REDIS),
-                ),
+                dependencies=(self._dependency(models, name=models.DependencyId.REDIS),),
             )
         ok = self._result(
             models,

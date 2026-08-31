@@ -18,8 +18,9 @@ import time
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
-from .dsn import DSNError, attested_test_dsn, dsn_is_production_shaped as _dsn_is_production_shaped
 
+from .dsn import DSNError, attested_test_dsn
+from .dsn import dsn_is_production_shaped as _dsn_is_production_shaped
 from .events import DiagnosticCode, EventLog, aggregate_status, emit_event, to_jsonl
 from .images import image_scan, runtime_smoke
 from .manifest import ManifestError, action_binding, load_manifest, validate_all
@@ -145,14 +146,12 @@ def _assert_hosted_toolchain_environment(environment: Mapping[str, str]) -> None
     if environment.get("GITHUB_ACTIONS") != "true":
         raise WorkflowError(
             "INVALID_CONFIG",
-            f"toolchain profile {HOSTED_TOOLCHAIN_PROFILE!r} requires "
-            "GITHUB_ACTIONS=true",
+            f"toolchain profile {HOSTED_TOOLCHAIN_PROFILE!r} requires " "GITHUB_ACTIONS=true",
         )
     if environment.get("RUNNER_OS") != "Linux":
         raise WorkflowError(
             "INVALID_CONFIG",
-            f"toolchain profile {HOSTED_TOOLCHAIN_PROFILE!r} requires "
-            "RUNNER_OS=Linux",
+            f"toolchain profile {HOSTED_TOOLCHAIN_PROFILE!r} requires " "RUNNER_OS=Linux",
         )
 
 
@@ -261,9 +260,7 @@ def toolchain_check(
                 )
 
         integrity = tool.get("integrity_reference", "")
-        if integrity and (
-            integrity.startswith("services/") or integrity.startswith("ops/")
-        ):
+        if integrity and (integrity.startswith("services/") or integrity.startswith("ops/")):
             ref_path = repo_root / integrity if repo_root else _repo_root() / integrity
             if not ref_path.is_file():
                 raise WorkflowError(
@@ -285,13 +282,9 @@ def bootstrap(component_path: Path, *, frozen: bool = True) -> None:
         if result.returncode != 0:
             raise WorkflowError("STEP_FAILED", f"uv sync failed in {component_path}")
     elif (component_path / "go.mod").is_file():
-        result = subprocess.run(
-            ["go", "mod", "download"], cwd=component_path, check=False
-        )
+        result = subprocess.run(["go", "mod", "download"], cwd=component_path, check=False)
         if result.returncode != 0:
-            raise WorkflowError(
-                "STEP_FAILED", f"go mod download failed in {component_path}"
-            )
+            raise WorkflowError("STEP_FAILED", f"go mod download failed in {component_path}")
     elif (component_path / "package-lock.json").is_file():
         cmd = ["npm", "ci"]
         result = subprocess.run(cmd, cwd=component_path, check=False)
@@ -448,9 +441,7 @@ def execute_action(
         if action in ("start", "stop"):
             from .local_stack import start_local, stop_local
 
-            start_scope = (
-                (os.environ.get("TOKENMARKET_START_SCOPE") or "all").strip().lower()
-            )
+            start_scope = (os.environ.get("TOKENMARKET_START_SCOPE") or "all").strip().lower()
 
             # Port overrides arrive via environment (Makefile exports).
             port_keys = (
@@ -534,9 +525,7 @@ def execute_action(
                 continue
 
             if failed:
-                log.skip(
-                    action, component["id"], "execution", reason="previous step failed"
-                )
+                log.skip(action, component["id"], "execution", reason="previous step failed")
                 emit(log.events[-1])
                 continue
 
@@ -761,9 +750,7 @@ def _release_candidate_main(argv: Sequence[str], *, repo_root: Path) -> int:
     sub = parser.add_subparsers(dest="rc_action", required=True)
 
     capture_p = sub.add_parser("capture", help="Freeze a release candidate manifest")
-    capture_p.add_argument(
-        "--increment", required=True, choices=["p1", "p2", "P1", "P2"]
-    )
+    capture_p.add_argument("--increment", required=True, choices=["p1", "p2", "P1", "P2"])
     capture_p.add_argument("--output", required=True, help="Manifest JSON output path")
     capture_p.add_argument(
         "--allow-dirty",
@@ -922,10 +909,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest = load_manifest(repo_root / "ops" / "workflow" / "components.json")
         for component in manifest["components"]:
             comp_path = repo_root / component["path"]
-            if any(
-                (comp_path / f).is_file()
-                for f in ("uv.lock", "go.sum", "package-lock.json")
-            ):
+            if any((comp_path / f).is_file() for f in ("uv.lock", "go.sum", "package-lock.json")):
                 bootstrap(comp_path)
         return 0
 

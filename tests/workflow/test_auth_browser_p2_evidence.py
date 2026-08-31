@@ -14,9 +14,7 @@ import pytest
 from .helpers import find_repo_root, repo_path
 
 FIXTURE_DIR = repo_path("tests", "workflow", "fixtures", "auth-browser", "p2")
-REAL_EVIDENCE = repo_path(
-    "specs", "004-phone-login-session-ui", "evidence", "browser-p2.md"
-)
+REAL_EVIDENCE = repo_path("specs", "004-phone-login-session-ui", "evidence", "browser-p2.md")
 
 
 def _load(name: str) -> dict:

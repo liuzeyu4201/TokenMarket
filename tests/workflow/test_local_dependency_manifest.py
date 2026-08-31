@@ -75,16 +75,12 @@ class TestAcceptedManifest:
 
 
 class TestDigestIdentity:
-    def test_placeholder_zero_digest_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_placeholder_zero_digest_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["index_digest"] = "sha256:" + "0" * 64
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_placeholder_text_digest_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_placeholder_text_digest_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["index_digest"] = "sha256:PLACEHOLDER_INDEX_DIGEST"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -104,17 +100,13 @@ class TestDigestIdentity:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_tag_only_missing_index_digest_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_tag_only_missing_index_digest_rejected(self, manifest_data: dict[str, Any]) -> None:
         del _postgres(manifest_data)["index_digest"]
         with pytest.raises(_validation_error()) as excinfo:
             _parse(manifest_data)
         assert "index_digest" in excinfo.value.path
 
-    def test_tag_only_empty_index_digest_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_tag_only_empty_index_digest_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["index_digest"] = ""
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -126,46 +118,34 @@ class TestDigestIdentity:
             _parse(manifest_data)
         assert "index_digest" in excinfo.value.path
 
-    def test_platform_child_digest_pattern_enforced(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_platform_child_digest_pattern_enforced(self, manifest_data: dict[str, Any]) -> None:
         _redis(manifest_data)["platform_digests"]["linux_arm64"] = "sha256:not-a-digest"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
 
 class TestPlatformChildren:
-    def test_missing_platform_child_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_missing_platform_child_rejected(self, manifest_data: dict[str, Any]) -> None:
         del _postgres(manifest_data)["platform_digests"]["linux_arm64"]
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_missing_platform_digest_map_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_missing_platform_digest_map_rejected(self, manifest_data: dict[str, Any]) -> None:
         del _redis(manifest_data)["platform_digests"]
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
     def test_extra_platform_child_rejected(self, manifest_data: dict[str, Any]) -> None:
-        _grafana(manifest_data)["platform_digests"]["linux_ppc64le"] = _valid_digest(
-            "cd"
-        )
+        _grafana(manifest_data)["platform_digests"]["linux_ppc64le"] = _valid_digest("cd")
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_required_platforms_reordered_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_required_platforms_reordered_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["required_platforms"] = ["linux/arm64", "linux/amd64"]
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_required_platforms_reduced_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_required_platforms_reduced_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["required_platforms"] = ["linux/amd64"]
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -182,9 +162,7 @@ class TestDependencySet:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_reordered_dependencies_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_reordered_dependencies_rejected(self, manifest_data: dict[str, Any]) -> None:
         deps = manifest_data["dependencies"]
         manifest_data["dependencies"] = [deps[1], deps[0], deps[2]]
         with pytest.raises(_validation_error()):
@@ -196,16 +174,12 @@ class TestDependencySet:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_extra_dependency_field_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_extra_dependency_field_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["extra_field"] = "not-reviewed"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_unknown_dependency_id_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_unknown_dependency_id_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["id"] = "kafka"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -223,9 +197,7 @@ class TestUnsafeRuntimes:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_compose_version_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_compose_version_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         manifest_data["runtime"]["compose_version"] = "4.0.0"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -244,23 +216,17 @@ class TestUnsafeRuntimes:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_secret_transport_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_secret_transport_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         manifest_data["runtime"]["secret_transport"] = "service-environment-variables"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_wildcard_bind_address_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_wildcard_bind_address_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["host_bind_address"] = "0.0.0.0"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_hostname_bind_address_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_hostname_bind_address_rejected(self, manifest_data: dict[str, Any]) -> None:
         _redis(manifest_data)["host_bind_address"] = "localhost"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -295,17 +261,13 @@ class TestRuntimeUidGid:
 
 
 class TestTimeoutDrift:
-    def test_readiness_budget_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_readiness_budget_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         manifest_data["timeouts"]["readiness_budget_seconds"] = 61
         with pytest.raises(_validation_error()) as excinfo:
             _parse(manifest_data)
         assert "readiness_budget_seconds" in excinfo.value.path
 
-    def test_repeat_confirmation_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_repeat_confirmation_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         manifest_data["timeouts"]["repeat_confirmation_seconds"] = 14
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -315,69 +277,51 @@ class TestTimeoutDrift:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_postgres_grace_period_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_postgres_grace_period_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["stop_grace_period_seconds"] = 59
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_grafana_grace_period_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_grafana_grace_period_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         _grafana(manifest_data)["stop_grace_period_seconds"] = 45
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
 
 class TestStorageClasses:
-    def test_postgres_ephemeral_storage_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_postgres_ephemeral_storage_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["ephemeral_storage"] = copy.deepcopy(
             _grafana(manifest_data)["ephemeral_storage"]
         )
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_postgres_missing_volume_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_postgres_missing_volume_rejected(self, manifest_data: dict[str, Any]) -> None:
         del _postgres(manifest_data)["volume"]
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
     def test_grafana_volume_rejected(self, manifest_data: dict[str, Any]) -> None:
-        _grafana(manifest_data)["volume"] = copy.deepcopy(
-            _redis(manifest_data)["volume"]
-        )
+        _grafana(manifest_data)["volume"] = copy.deepcopy(_redis(manifest_data)["volume"])
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_grafana_missing_tmpfs_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_grafana_missing_tmpfs_rejected(self, manifest_data: dict[str, Any]) -> None:
         del _grafana(manifest_data)["ephemeral_storage"]
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_volume_delete_on_down_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_volume_delete_on_down_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["volume"]["delete_on_down"] = True
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_volume_logical_name_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_volume_logical_name_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         _redis(manifest_data)["volume"]["logical_name"] = "shared-data"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_volume_mount_path_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_volume_mount_path_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["volume"]["mount_path"] = "var/lib/postgresql/data"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -399,9 +343,7 @@ class TestDependencyConstDrift:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_grafana_repository_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_grafana_repository_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         _grafana(manifest_data)["repository"] = "docker.io/grafana/grafana-oss"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -411,9 +353,7 @@ class TestDependencyConstDrift:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_readiness_probe_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_readiness_probe_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         _postgres(manifest_data)["readiness_probe"] = "tcp-connect-only"
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
@@ -452,9 +392,7 @@ class TestTopLevelStructure:
         with pytest.raises(_validation_error()):
             _parse(manifest_data)
 
-    def test_workspace_hash_length_drift_rejected(
-        self, manifest_data: dict[str, Any]
-    ) -> None:
+    def test_workspace_hash_length_drift_rejected(self, manifest_data: dict[str, Any]) -> None:
         manifest_data["project"]["workspace_hash_length"] = 16
         with pytest.raises(_validation_error()):
             _parse(manifest_data)

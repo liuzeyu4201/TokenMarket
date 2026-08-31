@@ -377,12 +377,8 @@ def test_prod_deploy_dirty_worktree_fails_before_docker(
 ) -> None:
     from workflow.deploy_env import lifecycle as life
 
-    monkeypatch.setattr(
-        "workflow.release_candidate.git_tree_clean", lambda _root: False
-    )
-    monkeypatch.setattr(
-        "workflow.release_candidate.git_commit_sha", lambda _root: "abc123"
-    )
+    monkeypatch.setattr("workflow.release_candidate.git_tree_clean", lambda _root: False)
+    monkeypatch.setattr("workflow.release_candidate.git_commit_sha", lambda _root: "abc123")
 
     def _boom() -> None:
         raise AssertionError("docker must not be contacted for a dirty worktree")

@@ -81,11 +81,7 @@ def require_production_approval(
 
     from pathlib import Path
 
-    from .prod_approval import (
-        production_verify_key,
-        refuse_hmac_mint_authority,
-        verify_approval,
-    )
+    from .prod_approval import production_verify_key, refuse_hmac_mint_authority, verify_approval
 
     if not approval_proof:
         raise ModeError(

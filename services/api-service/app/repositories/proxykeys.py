@@ -6,11 +6,10 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.domain.owners import owner_can_use_proxy_keys
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
 from app.domain.proxykeys.models import ProxyKey, ProxyKeyIdempotency, ProxyKeyQuota
 from app.domain.proxykeys.service import IssuedProxyKey
 from app.domain.users.models import User, UserRole, UserStatus

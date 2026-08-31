@@ -87,7 +87,11 @@ def test_issue_list_no_secret_and_revoke() -> None:
         assert foreign.status_code == 404
         issued2 = client.post(
             f"/api/v1/projects/{pid}/proxy-keys",
-            json={"protocols": ["openai"], "allowed_models": ["gpt-test"], "name": "n2"},
+            json={
+                "protocols": ["openai"],
+                "allowed_models": ["gpt-test"],
+                "name": "n2",
+            },
         )
         kid2 = issued2.json()["data"]["key_id"]
         assert (

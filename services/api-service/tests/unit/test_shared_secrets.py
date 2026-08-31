@@ -42,7 +42,9 @@ def test_same_deployment_secret_keeps_proxy_and_seller_keys_usable() -> None:
         ("abc", "SECRET_MALFORMED"),
     ],
 )
-def test_missing_malformed_undersized_material_fails(raw: str | None, code: str) -> None:
+def test_missing_malformed_undersized_material_fails(
+    raw: str | None, code: str
+) -> None:
     with pytest.raises(SharedSecretError) as exc:
         load_shared_secret_bytes("PROXY_AUTH_PEPPER", raw)
     assert exc.value.code == code

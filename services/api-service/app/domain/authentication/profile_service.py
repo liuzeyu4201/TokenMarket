@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AuthSettings
+from app.domain.authorization.workspace import default_workspace
 from app.domain.users.privacy import mask_phone
 from app.domain.users.service import RegistrationService
 from app.errors import (
@@ -19,7 +20,6 @@ from app.errors import (
     MSG_SERVICE_UNAVAILABLE,
 )
 from app.repositories.authentication import AuthenticationRepository, utc_now
-from app.domain.authorization.workspace import default_workspace
 from app.security.csrf import issue_csrf_token
 from app.security.profile_token import parse_profile_cookie, profile_token_digest
 from app.security.reference import client_hint

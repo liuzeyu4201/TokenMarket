@@ -24,11 +24,11 @@ from app.domain.authorization.matrix import (
     Action,
     is_action_allowed,
 )
-from app.domain.authorization.workspace import effective_role
 from app.domain.authorization.route_exclude import (
     RouteCandidate,
     exclude_self_owned_seller_keys,
 )
+from app.domain.authorization.workspace import effective_role
 from app.domain.users.models import User, UserStatus
 from app.observability import record_authz_audit_failure, record_authz_decision
 from app.repositories.authorization import AuthorizationRepository

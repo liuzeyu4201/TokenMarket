@@ -112,9 +112,7 @@ class LifecycleService:
             raise OnboardingError(
                 CODE_ENCRYPTION, MSG[CODE_ENCRYPTION], http_status=503
             ) from exc
-        plaintext = self._encryptor.decrypt(
-            nonce, ct, tag, key_ver
-        ).decode("utf-8")
+        plaintext = self._encryptor.decrypt(nonce, ct, tag, key_ver).decode("utf-8")
         snap = self._validator.validate(
             platform=str(row["platform"]), api_key=plaintext, request_id=request_id
         )
@@ -155,7 +153,9 @@ class LifecycleService:
         saver = getattr(self._store, "save_if_unmodified", None)
         if callable(saver):
             if not saver(current, expected_version):
-                raise OnboardingError(CODE_CONFLICT, MSG[CODE_CONFLICT], http_status=409)
+                raise OnboardingError(
+                    CODE_CONFLICT, MSG[CODE_CONFLICT], http_status=409
+                )
         else:
             self._store.save(current)
         return _public_view(current)

@@ -73,7 +73,9 @@ def _lifecycle_posts(key_id: uuid.UUID) -> list[tuple[str, dict[str, str] | None
     return [(p, body_needed.get(p)) for p in paths]
 
 
-def _prepare_client(client: TestClient, *, session_id: uuid.UUID, user: uuid.UUID) -> None:
+def _prepare_client(
+    client: TestClient, *, session_id: uuid.UUID, user: uuid.UUID
+) -> None:
     client.app.state.auth_settings = _settings()
     client.app.state.actor_override = Actor(
         user_id=user, role="both", status="active", session_id=session_id

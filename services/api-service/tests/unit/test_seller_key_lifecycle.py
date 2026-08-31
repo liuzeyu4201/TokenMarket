@@ -202,7 +202,10 @@ def test_stale_version_rejected_on_resume() -> None:
     stale = dict(row)
     stale["administrative_state"] = "active"
     stale["version"] = int(row["version"]) + 5
-    assert store.save_if_unmodified(stale, expected_version=int(row["version"]) - 1) is False
+    assert (
+        store.save_if_unmodified(stale, expected_version=int(row["version"]) - 1)
+        is False
+    )
     assert store.get(out.key_id)["administrative_state"] == "paused"
 
 

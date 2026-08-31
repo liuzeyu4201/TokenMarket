@@ -6,7 +6,11 @@ import uuid
 
 import pytest
 
-from app.domain.proxykeys.service import MemoryProxyStore, ProxyKeyError, ProxyKeyService
+from app.domain.proxykeys.service import (
+    MemoryProxyStore,
+    ProxyKeyError,
+    ProxyKeyService,
+)
 from app.domain.sellerkeys.crypto import CredentialEncryptor
 from app.domain.sellerkeys.memory_store import MemoryKeyStore
 from app.domain.sellerkeys.service import OnboardingService
@@ -14,7 +18,9 @@ from app.domain.sellerkeys.validator_port import ValidationSnapshot
 
 
 class _OK:
-    def validate(self, *, platform: str, api_key: str, request_id: str) -> ValidationSnapshot:
+    def validate(
+        self, *, platform: str, api_key: str, request_id: str
+    ) -> ValidationSnapshot:
         return ValidationSnapshot(
             "success", remaining_quota="10", quota_unit="token", validity="valid"
         )

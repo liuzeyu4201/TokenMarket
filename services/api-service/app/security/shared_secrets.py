@@ -103,9 +103,7 @@ def load_process_shared_secrets(
     fingerprint = load_shared_secret_bytes(
         "SELLER_KEY_FINGERPRINT_SECRET", env.get("SELLER_KEY_FINGERPRINT_SECRET")
     )
-    pepper = load_shared_secret_bytes(
-        "PROXY_AUTH_PEPPER", env.get("PROXY_AUTH_PEPPER")
-    )
+    pepper = load_shared_secret_bytes("PROXY_AUTH_PEPPER", env.get("PROXY_AUTH_PEPPER"))
     version = load_seller_key_version(env.get("SELLER_KEY_VERSION"))
     previous = load_seller_previous_keys(env)
     previous.pop(version, None)

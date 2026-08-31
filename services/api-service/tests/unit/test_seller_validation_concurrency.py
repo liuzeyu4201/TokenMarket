@@ -163,7 +163,9 @@ def test_gateway_validator_global_concurrency_bound() -> None:
                 inflight += 1
                 max_inflight = max(max_inflight, inflight)
             release.wait(timeout=1.0)
-            body = json.dumps({"error_category": "success", "remaining_quota": "1"}).encode()
+            body = json.dumps(
+                {"error_category": "success", "remaining_quota": "1"}
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -186,7 +188,14 @@ def test_gateway_validator_global_concurrency_bound() -> None:
             timeout=2.0,
             max_concurrency=2,
         )
-        workers = [threading.Thread(target=lambda: v.validate(platform="volcano", api_key="sk-x", request_id="r")) for _ in range(6)]
+        workers = [
+            threading.Thread(
+                target=lambda: v.validate(
+                    platform="volcano", api_key="sk-x", request_id="r"
+                )
+            )
+            for _ in range(6)
+        ]
         for w in workers:
             w.start()
         time.sleep(0.2)

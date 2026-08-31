@@ -16,9 +16,7 @@ class OwnerState:
     is_deleted: bool = False
 
 
-def owner_can_use_proxy_keys(
-    status: str, role: str, is_deleted: bool = False
-) -> bool:
+def owner_can_use_proxy_keys(status: str, role: str, is_deleted: bool = False) -> bool:
     """Active, non-deleted buyer/both owners may authenticate proxy keys."""
     return (not is_deleted) and status == ACTIVE_STATUS and role in BUYER_ROLES
 

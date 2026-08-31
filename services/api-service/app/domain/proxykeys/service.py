@@ -320,9 +320,15 @@ class ProxyKeyService:
         if not self._digest_ok(computed, rec):
             return None
         assert rec is not None
-        return self._scope_ok(
+        scoped = self._scope_ok(
             rec, protocol=protocol, model=model, client_ip=client_ip, now=now
         )
+        if scoped is None:
+            return None
+        # Re-check owner after scope so suspend cannot succeed post-commit.
+        if self._store.get_by_hash(computed) is None:
+            return None
+        return scoped
 
     def authorize_hash(
         self,
@@ -337,9 +343,14 @@ class ProxyKeyService:
         if not self._digest_ok(secret_hash, rec):
             return None
         assert rec is not None
-        return self._scope_ok(
+        scoped = self._scope_ok(
             rec, protocol=protocol, model=model, client_ip=client_ip, now=now
         )
+        if scoped is None:
+            return None
+        if self._store.get_by_hash(secret_hash) is None:
+            return None
+        return scoped
 
     def _scope_ok(
         self,

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import Info, generate_latest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from .api.ledger import router as ledger_router
 from .database import (
     InvalidDatabaseConfigError,
     ProbeErrorCategory,
@@ -99,6 +100,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="TokenMarket Billing Service", version=VERSION, lifespan=lifespan)
 app.state.version = VERSION
 app.include_router(health_router)
+app.include_router(ledger_router)
 
 
 @app.middleware("http")

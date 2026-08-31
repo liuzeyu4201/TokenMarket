@@ -29,7 +29,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `volcano-key-validation/v1/` | Proxy Gateway (provider validation) | 1.0.0 | OpenAPI / Markdown |
 | `volcano-openai-compat/v1/` | Proxy Gateway (Chat Completions adapter) | 1.0.0 | OpenAPI / Markdown |
 | `endpoint-catalog/v1/` | Proxy Gateway (V0.2 Endpoint Catalog) | 1.0.0 | JSON Schema / JSON / Markdown |
-| `native-passthrough/v1/` | Proxy Gateway (native same-protocol kernel, SF18+) | 1.5.0 | Markdown |
+| `native-passthrough/v1/` | Proxy Gateway (native same-protocol kernel, SF18+) | 1.6.0 | Markdown |
 | `project/v1/` | API Service (Project domain, SF10+) | 1.1.0 | OpenAPI |
 | `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.1.0 | OpenAPI |
 | `project-proxy-key/v1/` | API Service (Project proxy Key, SF12+) | 1.0.0 | OpenAPI |
@@ -38,7 +38,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `usage/v1/` | Billing Service (usage observation, SF26+) | 1.1.0 | JSON Schema |
 | `pricing/v1/` | Billing Service (versioned rates, SF27+) | 1.1.0 | JSON Schema |
 | `seller-workbench/v1/` | API Service + Frontend (seller quote workbench, SF17) | 1.0.0 | Markdown |
-| `ledger/v1/` | Billing Service (immutable ledger, SF28+) | 1.0.0 | JSON Schema |
+| `ledger/v1/` | Billing Service (immutable ledger, SF28+) | 1.1.0 | JSON Schema |
 | `audit/v1/` | Admin Service (audit events, SF30+) | 1.0.0 | JSON Schema |
 | `usage-outbox/v1/` | Proxy Gateway (usage outbox, SF04) | 1.0.0 | JSON Schema |
 | `unified-phone-auth/v1/` | API Service (unified phone auth, SF06) | 1.0.0 | OpenAPI |
@@ -74,7 +74,8 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   conversion); 1.1.0 adds SSE/WS/file affinity (SF22); 1.2.0 adds OpenAI
   stable data-plane catalog coverage (SF19); 1.3.0 adds Anthropic stable
   coverage (SF20); 1.4.0 adds Vertex publisher-model coverage (SF21);
-  1.5.0 adds dedicated fail-closed `DEDICATED_UNAVAILABLE` (SF25).
+  1.5.0 adds dedicated fail-closed `DEDICATED_UNAVAILABLE` (SF25);
+  1.6.0 adds `INSUFFICIENT_QUOTA` (SF28).
   `provider-binding/v1` 1.1.0 adds replace-preview/replace with buyer
   confirmation and draining (SF25).
   `usage/v1` 1.1.0 expands native spend and multi-dimension capture (SF26).
@@ -82,7 +83,8 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   `seller-workbench/v1` is the seller quote and supply console (SF17).
   `route-decision/v1` 1.1.0 is shared-pool hard qualification (SF23);
   1.2.0 adds composite health/latency/capacity/price scoring on that set (SF24).
-  Ledger/audit writers land in later SFs.
+  `ledger/v1` 1.1.0 is append-only test-quota reserve/settle (SF28).
+  Audit writers land in later SFs.
 - `deploy-environment/v1/` owns the ADR 003 deploy stack (`make deploy` / `make deploy-down`),
   layered Compose assets, fixed test/prod project names, and the fail-closed Phase 1 gate;
   it must never expand `compose.local.yml` or allow `mode=local` deploy. Runtime activation

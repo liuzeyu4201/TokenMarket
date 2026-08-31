@@ -381,7 +381,7 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
     "endpoint-catalog/v1/": ("Proxy Gateway (V0.2 Endpoint Catalog)", "1.0.0"),
     "native-passthrough/v1/": (
         "Proxy Gateway (native same-protocol kernel, SF18+)",
-        "1.5.0",
+        "1.6.0",
     ),
     "project/v1/": ("API Service (Project domain, SF10+)", "1.1.0"),
     "provider-binding/v1/": (
@@ -403,7 +403,7 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
         "API Service + Frontend (seller quote workbench, SF17)",
         "1.0.0",
     ),
-    "ledger/v1/": ("Billing Service (immutable ledger, SF28+)", "1.0.0"),
+    "ledger/v1/": ("Billing Service (immutable ledger, SF28+)", "1.1.0"),
     "audit/v1/": ("Admin Service (audit events, SF30+)", "1.0.0"),
     "usage-outbox/v1/": ("Proxy Gateway (usage outbox, SF04)", "1.0.0"),
     "unified-phone-auth/v1/": (

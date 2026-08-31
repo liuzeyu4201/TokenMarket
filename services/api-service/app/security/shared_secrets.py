@@ -96,7 +96,7 @@ def load_process_shared_secrets(
     environ: dict[str, str] | None = None,
 ) -> tuple[bytes, bytes, bytes, str, dict[str, bytes]]:
     """Return (seller_material, fingerprint_secret, proxy_pepper, key_version, previous)."""
-    env = os.environ if environ is None else environ
+    env: dict[str, str] = dict(os.environ if environ is None else environ)
     material = load_shared_secret_bytes(
         "SELLER_KEY_MATERIAL", env.get("SELLER_KEY_MATERIAL")
     )

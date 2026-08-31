@@ -70,7 +70,7 @@ class CompleteProfileRequest(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    nickname: str = Field(minLength=1, maxLength=50)
+    nickname: str = Field(..., min_length=1, max_length=50)
     role: Literal["buyer", "seller", "both"]
 
 

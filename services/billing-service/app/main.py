@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except CatalogError as exc:
         logger.error(
             "endpoint catalog load failed",
-            extra={"code": exc.code, "message": exc.message},
+            extra={"code": exc.code, "detail": exc.message},
         )
         raise
     app.state.endpoint_catalog = catalog

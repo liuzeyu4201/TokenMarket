@@ -193,29 +193,25 @@ def test_runtime_health_smoke(component: dict) -> None:
     )
 
     container_name = f"tm-smoke-{component['id'].replace('-', '_')}"
-    port = {
-        "proxy-gateway": 8080,
-        "api-service": 8000,
-        "billing-service": 8001,
-        "admin-service": 8002,
-        "frontend": 3000,
-    }[component["id"]]
+    from workflow.images import EXPOSED_PORTS, SMOKE_HOST_PORTS, _smoke_run_flags
+
+    container_port = EXPOSED_PORTS[component["id"]]
+    host_port = SMOKE_HOST_PORTS[component["id"]]
 
     try:
-        run_container = run(
-            [
-                "docker",
-                "run",
-                "--rm",
-                "-d",
-                "--name",
-                container_name,
-                "-p",
-                f"127.0.0.1:{port}:{port}",
-                image_tag,
-            ],
-            check=False,
-        )
+        run_cmd = [
+            "docker",
+            "run",
+            "--rm",
+            "-d",
+            "--name",
+            container_name,
+            "-p",
+            f"127.0.0.1:{host_port}:{container_port}",
+        ]
+        run_cmd.extend(_smoke_run_flags(find_repo_root(), component["id"]))
+        run_cmd.append(image_tag)
+        run_container = run(run_cmd, check=False)
         assert run_container.returncode == 0, (
             f"{component['id']}: docker run failed\nstdout:\n{run_container.stdout}\n"
             f"stderr:\n{run_container.stderr}"
@@ -227,7 +223,7 @@ def test_runtime_health_smoke(component: dict) -> None:
         last_error = ""
         while time.time() < deadline:
             probe = run(
-                ["curl", "-fsS", f"http://127.0.0.1:{port}{health_path}"],
+                ["curl", "-fsS", f"http://127.0.0.1:{host_port}{health_path}"],
                 check=False,
             )
             if probe.returncode == 0:
@@ -360,7 +356,14 @@ def test_runtime_smoke_uses_shared_network_and_defers_cleanup(
         assert run_cmd[run_cmd.index("--network") + 1] == network
         assert "--network-alias" in run_cmd
         assert run_cmd[run_cmd.index("--network-alias") + 1] == comp["id"]
-        assert f"127.0.0.1:{images_mod.EXPOSED_PORTS[comp['id']]}" in " ".join(run_cmd)
+        host = images_mod.SMOKE_HOST_PORTS[comp["id"]]
+        container = images_mod.EXPOSED_PORTS[comp["id"]]
+        assert f"127.0.0.1:{host}:{container}" in " ".join(run_cmd)
+        if comp["id"] == "proxy-gateway":
+            assert "PROXY_AUTH_PEPPER=dev-only-proxy-pepper-not-for-prod" in run_cmd
+        if comp["id"] == "api-service":
+            assert "SELLER_KEY_VERSION=v1" in run_cmd
+            assert any(part.startswith("SELLER_KEY_MATERIAL=") for part in run_cmd)
 
     # api-service container must still be running when frontend is started:
     # no stop/rm for api before the last docker run.

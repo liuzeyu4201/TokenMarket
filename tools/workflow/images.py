@@ -36,6 +36,20 @@ EXPOSED_PORTS = {
     "frontend": 3000,
 }
 
+# Host publish ports for smoke. Keep off the local SF02 Grafana :3000 and
+# other operator loopback bindings so docker run -p does not collide.
+SMOKE_HOST_PORTS = {
+    "proxy-gateway": 18080,
+    "api-service": 18000,
+    "billing-service": 18001,
+    "admin-service": 18002,
+    "frontend": 13000,
+}
+
+_SMOKE_GATEWAY_PEPPER = "dev-only-proxy-pepper-not-for-prod"
+_SMOKE_SELLER_MATERIAL = "11" * 32
+_SMOKE_FINGERPRINT_SECRET = "22" * 32
+
 _SMOKE_TOKEN_RE = re.compile(r"^[a-z0-9]{8,16}$")
 _SMOKE_NETWORK_RE = re.compile(r"^tm-smoke-[a-z0-9]{8,16}$")
 _SMOKE_CONTAINER_RE = re.compile(r"^tm-smoke-[a-z0-9]{8,16}-[a-z0-9_]+$")
@@ -61,6 +75,38 @@ def _image_components(repo_root: Path) -> list[dict[str, Any]]:
 
 def _default_image_tag(component_id: str) -> str:
     return f"tokenmarket/{component_id}:0.1.0"
+
+
+def _smoke_run_flags(repo_root: Path, component_id: str) -> list[str]:
+    """Minimum env/mounts so a smoke container can bind and answer liveness."""
+    flags: list[str] = []
+    if component_id == "proxy-gateway":
+        flags.extend(["-e", f"PROXY_AUTH_PEPPER={_SMOKE_GATEWAY_PEPPER}"])
+    if component_id in {"api-service", "billing-service", "admin-service"}:
+        catalog = repo_root / "shared" / "contracts" / "endpoint-catalog" / "v1" / "catalog.json"
+        if catalog.is_file():
+            flags.extend(
+                [
+                    "-e",
+                    "TOKENMARKET_ENDPOINT_CATALOG=/catalog.json",
+                    "-v",
+                    f"{catalog}:/catalog.json:ro",
+                ]
+            )
+    if component_id == "api-service":
+        flags.extend(
+            [
+                "-e",
+                f"SELLER_KEY_MATERIAL={_SMOKE_SELLER_MATERIAL}",
+                "-e",
+                f"SELLER_KEY_FINGERPRINT_SECRET={_SMOKE_FINGERPRINT_SECRET}",
+                "-e",
+                f"PROXY_AUTH_PEPPER={_SMOKE_GATEWAY_PEPPER}",
+                "-e",
+                "SELLER_KEY_VERSION=v1",
+            ]
+        )
+    return flags
 
 
 def _run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -207,7 +253,8 @@ def runtime_smoke(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any
             comp_id = component["id"]
             image_tag = _default_image_tag(comp_id)
             container_name = smoke_container_name(run_token, comp_id)
-            port = EXPOSED_PORTS[comp_id]
+            container_port = EXPOSED_PORTS[comp_id]
+            host_port = SMOKE_HOST_PORTS[comp_id]
             health_path = HEALTH_ENDPOINTS[comp_id]
 
             log.start("runtime-smoke", comp_id, "execution")
@@ -235,23 +282,23 @@ def runtime_smoke(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any
                             f"{comp_id}: image build failed before smoke",
                         )
 
-                run_result = _run(
-                    [
-                        "docker",
-                        "run",
-                        "--rm",
-                        "-d",
-                        "--name",
-                        container_name,
-                        "--network",
-                        network_name,
-                        "--network-alias",
-                        comp_id,
-                        "-p",
-                        f"127.0.0.1:{port}:{port}",
-                        image_tag,
-                    ]
-                )
+                run_cmd = [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "-d",
+                    "--name",
+                    container_name,
+                    "--network",
+                    network_name,
+                    "--network-alias",
+                    comp_id,
+                    "-p",
+                    f"127.0.0.1:{host_port}:{container_port}",
+                ]
+                run_cmd.extend(_smoke_run_flags(repo_root, comp_id))
+                run_cmd.append(image_tag)
+                run_result = _run(run_cmd)
                 if run_result.returncode != 0:
                     raise ImageWorkflowError(
                         "STEP_FAILED",
@@ -268,7 +315,7 @@ def runtime_smoke(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any
                             "--noproxy",
                             "*",
                             "-fsS",
-                            f"http://127.0.0.1:{port}{health_path}",
+                            f"http://127.0.0.1:{host_port}{health_path}",
                         ]
                     )
                     if probe.returncode == 0:
@@ -276,9 +323,14 @@ def runtime_smoke(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any
                     last_error = probe.stderr.strip()
                     time.sleep(0.5)
                 else:
+                    logs = _run(["docker", "logs", "--tail", "30", container_name])
+                    log_text = ((logs.stderr or "") + (logs.stdout or "")).strip()
+                    detail = last_error
+                    if log_text:
+                        detail = f"{last_error}; container logs: {log_text[-800:]}"
                     raise ImageWorkflowError(
                         "STEP_FAILED",
-                        f"{comp_id}: health endpoint did not respond: {last_error}",
+                        f"{comp_id}: health endpoint did not respond: {detail}",
                     )
 
                 inspect = _run(

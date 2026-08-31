@@ -28,7 +28,7 @@ try:
 except CatalogError as exc:
     logger.error(
         "endpoint catalog load failed",
-        extra={"code": exc.code, "message": exc.message},
+        extra={"code": exc.code, "detail": exc.message},
     )
     raise
 logger.info(

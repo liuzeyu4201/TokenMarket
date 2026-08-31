@@ -41,3 +41,23 @@ def test_missing_file(tmp_path: Path) -> None:
     with pytest.raises(CatalogError) as exc:
         load_catalog(tmp_path / "nope.json", want_major=1)
     assert exc.value.code == "CATALOG_LOAD_FAILED"
+
+
+def test_packaged_catalog_matches_shared_contract() -> None:
+    packaged = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "domain"
+        / "endpcatalog"
+        / "catalog.json"
+    )
+    shared = (
+        Path(__file__).resolve().parents[4]
+        / "shared"
+        / "contracts"
+        / "endpoint-catalog"
+        / "v1"
+        / "catalog.json"
+    )
+    assert packaged.is_file()
+    assert packaged.read_bytes() == shared.read_bytes()

@@ -35,6 +35,9 @@ def catalog_path() -> Path:
     env = os.environ.get("TOKENMARKET_ENDPOINT_CATALOG", "").strip()
     if env:
         return Path(env)
+    sibling = Path(__file__).resolve().parent / "catalog.json"
+    if sibling.is_file():
+        return sibling
     found = _walk_catalog(Path(__file__).resolve().parent)
     if found is None:
         raise CatalogError("CATALOG_LOAD_FAILED", "catalog file not found")

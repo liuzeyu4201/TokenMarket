@@ -17,6 +17,9 @@ const previewReplace = vi.fn()
 const replaceBinding = vi.fn()
 const listProjectKeys = vi.fn()
 const issueProjectKey = vi.fn()
+const getProjectBudget = vi.fn()
+const getProjectGuide = vi.fn()
+const listProjectUsage = vi.fn()
 
 vi.mock('../api/v1/phoneAuth', async () => {
   const actual = await vi.importActual<typeof import('../api/v1/phoneAuth')>('../api/v1/phoneAuth')
@@ -32,6 +35,16 @@ vi.mock('../api/v1/projects', async () => {
   return {
     ...actual,
     getProject: (...args: unknown[]) => getProject(...args),
+  }
+})
+
+vi.mock('../api/v1/budget', async () => {
+  const actual = await vi.importActual<typeof import('../api/v1/budget')>('../api/v1/budget')
+  return {
+    ...actual,
+    getProjectBudget: (...args: unknown[]) => getProjectBudget(...args),
+    getProjectGuide: (...args: unknown[]) => getProjectGuide(...args),
+    listProjectUsage: (...args: unknown[]) => listProjectUsage(...args),
   }
 })
 
@@ -86,6 +99,32 @@ describe('ProjectDetail', () => {
     listProjectKeys.mockReset()
     listProjectKeys.mockResolvedValue([])
     issueProjectKey.mockReset()
+    getProjectBudget.mockReset()
+    getProjectBudget.mockResolvedValue({
+      available: 890,
+      reserved: 0,
+      settled: 80,
+      unresolved: 30,
+    })
+    getProjectGuide.mockReset()
+    getProjectGuide.mockResolvedValue({
+      checklist: [
+        { id: 'binding', title: '发布 Provider Binding', done: false },
+        { id: 'key', title: '签发 Project 代理 Key', done: false },
+        { id: 'sample', title: '用原生示例发出测试请求', done: false },
+        { id: 'result', title: '查看用量与测试额度结果', done: false },
+      ],
+      samples: {
+        openai: { curl: 'curl /openai/v1/chat/completions -H Authorization: Bearer $TOKENMARKET_KEY', sdk: '', auth_header: 'Authorization: Bearer', path: '/openai/v1/chat/completions' },
+        anthropic: { curl: 'curl /anthropic/v1/messages -H x-api-key: $TOKENMARKET_KEY -H anthropic-version: 2023-06-01', sdk: '', auth_header: 'x-api-key', path: '/anthropic/v1/messages' },
+        vertex: { curl: 'curl ...:generateContent -H Authorization: Bearer $TOKENMARKET_KEY', sdk: '', auth_header: 'Authorization: Bearer', path: ':generateContent' },
+      },
+      disclaimer: '测试额度不可购买、转让、兑换或提现。',
+    })
+    listProjectUsage.mockReset()
+    listProjectUsage.mockResolvedValue([
+      { request_id: 'un-1', key_id: 'k1', status: 'unresolved', amount_minor: 30, reason: 'PARSE_FAILED' },
+    ])
   })
 
   it('shows immutable mode copy', async () => {
@@ -117,6 +156,13 @@ describe('ProjectDetail', () => {
     expect(screen.getByTestId('binding-form')).toBeInTheDocument()
     expect(screen.getByTestId('replace-impact')).toHaveTextContent('files')
     expect(screen.getByTestId('replace-impact')).toHaveTextContent('不会迁移')
+    await waitFor(() => {
+      expect(screen.getByTestId('quota-unresolved')).toHaveTextContent('30')
+    })
+    expect(screen.getByTestId('guide-checklist')).toHaveTextContent('发布 Provider Binding')
+    expect(screen.getByTestId('sample-anthropic')).toHaveTextContent('x-api-key')
+    expect(screen.getByTestId('usage-un-1')).toHaveTextContent('PARSE_FAILED')
+    expect(screen.queryByRole('button', { name: /充值/ })).not.toBeInTheDocument()
     assertNoSeriousA11y(container)
   })
 

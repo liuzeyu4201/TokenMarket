@@ -20,6 +20,7 @@ from .api.v1.auth import router as auth_router
 from .api.v1.authorization import router as authorization_router
 from .api.v1.bindings import internal_router as bindings_internal_router
 from .api.v1.bindings import router as bindings_router
+from .api.v1.budget import router as budget_router
 from .api.v1.connections import internal_router as connections_internal_router
 from .api.v1.connections import router as connections_router
 from .api.v1.internal import router as internal_router
@@ -33,6 +34,7 @@ from .config import clear_auth_settings_cache, load_auth_settings
 from .dependencies import create_session_engine
 from .dispatch.auth_delivery import AuthDeliveryDispatcher
 from .domain.bindings.service import BindingService
+from .domain.budget.service import BudgetService
 from .domain.connections.health import FailClosedProbe, HealthService
 from .domain.connections.lifecycle import BindingDependencies, LifecycleService
 from .domain.connections.service import ConnectionService, ServiceConnectionLookup
@@ -184,6 +186,11 @@ def _wire_key_services(application: FastAPI, database_url: str | None = None) ->
     application.state.seller_key_store = store
     application.state.internal_token = os.environ.get("INTERNAL_GATEWAY_TOKEN") or ""
     application.state.workbench_service = WorkbenchService()
+    application.state.budget_service = BudgetService(
+        projects=application.state.project_service,
+        bindings=application.state.binding_service,
+        keys=application.state.proxy_key_service,
+    )
 
 
 service_info = Info("app", "API service build information")
@@ -330,6 +337,7 @@ app.include_router(authorization_router)
 app.include_router(seller_keys_router)
 app.include_router(proxy_keys_router)
 app.include_router(projects_router)
+app.include_router(budget_router)
 app.include_router(project_keys_router)
 app.include_router(bindings_router)
 app.include_router(bindings_internal_router)

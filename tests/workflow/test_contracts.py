@@ -383,7 +383,7 @@ EXPECTED_CATALOG: dict[str, tuple[str, str]] = {
         "Proxy Gateway (native same-protocol kernel, SF18+)",
         "1.6.0",
     ),
-    "project/v1/": ("API Service (Project domain, SF10+)", "1.1.0"),
+    "project/v1/": ("API Service (Project domain, SF10+)", "1.2.0"),
     "provider-binding/v1/": (
         "API Service (Provider Binding, SF11+)",
         "1.1.0",

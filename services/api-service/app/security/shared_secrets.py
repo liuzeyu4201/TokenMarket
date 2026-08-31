@@ -85,7 +85,8 @@ def load_seller_previous_keys(
     if not prev_ver or not prev_raw:
         raise SharedSecretError(
             "SECRET_VERSION_MISSING",
-            "SELLER_KEY_PREVIOUS_VERSION and SELLER_KEY_MATERIAL_PREVIOUS must be set together",
+            "SELLER_KEY_PREVIOUS_VERSION and "
+            "SELLER_KEY_MATERIAL_PREVIOUS must be set together",
         )
     version = load_seller_key_version(prev_ver)
     material = load_shared_secret_bytes("SELLER_KEY_MATERIAL_PREVIOUS", prev_raw)
@@ -95,7 +96,7 @@ def load_seller_previous_keys(
 def load_process_shared_secrets(
     environ: dict[str, str] | None = None,
 ) -> tuple[bytes, bytes, bytes, str, dict[str, bytes]]:
-    """Return (seller_material, fingerprint_secret, proxy_pepper, key_version, previous)."""
+    """Load seller material, fingerprint secret, pepper, version, previous."""
     env: dict[str, str] = dict(os.environ if environ is None else environ)
     material = load_shared_secret_bytes(
         "SELLER_KEY_MATERIAL", env.get("SELLER_KEY_MATERIAL")

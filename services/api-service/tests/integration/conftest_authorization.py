@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth_rate_limit import MemoryAuthRateLimiter
 from app.config import clear_auth_settings_cache, load_auth_settings
+from app.domain.authorization.workspace import default_workspace
 from app.domain.users.models import User, UserRole
 from app.main import app
 from app.rate_limit import MemoryRateLimiter
@@ -67,7 +68,7 @@ class AuthzSessionFactory:
     def close(self) -> None:
         self._engine.dispose()
 
-    def issue(self, user: User) -> IssuedSession:
+    def issue(self, user: User, *, workspace: str | None = None) -> IssuedSession:
         settings = load_auth_settings()
         session_mat = settings.key_material("session")
         csrf_mat = settings.key_material("csrf")
@@ -76,6 +77,7 @@ class AuthzSessionFactory:
         session_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
         role_value = user.role.value if hasattr(user.role, "value") else str(user.role)
+        ws = workspace if workspace is not None else default_workspace(role_value)
         with self._factory() as db:
             # revoke any existing active session for user (partial unique)
             db.execute(
@@ -90,12 +92,12 @@ class AuthzSessionFactory:
                 text(
                     "INSERT INTO auth_sessions ("
                     "id, user_id, token_digest, token_key_version, role_snapshot, "
-                    "issued_at, expires_at, revoked_at, revocation_reason, "
+                    "workspace, issued_at, expires_at, revoked_at, revocation_reason, "
                     "created_request_id, delete_after"
                     ") VALUES ("
                     "CAST(:id AS uuid), CAST(:uid AS uuid), :digest, :ver, "
-                    "CAST(:role AS user_role), :issued, :expires, NULL, NULL, "
-                    ":req, :delete_after"
+                    "CAST(:role AS user_role), :workspace, :issued, :expires, "
+                    "NULL, NULL, :req, :delete_after"
                     ")"
                 ),
                 {
@@ -104,6 +106,7 @@ class AuthzSessionFactory:
                     "digest": digest,
                     "ver": session_mat.version,
                     "role": role_value,
+                    "workspace": ws,
                     "issued": now,
                     "expires": now + timedelta(hours=1),
                     "req": "authz-test",
@@ -141,6 +144,17 @@ class AuthzSessionFactory:
                     "updated_at = NOW() WHERE id = CAST(:id AS uuid)"
                 ),
                 {"role": role_value, "id": str(user_id)},
+            )
+            db.commit()
+
+    def set_workspace(self, session_id: uuid.UUID, workspace: str) -> None:
+        with self._factory() as db:
+            db.execute(
+                text(
+                    "UPDATE auth_sessions SET workspace = :ws "
+                    "WHERE id = CAST(:id AS uuid)"
+                ),
+                {"ws": workspace, "id": str(session_id)},
             )
             db.commit()
 

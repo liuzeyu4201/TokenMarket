@@ -62,16 +62,36 @@ def test_buyer_seller_both_matrix_and_session_revoke(
         == "FORBIDDEN_ROLE"
     )
 
-    # both: both allowed
+    # both: default workspace is buyer; seller action needs a lens switch
     bo_sess = authz_sessions.issue(both)
     force_session_cookie(authz_client, bo_sess.cookie_value)
-    for action in ("proxy_key.create", "seller_key.register"):
-        res = authz_client.post(
-            "/api/v1/authorization/evaluate",
-            json={"action": action},
-            headers=authz_headers(bo_sess, with_csrf=False),
-        )
-        assert res.status_code == 200, res.text
+    buyer_ok = authz_client.post(
+        "/api/v1/authorization/evaluate",
+        json={"action": "proxy_key.create"},
+        headers=authz_headers(bo_sess, with_csrf=False),
+    )
+    assert buyer_ok.status_code == 200, buyer_ok.text
+    seller_denied = authz_client.post(
+        "/api/v1/authorization/evaluate",
+        json={"action": "seller_key.register"},
+        headers=authz_headers(bo_sess, with_csrf=False),
+    )
+    assert seller_denied.status_code == 403
+    assert seller_denied.json()["code"] == "FORBIDDEN_ROLE"
+    authz_sessions.set_workspace(bo_sess.session_id, "seller")
+    seller_ok = authz_client.post(
+        "/api/v1/authorization/evaluate",
+        json={"action": "seller_key.register"},
+        headers=authz_headers(bo_sess, with_csrf=False),
+    )
+    assert seller_ok.status_code == 200, seller_ok.text
+    proxy_denied = authz_client.post(
+        "/api/v1/authorization/evaluate",
+        json={"action": "proxy_key.create"},
+        headers=authz_headers(bo_sess, with_csrf=False),
+    )
+    assert proxy_denied.status_code == 403
+    assert proxy_denied.json()["code"] == "FORBIDDEN_ROLE"
 
     # SC-006: revoke session → 401, never allow
     authz_sessions.revoke(bo_sess.session_id)

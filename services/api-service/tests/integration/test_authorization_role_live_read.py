@@ -21,7 +21,7 @@ def test_role_change_after_login_uses_db_role(
     authz_sessions: AuthzSessionFactory,
 ) -> None:
     user = account_factory.create_active(role=UserRole.both, nickname="可变角色")
-    issued = authz_sessions.issue(user)
+    issued = authz_sessions.issue(user, workspace="seller")
     force_session_cookie(authz_client, issued.cookie_value)
 
     assert (
@@ -43,7 +43,14 @@ def test_role_change_after_login_uses_db_role(
     assert denied.status_code == 403
     assert denied.json()["code"] == "FORBIDDEN_ROLE"
 
-    # Buyer proxy path still allowed
+    # Seller lens is invalid for buyer: fail-closed until workspace matches
+    stale = authz_client.post(
+        "/api/v1/authorization/evaluate",
+        json={"action": "proxy_key.create"},
+        headers=authz_headers(issued, with_csrf=False),
+    )
+    assert stale.status_code == 403
+    authz_sessions.set_workspace(issued.session_id, "buyer")
     ok = authz_client.post(
         "/api/v1/authorization/evaluate",
         json={"action": "proxy_key.create"},

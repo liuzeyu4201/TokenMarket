@@ -299,6 +299,11 @@ def test_phone_auth_migration_upgrade_downgrade_retry_head(
             rev = conn.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-            assert rev == "0016_supply_lifecycle"
+            # Head moves with later SFs; this test only requires 0003 survived.
+            assert isinstance(rev, str) and rev
+            assert rev not in {
+                "0002_users_registration",
+                "0003_phone_login_session",
+            }
     finally:
         engine.dispose()

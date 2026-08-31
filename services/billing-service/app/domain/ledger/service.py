@@ -461,6 +461,36 @@ class LedgerService:
         self._store.save_reservation(rec)
         return Journal(journal_id=journal, request_id=request_id)
 
+    def project_overview(self, project_id: str) -> dict[str, object]:
+        bal = self.rebuild(account_id_for("project_quota", project_id))
+        held = 0
+        unresolved = 0
+        requests: list[dict[str, object]] = []
+        for rec in self.list_reservations():
+            if rec.project_id != project_id:
+                continue
+            if rec.status == "held":
+                held += rec.amount_minor
+            elif rec.status == "unresolved":
+                unresolved += rec.amount_minor
+            requests.append(
+                {
+                    "request_id": rec.request_id,
+                    "key_id": rec.key_id,
+                    "status": rec.status,
+                    "amount_minor": rec.amount_minor,
+                    "reason": rec.unresolved_reason,
+                    "updated_at": rec.created_at.isoformat(),
+                }
+            )
+        return {
+            "available": bal.available,
+            "reserved": held,
+            "settled": bal.settled_debit,
+            "unresolved": unresolved,
+            "requests": requests,
+        }
+
     def projection(self, account_id: str) -> Balance:
         return self.rebuild(account_id)
 

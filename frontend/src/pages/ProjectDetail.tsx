@@ -13,6 +13,7 @@ import {
   type ReplacePreview,
   type SdkHint,
 } from '../api/v1/bindings'
+import { getProjectBudget, getProjectGuide, listProjectUsage, type Guide, type QuotaOverview, type UsageItem } from '../api/v1/budget'
 import { issueProjectKey, listProjectKeys, type ProxyKeyPublic } from '../api/v1/proxyKeys'
 import {
   MODE_CONSEQUENCE,
@@ -54,6 +55,9 @@ export function ProjectDetail() {
   const [replaceReason, setReplaceReason] = useState('')
   const [buyerConfirmed, setBuyerConfirmed] = useState(false)
   const [stepUp, setStepUp] = useState(false)
+  const [quota, setQuota] = useState<QuotaOverview | null>(null)
+  const [guide, setGuide] = useState<Guide | null>(null)
+  const [usage, setUsage] = useState<UsageItem[]>([])
 
   useEffect(() => {
     if (auth.status !== 'authenticated' || !projectId) return
@@ -62,13 +66,19 @@ export function ProjectDetail() {
       getProject(projectId),
       listBindings(projectId),
       listProjectKeys(projectId).catch(() => []),
+      getProjectBudget(projectId).catch(() => null),
+      getProjectGuide(projectId).catch(() => null),
+      listProjectUsage(projectId).catch(() => []),
     ])
-      .then(([p, rows, keyRows]) => {
+      .then(([p, rows, keyRows, budget, g, usageRows]) => {
         if (cancelled) return
         setItem(p)
         setName(p.display_name)
         setBindings(rows)
         setKeys(keyRows)
+        setQuota(budget)
+        setGuide(g)
+        setUsage(usageRows)
         setNotFound(false)
         const dedicated = rows.find(
           (b) => b.supply_mode === 'dedicated' && (b.status === 'active' || b.status === 'degraded'),
@@ -383,6 +393,63 @@ export function ProjectDetail() {
           </li>
         ))}
       </ul>
+      <section data-testid="quota-overview">
+        <h2>测试额度</h2>
+        <p>不可购买、转让、兑换或提现。未决不是 0 成本。预算不是最终上限，reservation 之后可能异步调整。</p>
+        {quota ? (
+          <dl>
+            <div>
+              <dt>available</dt>
+              <dd data-testid="quota-available">{quota.available}</dd>
+            </div>
+            <div>
+              <dt>reserved</dt>
+              <dd>{quota.reserved}</dd>
+            </div>
+            <div>
+              <dt>settled</dt>
+              <dd>{quota.settled}</dd>
+            </div>
+            <div>
+              <dt>unresolved</dt>
+              <dd data-testid="quota-unresolved">{quota.unresolved}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p>暂无账本投影。</p>
+        )}
+        {quota?.warning ? <Notice tone="info">已接近软阈值，请关注测试额度。</Notice> : null}
+      </section>
+      {guide ? (
+        <section data-testid="dev-guide">
+          <h2>开发者引导</h2>
+          <ol data-testid="guide-checklist">
+            {guide.checklist.map((s) => (
+              <li key={s.id}>
+                {s.title}
+                {s.done ? '（已完成）' : '（待完成）'}
+              </li>
+            ))}
+          </ol>
+          <p>{guide.disclaimer}</p>
+          {(['openai', 'anthropic', 'vertex'] as const).map((p) => (
+            <pre key={p} data-testid={`sample-${p}`}>
+              {guide.samples[p]?.curl}
+            </pre>
+          ))}
+        </section>
+      ) : null}
+      <section data-testid="usage-table">
+        <h2>用量</h2>
+        <ul>
+          {usage.map((u) => (
+            <li key={u.request_id} data-testid={`usage-${u.request_id}`}>
+              {u.request_id} · {u.status} · {u.amount_minor}
+              {u.status === 'unresolved' ? ` · ${u.reason ?? '未决'}` : ''}
+            </li>
+          ))}
+        </ul>
+      </section>
       <h2>协议</h2>
       <ul>
         {PROTOCOLS.map((p) => {

@@ -30,7 +30,7 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
 | `volcano-openai-compat/v1/` | Proxy Gateway (Chat Completions adapter) | 1.0.0 | OpenAPI / Markdown |
 | `endpoint-catalog/v1/` | Proxy Gateway (V0.2 Endpoint Catalog) | 1.0.0 | JSON Schema / JSON / Markdown |
 | `native-passthrough/v1/` | Proxy Gateway (native same-protocol kernel, SF18+) | 1.6.0 | Markdown |
-| `project/v1/` | API Service (Project domain, SF10+) | 1.1.0 | OpenAPI |
+| `project/v1/` | API Service (Project domain, SF10+) | 1.2.0 | OpenAPI |
 | `provider-binding/v1/` | API Service (Provider Binding, SF11+) | 1.1.0 | OpenAPI |
 | `project-proxy-key/v1/` | API Service (Project proxy Key, SF12+) | 1.0.0 | OpenAPI |
 | `provider-connection/v1/` | API Service (Provider Connection, SF14+) | 1.3.0 | OpenAPI |
@@ -66,7 +66,8 @@ Human-readable catalog: [`docs/api/README.md`](../../docs/api/README.md) (中文
   add compatible records/fields; `catalog_major` mismatch fail-closes consumers. Preview/beta
   require Project opt-in. Control-plane paths are cataloged and rejected. Volcano V0.1
   contracts stay independent. `project/v1` 1.1.0 is a backward-compatible expansion
-  implemented by SF10 (lifecycle writers; PATCH still has no mode). `provider-connection/v1`
+  implemented by SF10 (lifecycle writers; PATCH still has no mode).
+  `project/v1` 1.2.0 adds test-quota overview, budget admit, and native SDK guide (SF13). `provider-connection/v1`
   1.1.0 is a backward-compatible expansion implemented by SF14 (encrypted credentials,
   no plaintext read-back). 1.2.0 adds verify, health, and capability snapshots (SF15).
   1.3.0 adds supply lifecycle and mode lock (SF16).

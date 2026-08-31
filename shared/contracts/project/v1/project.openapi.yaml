@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
-  title: TokenMarket Project contract (SF10)
-  version: 1.1.0
+  title: TokenMarket Project contract (SF10/SF13)
+  version: 1.2.0
   description: |
     版本化 Project 契约。mode 在创建后不可变；禁止 PATCH mode。
     1.1.0 为兼容扩展：列表、重命名、状态机、协议启用/停用、删除阻塞、准入。
+    1.2.0：测试额度总览、软硬预算、原生 SDK 引导与用量下钻。无充值、提现。
 paths:
   /api/v1/projects:
     post:
@@ -159,6 +160,59 @@ paths:
           description: 已停用（历史行保留）
         "404":
           description: 不存在与无权访问同形
+  /api/v1/projects/{project_id}/budget:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      operationId: getProjectBudget
+      responses:
+        "200":
+          description: 测试额度总览（账本投影）
+    put:
+      operationId: putProjectBudget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutBudgetRequest"
+      responses:
+        "200":
+          description: 已保存软/硬阈值
+        "409":
+          description: HARD_LIMIT 非法
+  /api/v1/projects/{project_id}/budget/admit:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    post:
+      operationId: admitProjectBudget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdmitBudgetRequest"
+      responses:
+        "200":
+          description: 允许预留；可能带软告警
+        "409":
+          description: HARD_LIMIT
+  /api/v1/projects/{project_id}/guide:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      operationId: getProjectGuide
+      responses:
+        "200":
+          description: checklist 与三协议原生示例
+  /api/v1/projects/{project_id}/usage:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      operationId: listProjectUsage
+      responses:
+        "200":
+          description: 可筛选用量行，含 request_id
 components:
   parameters:
     ProjectId:
@@ -301,3 +355,19 @@ components:
                 blockers:
                   type: array
                   items: { $ref: "#/components/schemas/DeletionBlocker" }
+    PutBudgetRequest:
+      type: object
+      additionalProperties: false
+      required: [hard_minor, soft_minor]
+      properties:
+        hard_minor: { type: integer, minimum: 0 }
+        soft_minor: { type: integer, minimum: 0 }
+        key_id: { type: string }
+    AdmitBudgetRequest:
+      type: object
+      additionalProperties: false
+      required: [amount_minor]
+      properties:
+        amount_minor: { type: integer, minimum: 1 }
+        key_id: { type: string }
+        protocol: { $ref: "#/components/schemas/ProtocolName" }

@@ -239,6 +239,20 @@ async def unresolved(
     )
 
 
+@router.get("/overview/project/{project_id}")
+async def project_overview(
+    project_id: str,
+    request: Request,
+    token: str | None = Header(default=None, alias="X-Internal-Token"),
+) -> JSONResponse:
+    denied = _auth(request, token)
+    if denied is not None:
+        return denied
+    rid = str(uuid.uuid4())
+    data = _svc(request).project_overview(project_id)
+    return JSONResponse(status_code=200, content=_envelope("0", "ok", rid, data))
+
+
 @router.get("/balance/{kind}/{raw_id}")
 async def balance(
     kind: str,

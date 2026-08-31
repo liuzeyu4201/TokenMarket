@@ -25,7 +25,7 @@ _INTEGRATION_CONTAINER = "tm-migrate-integration-check"
 _INTEGRATION_ADMIN_URL = (
     "postgresql+psycopg2://postgres:synthetic@127.0.0.1:15432/postgres"
 )
-_INTEGRATION_PG_IMAGE = "postgres:15.12"
+_INTEGRATION_PG_IMAGE = "postgres:15.18-bookworm"
 _DB_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 _RUN_TOKEN_RE = re.compile(r"^[a-z0-9]{8,16}$")
 _OWNER_SLUG_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")

@@ -18,6 +18,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/admin/v1': {
+        target: process.env.VITE_ADMIN_PROXY_TARGET?.trim() || 'http://127.0.0.1:8002',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   build: {

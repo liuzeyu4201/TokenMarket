@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import FrozenSet
 
-ROLES = frozenset({"support", "supply_ops", "pricing", "ledger", "security_audit"})
+ROLES = frozenset(
+    {"support", "supply_ops", "pricing", "ledger", "security_audit"}
+)
 
 NEVER: FrozenSet[str] = frozenset(
     {"credential.read", "ledger.edit_balance", "audit.delete"}
@@ -23,16 +25,41 @@ HIGH_RISK: FrozenSet[str] = frozenset(
 
 # (role, readonly) -> allowed actions
 _MATRIX: dict[tuple[str, bool], FrozenSet[str]] = {
-    ("support", False): frozenset({"user.lookup", "user.force_logout", "audit.read"}),
-    ("support", True): frozenset({"user.lookup", "audit.read"}),
-    ("supply_ops", False): frozenset(
-        {"connection.view_health", "connection.replace_dedicated"}
+    ("support", False): frozenset(
+        {
+            "user.lookup",
+            "user.force_logout",
+            "audit.read",
+            "project.lookup",
+            "alert.read",
+        }
     ),
-    ("supply_ops", True): frozenset({"connection.view_health"}),
-    ("pricing", False): frozenset({"price.publish", "route.rollback"}),
-    ("pricing", True): frozenset(),
-    ("ledger", False): frozenset({"ledger.reverse"}),
-    ("ledger", True): frozenset(),
+    ("support", True): frozenset(
+        {"user.lookup", "audit.read", "project.lookup", "alert.read"}
+    ),
+    ("supply_ops", False): frozenset(
+        {
+            "connection.view_health",
+            "connection.replace_dedicated",
+            "project.lookup",
+            "alert.read",
+        }
+    ),
+    ("supply_ops", True): frozenset(
+        {"connection.view_health", "project.lookup", "alert.read"}
+    ),
+    ("pricing", False): frozenset(
+        {
+            "price.publish",
+            "route.rollback",
+            "price.read",
+            "route.read",
+            "alert.read",
+        }
+    ),
+    ("pricing", True): frozenset({"price.read", "route.read", "alert.read"}),
+    ("ledger", False): frozenset({"ledger.reverse", "ledger.read", "alert.read"}),
+    ("ledger", True): frozenset({"ledger.read", "alert.read"}),
     ("security_audit", False): frozenset(
         {
             "audit.read",
@@ -40,10 +67,18 @@ _MATRIX: dict[tuple[str, bool], FrozenSet[str]] = {
             "user.lookup",
             "connection.view_health",
             "break_glass",
+            "project.lookup",
+            "alert.read",
         }
     ),
     ("security_audit", True): frozenset(
-        {"audit.read", "user.lookup", "connection.view_health"}
+        {
+            "audit.read",
+            "user.lookup",
+            "connection.view_health",
+            "project.lookup",
+            "alert.read",
+        }
     ),
 }
 

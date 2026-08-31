@@ -97,9 +97,19 @@ async def login(body: LoginBody, request: Request, response: Response) -> JSONRe
         )
     except AdminError as exc:
         return _fail(exc, rid)
+    acc = _svc(request).resolve(admin_token=token, user_cookie=None)
     response = JSONResponse(
         status_code=200,
-        content=_envelope("0", "ok", rid, {"admin_id": sess.admin_id, "role": "admin"}),
+        content=_envelope(
+            "0",
+            "ok",
+            rid,
+            {
+                "admin_id": sess.admin_id,
+                "role": acc.role,
+                "readonly": acc.readonly,
+            },
+        ),
     )
     # Header carries the isolated cookie name; TestClient may drop __Host- flags.
     response.headers["Set-Cookie"] = _svc(request).cookie_header(token)
@@ -114,6 +124,43 @@ async def login(body: LoginBody, request: Request, response: Response) -> JSONRe
     return response
 
 
+@router.get("/session")
+async def current_session(request: Request) -> JSONResponse:
+    rid = _rid(request)
+    admin, user = _tokens(request)
+    try:
+        acc = _svc(request).resolve(admin_token=admin, user_cookie=user)
+    except AdminError as exc:
+        return _fail(exc, rid)
+    return JSONResponse(
+        status_code=200,
+        content=_envelope(
+            "0",
+            "ok",
+            rid,
+            {
+                "admin_id": acc.admin_id,
+                "role": acc.role,
+                "readonly": acc.readonly,
+            },
+        ),
+    )
+
+
+@router.delete("/session")
+async def logout(request: Request, response: Response) -> JSONResponse:
+    rid = _rid(request)
+    admin, _user = _tokens(request)
+    _svc(request).logout(admin)
+    payload = JSONResponse(
+        status_code=200,
+        content=_envelope("0", "ok", rid, {"logged_out": True}),
+    )
+    payload.delete_cookie(ADMIN_COOKIE, path="/admin")
+    _ = response
+    return payload
+
+
 @router.post("/step-up")
 async def step_up(body: StepUpBody, request: Request) -> JSONResponse:
     rid = _rid(request)
@@ -124,7 +171,8 @@ async def step_up(body: StepUpBody, request: Request) -> JSONResponse:
     except AdminError as exc:
         return _fail(exc, rid)
     return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, {"stepped": True})
+        status_code=200,
+        content=_envelope("0", "ok", rid, {"stepped": True}),
     )
 
 
@@ -169,7 +217,8 @@ async def list_audit(request: Request) -> JSONResponse:
         for r in _svc(request).audit.list()
     ]
     return JSONResponse(
-        status_code=200, content=_envelope("0", "ok", rid, {"items": items})
+        status_code=200,
+        content=_envelope("0", "ok", rid, {"items": items}),
     )
 
 

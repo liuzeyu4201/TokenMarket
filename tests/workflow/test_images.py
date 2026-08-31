@@ -543,6 +543,37 @@ def test_image_scan_plain_mode_reads_payload_without_keyerror(
     assert "trivy" in out.lower()
 
 
+def test_image_scan_skips_db_update_and_sets_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from workflow import images as images_mod
+
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(args))
+        return _ok(stdout="{}\n")
+
+    monkeypatch.setattr(images_mod.shutil, "which", lambda _n: "/opt/homebrew/bin/trivy")
+    monkeypatch.setattr(
+        images_mod,
+        "_image_components",
+        lambda _r: [
+            {
+                "id": "proxy-gateway",
+                "path": "services/proxy-gateway",
+                "deliverables": ["container-image"],
+            }
+        ],
+    )
+    monkeypatch.setattr(images_mod, "_run", fake_run)
+    images_mod.image_scan(find_repo_root(), plain=True)
+    trivy_cmds = [c for c in calls if c and c[0].endswith("trivy")]
+    assert trivy_cmds
+    assert "--skip-db-update" in trivy_cmds[0]
+    assert "--timeout" in trivy_cmds[0]
+
+
 def test_trivy_finding_summary_extracts_cve_and_fix_versions() -> None:
     import json
 

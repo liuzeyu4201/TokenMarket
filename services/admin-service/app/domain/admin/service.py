@@ -129,7 +129,9 @@ class AdminService:
     ) -> tuple[AdminSession, str]:
         if user_cookie:
             raise AdminError(
-                USER_SESSION_REJECTED, MSG[USER_SESSION_REJECTED], http_status=401
+                USER_SESSION_REJECTED,
+                MSG[USER_SESSION_REJECTED],
+                http_status=401,
             )
         admin_id = self._by_login.get(login)
         if admin_id is None:
@@ -151,12 +153,21 @@ class AdminService:
         self._tokens[token] = sess.session_id
         return sess, token
 
+    def logout(self, admin_token: str | None) -> None:
+        if not admin_token:
+            return
+        sid = self._tokens.pop(admin_token, None)
+        if sid:
+            self._sessions.pop(sid, None)
+
     def resolve(
         self, *, admin_token: str | None, user_cookie: str | None
     ) -> AdminAccount:
         if user_cookie:
             raise AdminError(
-                USER_SESSION_REJECTED, MSG[USER_SESSION_REJECTED], http_status=401
+                USER_SESSION_REJECTED,
+                MSG[USER_SESSION_REJECTED],
+                http_status=401,
             )
         if not admin_token:
             raise AdminError(UNAUTHORIZED, MSG[UNAUTHORIZED], http_status=401)
@@ -173,6 +184,48 @@ class AdminService:
         sid = self._tokens[admin_token]
         self._sessions[sid].step_up_at = self._now()
 
+    def ensure_action(
+        self,
+        *,
+        admin_token: str | None,
+        user_cookie: str | None,
+        action: str,
+        reason: str,
+        audit_denial: bool = False,
+        request_id: str = "",
+        target: str = "",
+        source: str = "127.0.0.1",
+    ) -> AdminAccount:
+        acc = self.resolve(admin_token=admin_token, user_cookie=user_cookie)
+        if not evaluate(acc.role, acc.readonly, action):
+            if audit_denial:
+                self.audit.append(
+                    actor_id=acc.admin_id,
+                    role=acc.role,
+                    action=action,
+                    target=target,
+                    reason=reason,
+                    request_id=request_id,
+                    result="denied",
+                    source=source,
+                )
+            raise AdminError(FORBIDDEN, MSG[FORBIDDEN], http_status=403)
+        if action in HIGH_RISK:
+            if not acc.mfa_enrolled:
+                raise AdminError(MFA_REQUIRED, MSG[MFA_REQUIRED], http_status=401)
+            if not str(reason).strip():
+                raise AdminError(REASON_REQUIRED, MSG[REASON_REQUIRED], http_status=400)
+            sid = self._tokens.get(admin_token or "")
+            sess = self._sessions.get(sid or "")
+            stepped = sess.step_up_at if sess else None
+            if stepped is None or self._now() - stepped > self._ttl:
+                raise AdminError(
+                    STEP_UP_REQUIRED,
+                    MSG[STEP_UP_REQUIRED],
+                    http_status=401,
+                )
+        return acc
+
     def execute(
         self,
         *,
@@ -186,31 +239,16 @@ class AdminService:
         before: dict[str, Any] | None = None,
         after: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        acc = self.resolve(admin_token=admin_token, user_cookie=user_cookie)
-        if not evaluate(acc.role, acc.readonly, action):
-            self.audit.append(
-                actor_id=acc.admin_id,
-                role=acc.role,
-                action=action,
-                target=target,
-                reason=reason,
-                request_id=request_id,
-                result="denied",
-                source=source,
-            )
-            raise AdminError(FORBIDDEN, MSG[FORBIDDEN], http_status=403)
-        if action in HIGH_RISK:
-            if not acc.mfa_enrolled:
-                raise AdminError(MFA_REQUIRED, MSG[MFA_REQUIRED], http_status=401)
-            if not str(reason).strip():
-                raise AdminError(REASON_REQUIRED, MSG[REASON_REQUIRED], http_status=400)
-            sid = self._tokens.get(admin_token or "")
-            sess = self._sessions.get(sid or "")
-            stepped = sess.step_up_at if sess else None
-            if stepped is None or self._now() - stepped > self._ttl:
-                raise AdminError(
-                    STEP_UP_REQUIRED, MSG[STEP_UP_REQUIRED], http_status=401
-                )
+        acc = self.ensure_action(
+            admin_token=admin_token,
+            user_cookie=user_cookie,
+            action=action,
+            reason=reason,
+            audit_denial=True,
+            request_id=request_id,
+            target=target,
+            source=source,
+        )
         rec = self.audit.append(
             actor_id=acc.admin_id,
             role=acc.role,

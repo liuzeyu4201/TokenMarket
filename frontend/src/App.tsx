@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { AdminApp } from './admin/AdminApp'
 import { AuthProvider } from './auth/AuthContext'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { AppShell } from './layouts/AppShell'
@@ -15,69 +16,78 @@ import { Projects } from './pages/Projects'
 import { Register } from './pages/Register'
 import './styles/globals.css'
 
+function BuyerApp() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route index element={<Home />} />
+          <Route path="register" element={<Register />} />
+          <Route path="login" element={<Login />} />
+          <Route path="design-system" element={<DesignSystem />} />
+          <Route
+            path="dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="account/security"
+            element={
+              <ProtectedRoute>
+                <AccountSecurity />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="projects"
+            element={
+              <ProtectedRoute>
+                <Projects />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="projects/:projectId"
+            element={
+              <ProtectedRoute>
+                <ProjectDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="connections"
+            element={
+              <ProtectedRoute>
+                <Connections />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="supply"
+            element={
+              <ProtectedRoute>
+                <Supply />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+        <Route path="home" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
+  )
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route index element={<Home />} />
-            <Route path="register" element={<Register />} />
-            <Route path="login" element={<Login />} />
-            <Route path="design-system" element={<DesignSystem />} />
-            <Route
-              path="dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="account/security"
-              element={
-                <ProtectedRoute>
-                  <AccountSecurity />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="projects"
-              element={
-                <ProtectedRoute>
-                  <Projects />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="projects/:projectId"
-              element={
-                <ProtectedRoute>
-                  <ProjectDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="connections"
-              element={
-                <ProtectedRoute>
-                  <Connections />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="supply"
-              element={
-                <ProtectedRoute>
-                  <Supply />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="*" element={<NotFound />} />
-          </Route>
-          <Route path="home" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
+      <Routes>
+        <Route path="/admin/*" element={<AdminApp />} />
+        <Route path="*" element={<BuyerApp />} />
+      </Routes>
     </BrowserRouter>
   )
 }

@@ -1,0 +1,341 @@
+openapi: 3.0.3
+info:
+  title: TokenMarket admin console (SF31)
+  version: 1.0.0
+  description: |
+    运营后台 HTTP。统一包络 {code,message,data,request_id,timestamp}。
+    列表必须服务端分页；凭据永不回读；禁止直接编辑 active 配置。
+servers:
+  - url: /
+paths:
+  /admin/v1/session:
+    get:
+      operationId: getAdminSession
+      summary: 当前管理员会话
+      responses:
+        "200":
+          description: 会话
+        "401":
+          description: 未登录或用户 Cookie 被拒绝
+  /admin/v1/ops:
+    get:
+      operationId: listOpsKinds
+      summary: 当前角色可见的运营对象种类
+      responses:
+        "200":
+          description: kinds
+  /admin/v1/ops/{kind}:
+    get:
+      operationId: listOps
+      summary: 分页列表；limit 最大 100，不得下发全表
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpsKind"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+            minimum: 1
+        - name: q
+          in: query
+          schema:
+            type: string
+            description: 可分享的非敏感查询，不得含密钥
+      responses:
+        "200":
+          description: OpsPage
+        "403":
+          description: 角色无权
+  /admin/v1/ops/{kind}/{item_id}:
+    get:
+      operationId: getOpsItem
+      summary: 详情（状态、版本、关联、告警、审计时间线）
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpsKind"
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 详情
+        "404":
+          description: 不存在
+  /admin/v1/ops/{kind}/{item_id}/export:
+    get:
+      operationId: exportOpsItem
+      summary: 导出；Connection 仅指纹与健康
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpsKind"
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 脱敏导出
+  /admin/v1/config:
+    post:
+      operationId: createConfigDraft
+      summary: 创建价格或路由草稿
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDraftRequest"
+      responses:
+        "200":
+          description: ConfigDraft
+  /admin/v1/config/{draft_id}:
+    get:
+      operationId: getConfigDraft
+      parameters:
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ConfigDraft
+  /admin/v1/config/{draft_id}/diff:
+    get:
+      operationId: diffConfigDraft
+      parameters:
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 语义差异
+  /admin/v1/config/{draft_id}/simulate:
+    post:
+      operationId: simulateConfigDraft
+      parameters:
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 仿真结果；失败不改 active
+  /admin/v1/config/{draft_id}/approve:
+    post:
+      operationId: approveConfigDraft
+      parameters:
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 已审批
+  /admin/v1/config/{draft_id}/publish:
+    post:
+      operationId: publishConfigDraft
+      summary: 高风险；需 step-up
+      parameters:
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReasonBody"
+      responses:
+        "200":
+          description: 已发布
+        "409":
+          description: 仿真失败或未审批
+  /admin/v1/config/{kind}/rollback:
+    post:
+      operationId: rollbackConfig
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [price, route]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollbackRequest"
+      responses:
+        "200":
+          description: 已回滚
+  /admin/v1/config/active:
+    patch:
+      operationId: patchActiveConfig
+      summary: 恒拒绝
+      responses:
+        "409":
+          description: PATCH_ACTIVE_DENIED
+  /admin/v1/wizards:
+    post:
+      operationId: startWizard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartWizardRequest"
+      responses:
+        "200":
+          description: Wizard pending
+  /admin/v1/wizards/{wizard_id}:
+    get:
+      operationId: getWizard
+      parameters:
+        - name: wizard_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Wizard
+  /admin/v1/wizards/{wizard_id}/confirm:
+    post:
+      operationId: confirmWizard
+      summary: 仅 pending 可确认；调用高风险 execute
+      parameters:
+        - name: wizard_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReasonBody"
+      responses:
+        "200":
+          description: confirmed，含 request_id
+  /admin/v1/wizards/{wizard_id}/cancel:
+    post:
+      operationId: cancelWizard
+      parameters:
+        - name: wizard_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: cancelled；无成功审计
+  /admin/v1/sql:
+    post:
+      operationId: denySqlEditor
+      summary: 后台不是数据库编辑器
+      responses:
+        "403":
+          description: SQL_EDITOR_DENIED
+  /admin/v1/ledger/{entry_id}/balance:
+    patch:
+      operationId: denySetBalance
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "403":
+          description: NEVER ledger.edit_balance
+  /admin/v1/audit/{event_id}:
+    delete:
+      operationId: denyDeleteAudit
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "409":
+          description: IMMUTABLE_AUDIT
+components:
+  schemas:
+    OpsKind:
+      type: string
+      enum:
+        - user
+        - session
+        - connection
+        - project
+        - price
+        - route
+        - ledger
+        - alert
+        - audit
+    CreateDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, payload]
+      properties:
+        kind:
+          type: string
+          enum: [price, route]
+        payload:
+          type: object
+    ReasonBody:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+    RollbackRequest:
+      type: object
+      additionalProperties: false
+      required: [to_version, reason]
+      properties:
+        to_version:
+          type: integer
+        reason:
+          type: string
+    StartWizardRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, target]
+      properties:
+        kind:
+          type: string
+          enum: [replace_dedicated, reverse, force_logout]
+        target:
+          type: string
+        reason:
+          type: string

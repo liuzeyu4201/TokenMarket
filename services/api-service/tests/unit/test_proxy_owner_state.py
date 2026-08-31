@@ -78,8 +78,11 @@ def test_race_suspension_vs_auth_no_post_commit_success() -> None:
     def authenticate_loop() -> None:
         started.set()
         for _ in range(2000):
+            if not suspended.is_set():
+                svc.authenticate(secret)
+                continue
             got = svc.authenticate(secret)
-            if suspended.is_set() and got is not None:
+            if got is not None:
                 post_commit_success.append(got)
 
     def suspend() -> None:

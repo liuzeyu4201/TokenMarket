@@ -310,3 +310,147 @@ async def test_bootstrap_db_error_is_service_unavailable() -> None:
     )
     assert result.kind == "service_unavailable"
     assert result.http_status == 503
+
+
+def _revoke_all_service(
+    settings: AuthSettings,
+    *,
+    row: SimpleNamespace | None,
+    user: SimpleNamespace | None = None,
+) -> SessionService:
+    service = SessionService(AsyncMock(), settings)
+    service._repo.lock_session_by_token_digest = AsyncMock(return_value=row)
+    service._repo.lock_user_by_id = AsyncMock(return_value=user)
+    service._repo.rollback = AsyncMock()
+    service._repo.commit = AsyncMock()
+    service._repo.bump_session_generation = AsyncMock()
+    service._repo.revoke_unrevoked_sessions = AsyncMock()
+    service._repo.append_security_event = AsyncMock()
+    return service
+
+
+@pytest.mark.asyncio
+async def test_revoke_all_missing_cookie() -> None:
+    service = SessionService(AsyncMock(), _settings())
+    result = await service.revoke_all_sessions(
+        cookie_value=None, csrf_presented=None, request_id="r-none"
+    )
+    assert result.kind == "unauthenticated"
+    assert result.clear_cookie is True
+
+
+@pytest.mark.asyncio
+async def test_revoke_all_unknown_session_key_version() -> None:
+    settings = _settings(session_version=2, previous="")
+    token = generate_session_token(1)
+    service = SessionService(AsyncMock(), settings)
+    result = await service.revoke_all_sessions(
+        cookie_value=token.cookie_value,
+        csrf_presented="1.aaa",
+        request_id="r-ver",
+    )
+    assert result.kind == "service_unavailable"
+    assert result.http_status == 503
+
+
+@pytest.mark.asyncio
+async def test_revoke_all_already_revoked_session() -> None:
+    settings = _settings()
+    mat = settings.key_material("session")
+    token = generate_session_token(mat.version)
+    digest = token_digest(mat.current, token.opaque_secret)
+    row = _auth_session(
+        user_id=uuid.uuid4(),
+        token_digest_bytes=digest,
+        revoked_at=datetime.now(timezone.utc),
+    )
+    service = _revoke_all_service(settings, row=row)
+    result = await service.revoke_all_sessions(
+        cookie_value=token.cookie_value,
+        csrf_presented="1.x",
+        request_id="r-revoked",
+    )
+    assert result.kind == "unauthenticated"
+    service._repo.rollback.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_revoke_all_csrf_invalid() -> None:
+    settings = _settings()
+    mat = settings.key_material("session")
+    token = generate_session_token(mat.version)
+    digest = token_digest(mat.current, token.opaque_secret)
+    user = _user()
+    row = _auth_session(user_id=user.id, token_digest_bytes=digest)
+    service = _revoke_all_service(settings, row=row, user=user)
+    result = await service.revoke_all_sessions(
+        cookie_value=token.cookie_value,
+        csrf_presented="1.not-a-valid-csrf",
+        request_id="r-csrf",
+    )
+    assert result.kind == "csrf_invalid"
+    assert result.http_status == 403
+    service._repo.bump_session_generation.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_revoke_all_user_missing() -> None:
+    settings = _settings()
+    mat = settings.key_material("session")
+    csrf_mat = settings.key_material("csrf")
+    token = generate_session_token(mat.version)
+    digest = token_digest(mat.current, token.opaque_secret)
+    row = _auth_session(user_id=uuid.uuid4(), token_digest_bytes=digest)
+    csrf = issue_csrf_token(csrf_mat.current, csrf_mat.version, row.id)
+    service = _revoke_all_service(settings, row=row, user=None)
+    result = await service.revoke_all_sessions(
+        cookie_value=token.cookie_value,
+        csrf_presented=csrf,
+        request_id="r-nouser",
+    )
+    assert result.kind == "unauthenticated"
+    service._repo.rollback.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_revoke_all_success_bumps_generation() -> None:
+    settings = _settings()
+    mat = settings.key_material("session")
+    csrf_mat = settings.key_material("csrf")
+    token = generate_session_token(mat.version)
+    digest = token_digest(mat.current, token.opaque_secret)
+    user = _user()
+    row = _auth_session(user_id=user.id, token_digest_bytes=digest)
+    csrf = issue_csrf_token(csrf_mat.current, csrf_mat.version, row.id)
+    service = _revoke_all_service(settings, row=row, user=user)
+    result = await service.revoke_all_sessions(
+        cookie_value=token.cookie_value,
+        csrf_presented=csrf,
+        request_id="r-all",
+    )
+    assert result.kind == "success"
+    assert result.data == {"logged_out": True, "scope": "all"}
+    assert result.clear_cookie is True
+    service._repo.bump_session_generation.assert_awaited()
+    service._repo.revoke_unrevoked_sessions.assert_awaited()
+    service._repo.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_revoke_all_db_error_is_service_unavailable() -> None:
+    from sqlalchemy.exc import OperationalError
+
+    settings = _settings()
+    mat = settings.key_material("session")
+    token = generate_session_token(mat.version)
+    service = SessionService(AsyncMock(), settings)
+    service._repo.lock_session_by_token_digest = AsyncMock(
+        side_effect=OperationalError("stmt", {}, Exception("down"))
+    )
+    result = await service.revoke_all_sessions(
+        cookie_value=token.cookie_value,
+        csrf_presented="1.x",
+        request_id="r-db-all",
+    )
+    assert result.kind == "service_unavailable"
+    assert result.http_status == 503

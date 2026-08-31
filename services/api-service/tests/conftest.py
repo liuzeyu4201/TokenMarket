@@ -41,6 +41,42 @@ pytest_plugins = [
     "tests.integration.conftest_authorization",
 ]
 
+# Unit HTTP tests inject fakes onto the singleton app; wipe them so a later
+# integration TestClient does not inherit actor_override / HMAC settings.
+_TEST_APP_STATE_KEYS = (
+    "actor_override",
+    "auth_settings",
+    "project_service",
+    "binding_service",
+    "budget_service",
+    "connection_service",
+    "health_service",
+    "lifecycle_service",
+    "workbench_service",
+    "proxy_key_service",
+    "usage_recorder",
+    "seller_key_store",
+    "seller_encryptor",
+    "seller_fp_secret",
+    "seller_validator",
+    "internal_token",
+)
+
+
+def _clear_test_app_state() -> None:
+    state = app.state
+    for key in _TEST_APP_STATE_KEYS:
+        if hasattr(state, key):
+            delattr(state, key)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_app_state() -> Iterator[None]:
+    _clear_test_app_state()
+    yield
+    _clear_test_app_state()
+
+
 POSTGRES_IMAGE = "postgres:15.18-bookworm"
 TEST_LABEL_KEY = "tmtest"
 TEST_LABEL_VALUE = "api-service-readiness"

@@ -281,6 +281,8 @@ def _run_container(name: str, run_id: str, password: str) -> int:
                 f"{_TMTEST_LABEL}={run_id}",
                 "--env",
                 f"POSTGRES_PASSWORD={password}",
+                "--mount",
+                "type=tmpfs,destination=/var/lib/postgresql/data",
                 "--publish",
                 f"127.0.0.1:{port}:5432",
                 _POSTGRES_IMAGE,

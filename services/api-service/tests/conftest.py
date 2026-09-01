@@ -203,6 +203,33 @@ def _docker(*args: str) -> subprocess.CompletedProcess[bytes]:
     )
 
 
+def postgres_run_argv(handle: PostgresHandle) -> list[str]:
+    """Docker argv for one disposable Postgres. Data dir is tmpfs so tests
+    cannot leak anonymous volumes (VOLUME in the official image).
+    """
+    return [
+        "run",
+        "--detach",
+        "--pull",
+        "never",
+        "--name",
+        handle.name,
+        "--label",
+        f"{TEST_LABEL_KEY}={TEST_LABEL_VALUE}",
+        "--env",
+        f"POSTGRES_USER={handle.user}",
+        "--env",
+        f"POSTGRES_PASSWORD={handle._password}",
+        "--env",
+        f"POSTGRES_DB={handle.database}",
+        "--mount",
+        "type=tmpfs,destination=/var/lib/postgresql/data",
+        "--publish",
+        f"127.0.0.1:{handle.port}:5432",
+        POSTGRES_IMAGE,
+    ]
+
+
 @dataclass
 class PostgresHandle:
     """Control handle for one disposable test PostgreSQL container.
@@ -307,26 +334,14 @@ def postgres_container() -> Iterator[PostgresHandle]:
         database="tmtest",
         _password=f"tm_local_{secrets.token_urlsafe(24)}",
     )
-    started = _docker(
-        "run",
-        "--detach",
-        "--name",
-        handle.name,
-        "--label",
-        f"{TEST_LABEL_KEY}={TEST_LABEL_VALUE}",
-        "--env",
-        f"POSTGRES_USER={handle.user}",
-        "--env",
-        f"POSTGRES_PASSWORD={handle._password}",
-        "--env",
-        f"POSTGRES_DB={handle.database}",
-        "--publish",
-        f"127.0.0.1:{handle.port}:5432",
-        POSTGRES_IMAGE,
-    )
+    started = _docker(*postgres_run_argv(handle))
     try:
         if started.returncode != 0:
-            pytest.fail("failed to start disposable postgres test container")
+            err = started.stderr.decode("utf-8", "replace").strip()
+            pytest.fail(
+                "failed to start disposable postgres test container"
+                + (f": {err}" if err else "")
+            )
         _wait_until_ready(handle)
         yield handle
     finally:

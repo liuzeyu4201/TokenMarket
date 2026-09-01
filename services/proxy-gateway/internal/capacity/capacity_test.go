@@ -96,6 +96,19 @@ func TestStream500DisconnectAndHeap(t *testing.T) {
 	}
 }
 
+func TestCapacityEngineTimeoutCoversStreamSoak(t *testing.T) {
+	e := NewEngine()
+	t.Cleanup(e.Close)
+	if e.kernel.Limits.UpstreamTimeout < StreamDuration {
+		t.Fatalf("upstream timeout %s < stream %s", e.kernel.Limits.UpstreamTimeout, StreamDuration)
+	}
+	// 6s > the previous 5s kernel deadline; 2 conns keep this off the 2h wall.
+	rep := e.RunStream(2, 6*time.Second)
+	if !rep.PassStream() {
+		t.Fatalf("stream %+v", rep)
+	}
+}
+
 func TestFaultNoDoubleCharge(t *testing.T) {
 	e := NewEngine()
 	t.Cleanup(e.Close)
@@ -160,13 +173,16 @@ func TestFullProfiles(t *testing.T) {
 	}
 	e := NewEngine()
 	t.Cleanup(e.Close)
-	if !e.Run(Steady()).PassSteady() {
-		t.Fatal("full steady")
+	steady := e.Run(Steady())
+	if !steady.PassSteady() {
+		t.Fatalf("full steady %+v", steady)
 	}
-	if !e.Run(Burst()).PassSteady() {
-		t.Fatal("full burst")
+	burst := e.Run(Burst())
+	if !burst.PassSteady() {
+		t.Fatalf("full burst %+v", burst)
 	}
-	if !e.RunStream(StreamConns, StreamDuration).PassStream() {
-		t.Fatal("full stream")
+	stream := e.RunStream(StreamConns, StreamDuration)
+	if !stream.PassStream() {
+		t.Fatalf("full stream %+v", stream)
 	}
 }

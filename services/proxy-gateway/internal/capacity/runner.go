@@ -34,8 +34,12 @@ func NewEngine() *Engine {
 	k := &passthrough.Kernel{
 		Catalog:  Catalog(),
 		Selector: passthrough.StaticSelector{Up: passthrough.Upstream{BaseURL: up.URL, Credential: "mock-k"}},
-		Limits:   passthrough.Limits{IdleTimeout: 2 * time.Second, UpstreamTimeout: 5 * time.Second},
-		Quota:    led,
+		// Soak SSE holds StreamDuration; a 5s upstream deadline aborts CAPACITY_FULL.
+		Limits: passthrough.Limits{
+			IdleTimeout:     30 * time.Second,
+			UpstreamTimeout: StreamDuration + 5*time.Second,
+		},
+		Quota: led,
 	}
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		k.ServeHTTP(w, r, "shared", false)

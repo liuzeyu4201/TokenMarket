@@ -76,6 +76,21 @@ test:
 		--cov-report=term-missing \
 		--cov-fail-under=80 \
 		tests/unit tests/integration -q
+	# V0.2 Goal: 鉴权 domain branch coverage ≥90% (does not replace the 80% line gates)
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app.domain.authentication \
+		--cov=app.security \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-fail-under=90 \
+		tests/unit -q
+	# V0.2 Goal: 权限 domain branch coverage ≥90%
+	PYTHONPATH=. uv run --locked --extra dev pytest \
+		--cov=app.domain.authorization \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-fail-under=90 \
+		tests/unit -q
 
 build:
 	docker build -t $(IMAGE_TAG) .

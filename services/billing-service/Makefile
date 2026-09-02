@@ -23,6 +23,13 @@ lint: fmt-check type-check
 
 test:
 	PYTHONPATH=. uv run --locked --group dev pytest --cov=app --cov-report=term-missing tests
+	# V0.2 Goal: 账本 domain branch coverage ≥90%
+	PYTHONPATH=. uv run --locked --group dev pytest \
+		--cov=app.domain.ledger \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-fail-under=90 \
+		tests/unit -q
 
 build:
 	docker build -t $(IMAGE_TAG) .

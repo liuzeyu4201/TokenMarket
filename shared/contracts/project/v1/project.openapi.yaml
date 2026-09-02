@@ -250,12 +250,14 @@ components:
           minItems: 1
           items: { $ref: "#/components/schemas/ProtocolName" }
         idempotency_key: { type: string, minLength: 1 }
+        preview_opt_in: { type: boolean, default: false }
     PatchProjectRequest:
       type: object
       additionalProperties: false
       properties:
         display_name: { type: string, minLength: 1, maxLength: 128 }
-      description: 不提供 mode。额外字段（含 mode）必须被拒绝。
+        preview_opt_in: { type: boolean }
+      description: 不提供 mode。额外字段（含 mode）必须被拒绝。preview_opt_in 可单独更新。
     ProtocolState:
       type: object
       additionalProperties: false
@@ -277,6 +279,7 @@ components:
         - enabled_protocols
         - protocols
         - created_at
+        - preview_opt_in
       properties:
         project_id: { type: string, format: uuid }
         owner_account_id: { type: string, format: uuid }
@@ -292,8 +295,10 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         archived_at: { type: string, format: date-time, nullable: true }
+        preview_opt_in: { type: boolean }
       description: |
         不提供 mode 变更字段。共享 Project 只允许目录中 stateful=false 的端点。
+        preview_opt_in 控制 catalog preview/beta 端点是否准入。
     DeletionBlocker:
       type: object
       additionalProperties: false

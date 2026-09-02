@@ -12,6 +12,7 @@ import (
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keypool"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/passthrough"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/proxyauth"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/infrastructure/apisvc"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/observability"
 )
 
@@ -93,6 +94,24 @@ func TestLoadNativeSnapshotsSharedAndDedicated(t *testing.T) {
 	ded, ok := store.Lookup("p-ded")
 	if !ok || ded.Mode != "dedicated" || ded.Dedicated.ConnectionID != "pin" {
 		t.Fatalf("%+v %v", ded, ok)
+	}
+}
+
+func TestRouteSnapshotFromAPIMapsConnections(t *testing.T) {
+	raw := apisvc.RouteSnapshot{
+		ProjectID: "proj-1", Mode: "shared", PreviewOptIn: true, BuyerOwnerID: "b1",
+		Connections: []apisvc.RouteConn{{
+			ConnectionID: "c1", Provider: "openai", Protocol: "openai", SupplyMode: "shared",
+			BaseURL: "https://api.openai.com", Credential: "sk", SellerOwnerID: "s1",
+			Health: "healthy", Lifecycle: "listed",
+		}},
+	}
+	snap := routeSnapshotFromAPI(raw)
+	if snap.Mode != "shared" || !snap.PreviewOptIn || snap.Upstreams["c1"].BaseURL == "" {
+		t.Fatalf("%+v", snap)
+	}
+	if len(snap.Candidates) != 1 {
+		t.Fatalf("candidates %d", len(snap.Candidates))
 	}
 }
 

@@ -114,6 +114,7 @@ class ProjectService:
         workspace: str | None,
         request_id: str,
         idempotency_key: str | None = None,
+        preview_opt_in: bool = False,
     ) -> ProjectRecord:
         self._require_buyer(role, workspace)
         name = self._validate_name(display_name)
@@ -145,6 +146,7 @@ class ProjectService:
             status="draft",
             created_at=now,
             updated_at=now,
+            preview_opt_in=bool(preview_opt_in),
             protocols=[
                 ProtocolState(protocol=p, enabled=True, enabled_at=now) for p in protos
             ],
@@ -230,6 +232,30 @@ class ProjectService:
             project_id=project_id,
             event_type="project.renamed",
             request_id=request_id,
+        )
+        return rec
+
+    def set_preview_opt_in(
+        self,
+        *,
+        project_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        preview_opt_in: bool,
+        role: str,
+        workspace: str | None,
+        request_id: str,
+    ) -> ProjectRecord:
+        self._require_buyer(role, workspace)
+        rec = self._owned(project_id, owner_id)
+        rec.preview_opt_in = bool(preview_opt_in)
+        rec.updated_at = utcnow()
+        self._store.save(rec)
+        self._store.audit(
+            owner_id=owner_id,
+            project_id=project_id,
+            event_type="project.preview_opt_in",
+            request_id=request_id,
+            payload={"preview_opt_in": rec.preview_opt_in},
         )
         return rec
 

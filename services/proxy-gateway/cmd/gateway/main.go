@@ -141,8 +141,21 @@ func main() {
 		}
 	}
 
-	snapStore := passthrough.NewMemoryStore()
-	loadNativeSnapshots(snapStore, os.Getenv("PROXY_NATIVE_SNAPSHOTS"))
+	memSnaps := passthrough.NewMemoryStore()
+	loadNativeSnapshots(memSnaps, os.Getenv("PROXY_NATIVE_SNAPSHOTS"))
+	var snapStore passthrough.SnapshotStore = memSnaps
+	if strings.TrimSpace(os.Getenv("API_INTERNAL_BASE_URL")) != "" && strings.TrimSpace(os.Getenv("INTERNAL_GATEWAY_TOKEN")) != "" {
+		snapStore = &passthrough.FetchingStore{
+			Cache: memSnaps,
+			Fetch: func(projectID string) (passthrough.ProjectSnapshot, bool) {
+				raw, ok := apiClient.FetchRouteSnapshot(projectID)
+				if !ok {
+					return passthrough.ProjectSnapshot{}, false
+				}
+				return routeSnapshotFromAPI(raw), true
+			},
+		}
+	}
 	nativeKernel := &passthrough.Kernel{
 		Catalog:  catalog,
 		Selector: passthrough.RoutingSelector{},
@@ -417,6 +430,54 @@ func loadNativeSnapshots(store *passthrough.MemoryStore, raw string) {
 		}
 		store.Put(snap)
 	}
+}
+
+func routeSnapshotFromAPI(raw apisvc.RouteSnapshot) passthrough.ProjectSnapshot {
+	snap := passthrough.ProjectSnapshot{
+		ProjectID:    raw.ProjectID,
+		Mode:         raw.Mode,
+		PreviewOptIn: raw.PreviewOptIn,
+		BuyerOwnerID: raw.BuyerOwnerID,
+		Upstreams:    map[string]passthrough.Upstream{},
+		Signals:      map[string]score.Signals{},
+	}
+	for _, c := range raw.Connections {
+		up := passthrough.Upstream{BaseURL: c.BaseURL, Credential: c.Credential, ConnectionID: c.ConnectionID}
+		snap.Upstreams[c.ConnectionID] = up
+		if raw.Mode == "dedicated" && (c.SupplyMode == "dedicated" || snap.Dedicated.ConnectionID == "") {
+			snap.Dedicated = passthrough.DedicatedSnapshot{
+				ConnectionID: c.ConnectionID,
+				Status:       "active",
+				Health:       c.Health,
+				Up:           up,
+			}
+			if snap.Dedicated.Health == "" {
+				snap.Dedicated.Health = "healthy"
+			}
+		}
+		proto := c.Protocol
+		if proto == "" {
+			proto = c.Provider
+		}
+		snap.Candidates = append(snap.Candidates, qualify.Candidate{
+			ConnectionID:     c.ConnectionID,
+			SellerOwnerID:    c.SellerOwnerID,
+			Provider:         c.Provider,
+			Protocol:         proto,
+			SupplyMode:       c.SupplyMode,
+			Lifecycle:        firstNonEmpty(c.Lifecycle, "listed"),
+			Health:           firstNonEmpty(c.Health, "healthy"),
+			DeclaredCapacity: 32,
+			AdmitsNew:        true,
+			PriceValid:       true,
+		})
+		snap.Signals[c.ConnectionID] = score.Signals{
+			ConnectionID: c.ConnectionID, Health: firstNonEmpty(c.Health, "healthy"),
+			CapacityPresent: true, Remaining: 32, Declared: 32,
+			PricePresent: true, SellerBPS: 10000, LatencyPresent: true, LatencyMS: 40,
+		}
+	}
+	return snap
 }
 
 // PROXY_STATIC_SELLER_KEYS=id|sellerId|apiKey[|admin|health[|officialConcurrency]][,...]

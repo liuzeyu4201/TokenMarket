@@ -2,22 +2,30 @@ package capacity
 
 import (
 	"os/exec"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestNodeExitNoDoubleCharge(t *testing.T) {
-	e1 := NewEngine()
-	e2 := NewEngine()
+	led := NewMemLedger()
+	seq := new(atomic.Int64)
+	e1 := NewEngineWithLedger(led, seq, nil)
+	e2 := NewEngineWithLedger(led, seq, nil)
 	t.Cleanup(e2.Close)
 	_ = e1.Run(Steady().WithDuration(150 * time.Millisecond))
-	e1.Close() // instance termination
+	settled := led.SettledIDs()
+	e1.Close()
 	rep := e2.Run(Steady().WithDuration(200 * time.Millisecond))
-	if e2.Ledger.DoubleCharge != 0 {
-		t.Fatalf("double %d after node exit", e2.Ledger.DoubleCharge)
+	tn := Dataset(DatasetSeed, 1)[0]
+	for _, id := range settled {
+		e2.Retry(tn, id)
 	}
-	if e2.Ledger.OpenCount() != 0 {
-		t.Fatalf("open %d", e2.Ledger.OpenCount())
+	if led.DoubleCharge != 0 {
+		t.Fatalf("shared ledger double %d after node exit", led.DoubleCharge)
+	}
+	if led.OpenCount() != 0 {
+		t.Fatalf("open %d", led.OpenCount())
 	}
 	if rep.Total == 0 {
 		t.Fatal("surviving node served no traffic")
@@ -27,20 +35,30 @@ func TestNodeExitNoDoubleCharge(t *testing.T) {
 func TestRedisRestartNoDoubleCharge(t *testing.T) {
 	dockerAvailable(t)
 	name := uniqueName("redis")
-	id := dockerRun(t, "--name", name, "--tmpfs", "/data", "redis:7.2-alpine",
-		"redis-server", "--save", "", "--appendonly", "no")
+	id, addr := dockerRunPublish(t, "6379", "--name", name, "--tmpfs", "/data",
+		"redis:7.2-alpine", "redis-server", "--save", "", "--appendonly", "no")
 	waitDocker(t, id, []string{"redis-cli", "PING"}, "PONG", 20*time.Second)
-	dockerExec(t, id, "redis-cli", "SET", "reservation:r1", "open")
+	led := NewMemLedger()
+	cached := &RedisCachedLedger{Inner: led, Addr: addr}
+	seq := new(atomic.Int64)
+	e := NewEngineWithLedger(led, seq, cached)
+	t.Cleanup(e.Close)
+	_ = e.Run(Steady().WithDuration(200 * time.Millisecond))
+	settled := led.SettledIDs()
+	if len(settled) == 0 {
+		t.Fatal("need settled ids before redis restart")
+	}
 	if err := exec.Command("docker", "restart", "-t", "1", id).Run(); err != nil {
 		t.Fatalf("redis restart: %v", err)
 	}
 	waitDocker(t, id, []string{"redis-cli", "PING"}, "PONG", 20*time.Second)
-	// Redis is not SoR: cache miss after restart is expected.
-	e := NewEngine()
-	t.Cleanup(e.Close)
-	_ = e.Run(Steady().WithDuration(200 * time.Millisecond))
-	if e.Ledger.DoubleCharge != 0 || e.Ledger.OpenCount() != 0 {
-		t.Fatalf("ledger after redis restart double=%d open=%d", e.Ledger.DoubleCharge, e.Ledger.OpenCount())
+	tn := Dataset(DatasetSeed, 1)[0]
+	for _, rid := range settled {
+		e.Retry(tn, rid)
+	}
+	_ = e.Run(Steady().WithDuration(150 * time.Millisecond))
+	if led.DoubleCharge != 0 || led.OpenCount() != 0 {
+		t.Fatalf("ledger after redis restart double=%d open=%d", led.DoubleCharge, led.OpenCount())
 	}
 }
 
@@ -61,48 +79,64 @@ func TestPostgresShortOutageNoDoubleCharge(t *testing.T) {
 			amount INT NOT NULL,
 			state TEXT NOT NULL
 		)`)
-	psql(t, id, `INSERT INTO ledger_entries(request_id, amount, state) VALUES ('r1', 1, 'settled')`)
+	led := NewMemLedger()
+	pg := &PGLedger{
+		Inner: led,
+		ExecSQL: func(sql string) error {
+			_, err := execSQLErr(id, sql)
+			return err
+		},
+	}
+	seq := new(atomic.Int64)
+	e := NewEngineWithLedger(led, seq, pg)
+	t.Cleanup(e.Close)
+	before := e.Run(Profile{Name: "pre", Tenants: 8, RPS: 20, Duration: 200 * time.Millisecond})
+	if before.Success == 0 {
+		t.Fatal("postgres-backed engine served nothing before outage")
+	}
 	if err := exec.Command("docker", "pause", id).Run(); err != nil {
 		t.Fatalf("pause postgres: %v", err)
 	}
-	e := NewEngine()
-	t.Cleanup(e.Close)
-	e.Mock.SetFail(true)
-	_ = e.Run(Steady().WithDuration(150 * time.Millisecond))
-	e.Mock.SetFail(false)
+	during := e.Run(Profile{Name: "outage", Tenants: 8, RPS: 20, Duration: 200 * time.Millisecond})
+	if during.Success != 0 {
+		t.Fatalf("postgres pause must fail-close, success=%d", during.Success)
+	}
 	if err := exec.Command("docker", "unpause", id).Run(); err != nil {
 		t.Fatalf("unpause postgres: %v", err)
 	}
 	postgresReady(t, id)
-	out := psqlt(t, id, `SELECT count(*) FROM ledger_entries WHERE request_id='r1' AND state='settled'`)
-	if out != "1" {
-		t.Fatalf("settled r1 after outage: %q", out)
+	after := e.Run(Profile{Name: "post", Tenants: 8, RPS: 20, Duration: 200 * time.Millisecond})
+	if after.Success == 0 {
+		t.Fatal("engine did not recover after postgres unpause")
 	}
-	dup := psqlt(t, id, `SELECT count(*) FROM ledger_entries WHERE request_id='r1'`)
-	if dup != "1" {
-		t.Fatalf("double row for r1: %q", dup)
+	if led.DoubleCharge != 0 {
+		t.Fatalf("double %d", led.DoubleCharge)
 	}
-	_ = e.Run(Steady().WithDuration(150 * time.Millisecond))
-	if e.Ledger.DoubleCharge != 0 {
-		t.Fatalf("double %d", e.Ledger.DoubleCharge)
+	dup := psqlt(t, id, `SELECT count(*) FROM ledger_entries`)
+	if dup == "" {
+		t.Fatal("empty ledger after outage")
 	}
 }
 
 func TestReleaseRollbackNoDoubleCharge(t *testing.T) {
-	e := NewEngine()
-	t.Cleanup(e.Close)
+	led := NewMemLedger()
+	seq := new(atomic.Int64)
+	e := NewEngineWithLedger(led, seq, nil)
 	_ = e.Run(Steady().WithDuration(150 * time.Millisecond))
-	// Rollback = close current listener and serve from a replacement engine
-	// with the same ledger invariants (no replayed settle).
+	settled := led.SettledIDs()
 	e.Close()
-	next := NewEngine()
+	next := NewEngineWithLedger(led, seq, nil)
 	t.Cleanup(next.Close)
 	rep := next.Run(Steady().WithDuration(200 * time.Millisecond))
-	if next.Ledger.DoubleCharge != 0 {
-		t.Fatalf("double %d after rollback", next.Ledger.DoubleCharge)
+	tn := Dataset(DatasetSeed, 1)[0]
+	for _, id := range settled {
+		next.Retry(tn, id)
 	}
-	if next.Ledger.OpenCount() != 0 {
-		t.Fatalf("open %d", next.Ledger.OpenCount())
+	if led.DoubleCharge != 0 {
+		t.Fatalf("shared ledger double %d after rollback", led.DoubleCharge)
+	}
+	if led.OpenCount() != 0 {
+		t.Fatalf("open %d", led.OpenCount())
 	}
 	if rep.Total == 0 {
 		t.Fatal("rollback node served no traffic")

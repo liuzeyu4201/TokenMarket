@@ -74,3 +74,31 @@ func SnapshotFrom(ctx context.Context) (ProjectSnapshot, bool) {
 	snap, ok := ctx.Value(snapshotCtxKey{}).(ProjectSnapshot)
 	return snap, ok
 }
+
+// FetchingStore consults cache then a Project/Binding SoR. Missing SoR is fail-closed.
+type FetchingStore struct {
+	Cache SnapshotStore
+	Fetch func(projectID string) (ProjectSnapshot, bool)
+}
+
+func (s *FetchingStore) Lookup(projectID string) (ProjectSnapshot, bool) {
+	if projectID == "" {
+		return ProjectSnapshot{}, false
+	}
+	if s != nil && s.Cache != nil {
+		if snap, ok := s.Cache.Lookup(projectID); ok {
+			return snap, true
+		}
+	}
+	if s == nil || s.Fetch == nil {
+		return ProjectSnapshot{}, false
+	}
+	snap, ok := s.Fetch(projectID)
+	if !ok {
+		return ProjectSnapshot{}, false
+	}
+	if put, ok := s.Cache.(interface{ Put(ProjectSnapshot) }); ok {
+		put.Put(snap)
+	}
+	return snap, true
+}

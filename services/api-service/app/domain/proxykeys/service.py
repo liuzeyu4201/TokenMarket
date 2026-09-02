@@ -392,6 +392,13 @@ class ProxyKeyService:
             secret_hash, protocol=protocol, model=model, client_ip=client_ip
         )
 
+    def lookup_runtime(self, secret_hash: str) -> IssuedProxyKey | None:
+        """Internal gateway lookup: hash is identity; protocol is applied at admit."""
+        rec = self._store.get_by_hash(secret_hash)
+        if rec is None or rec.status != "active":
+            return None
+        return rec
+
     def revoke(
         self, key_id: uuid.UUID, buyer_id: uuid.UUID, role: str = "buyer"
     ) -> IssuedProxyKey:

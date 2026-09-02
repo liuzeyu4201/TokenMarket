@@ -24,27 +24,39 @@ type Engine struct {
 	kernel *passthrough.Kernel
 	proxy  *httptest.Server
 	up     *httptest.Server
-	seq    atomic.Int64
+	seq    *atomic.Int64
 }
 
 func NewEngine() *Engine {
+	return NewEngineWithLedger(NewMemLedger(), new(atomic.Int64), nil)
+}
+
+// NewEngineWithLedger shares one SoR ledger (and optional quota wrapper) across nodes.
+func NewEngineWithLedger(led *MemLedger, seq *atomic.Int64, quota passthrough.Quota) *Engine {
+	if led == nil {
+		led = NewMemLedger()
+	}
+	if seq == nil {
+		seq = new(atomic.Int64)
+	}
+	if quota == nil {
+		quota = led
+	}
 	mock := &MockUpstream{}
 	up := httptest.NewServer(mock)
-	led := NewMemLedger()
 	k := &passthrough.Kernel{
 		Catalog:  Catalog(),
 		Selector: passthrough.StaticSelector{Up: passthrough.Upstream{BaseURL: up.URL, Credential: "mock-k"}},
-		// Soak SSE holds StreamDuration; a 5s upstream deadline aborts CAPACITY_FULL.
 		Limits: passthrough.Limits{
 			IdleTimeout:     30 * time.Second,
 			UpstreamTimeout: StreamDuration + 5*time.Second,
 		},
-		Quota: led,
+		Quota: quota,
 	}
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		k.ServeHTTP(w, r, "shared", false)
 	}))
-	return &Engine{Mock: mock, Ledger: led, kernel: k, proxy: proxy, up: up}
+	return &Engine{Mock: mock, Ledger: led, kernel: k, proxy: proxy, up: up, seq: seq}
 }
 
 func (e *Engine) Close() {
@@ -84,7 +96,7 @@ func (e *Engine) Run(p Profile) Report {
 			rid := fmt.Sprintf("cap-%d", e.seq.Add(1))
 			status, plat := e.once(tn, rid)
 			total.Add(1)
-			if status > 0 && status < 500 {
+			if status >= 200 && status < 300 {
 				ok.Add(1)
 				e.Ledger.Settle(rid)
 			} else {
@@ -119,6 +131,18 @@ func (e *Engine) Run(p Profile) Report {
 	rep.PlatformP95MS = float64(rep.PlatformP95) / float64(time.Millisecond)
 	rep.Pass = rep.PassSteady()
 	return rep
+}
+
+func (e *Engine) Retry(tn Tenant, rid string) int {
+	status, _ := e.once(tn, rid)
+	if status >= 200 && status < 300 {
+		if !e.Ledger.AlreadySettled(rid) {
+			e.Ledger.Settle(rid)
+		}
+	} else {
+		_ = e.Ledger.Abort(context.Background(), rid)
+	}
+	return status
 }
 
 func (e *Engine) once(tn Tenant, rid string) (int, time.Duration) {
@@ -175,7 +199,7 @@ func (e *Engine) RunStream(n int, d time.Duration) Report {
 				return
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode >= 500 {
+			if resp.StatusCode >= 300 {
 				fail.Add(1)
 				_ = e.Ledger.Abort(context.Background(), rid)
 				return

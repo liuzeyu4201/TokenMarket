@@ -140,12 +140,7 @@ async def lookup_proxy_hash(
     if denied is not None:
         return denied
     svc = request.app.state.proxy_key_service
-    rec = svc.lookup_hash(
-        secret_hash,
-        protocol=request.query_params.get("protocol"),
-        model=request.query_params.get("model"),
-        client_ip=request.query_params.get("ip"),
-    )
+    rec = svc.lookup_runtime(secret_hash)
     if rec is None:
         return JSONResponse(
             status_code=404,
@@ -172,6 +167,79 @@ async def lookup_proxy_hash(
     return JSONResponse(
         status_code=200, content=success_envelope(data, request_id=_rid(request))
     )
+
+
+@router.get("/projects/{project_id}/route-snapshot")
+async def project_route_snapshot(
+    project_id: uuid.UUID,
+    request: Request,
+    x_internal_token: str | None = Header(default=None, alias="X-Internal-Token"),
+) -> JSONResponse:
+    denied = _internal_ok(request, x_internal_token)
+    if denied is not None:
+        return denied
+    rid = _rid(request)
+    proj_svc = getattr(request.app.state, "project_service", None)
+    store = getattr(proj_svc, "_store", None) if proj_svc is not None else None
+    getter = getattr(store, "get", None)
+    proj = getter(project_id) if callable(getter) else None
+    if proj is None:
+        return JSONResponse(
+            status_code=404,
+            content=error_envelope("NOT_FOUND", "资源不存在", request_id=rid),
+        )
+    bind_svc = getattr(request.app.state, "binding_service", None)
+    bind_store = getattr(bind_svc, "_store", None) if bind_svc is not None else None
+    lister = getattr(bind_store, "list_by_project", None)
+    bindings = lister(project_id) if callable(lister) else []
+    conn_svc = getattr(request.app.state, "connection_service", None)
+    connections: list[dict[str, Any]] = []
+    for rec in bindings:
+        cid = getattr(rec, "connection_id", None)
+        if cid is None:
+            continue
+        secret = ""
+        base_url = ""
+        health = "unknown"
+        seller = ""
+        provider = ""
+        if conn_svc is not None:
+            try:
+                secret = conn_svc.unwrap(
+                    connection_id=cid, purpose="proxy", request_id=rid
+                )
+            except Exception:
+                secret = ""
+            cstore = getattr(conn_svc, "_store", None)
+            cget = getattr(cstore, "get", None)
+            row = cget(cid) if callable(cget) else None
+            if row is not None:
+                base_url = str(getattr(row, "base_url", "") or "")
+                health = str(getattr(row, "health_state", "") or "unknown")
+                seller = str(getattr(row, "seller_account_id", "") or "")
+                provider = str(getattr(row, "provider", "") or "")
+        protocol = str(getattr(rec, "protocol", "") or provider)
+        connections.append(
+            {
+                "connection_id": str(cid),
+                "provider": provider or protocol,
+                "protocol": protocol,
+                "supply_mode": str(getattr(rec, "supply_mode", "") or ""),
+                "base_url": base_url,
+                "credential": secret,
+                "seller_owner_id": seller,
+                "health": health or "unknown",
+                "lifecycle": str(getattr(rec, "status", "") or "listed"),
+            }
+        )
+    body = {
+        "project_id": str(proj.project_id),
+        "mode": proj.mode,
+        "preview_opt_in": bool(getattr(proj, "preview_opt_in", False)),
+        "buyer_owner_id": str(proj.owner_account_id),
+        "connections": connections,
+    }
+    return JSONResponse(status_code=200, content=success_envelope(body, request_id=rid))
 
 
 @router.post("/usage-observations")

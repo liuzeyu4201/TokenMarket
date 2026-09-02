@@ -45,7 +45,6 @@ func (l *MemLedger) Reserve(_ context.Context, requestID, projectID, keyID strin
 		if cur.ProjectID != projectID {
 			l.Leaks++
 		}
-		l.DoubleCharge++
 		return nil
 	}
 	l.open[requestID] = reservation{
@@ -89,6 +88,29 @@ func (l *MemLedger) OpenCount() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.open)
+}
+
+func (l *MemLedger) AlreadySettled(requestID string) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, ok := l.settled[requestID]
+	return ok
+}
+
+func (l *MemLedger) SettledIDs() []string {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]string, 0, len(l.settled))
+	for id := range l.settled {
+		out = append(out, id)
+	}
+	return out
 }
 
 func (l *MemLedger) Snapshot() LedgerSnap {

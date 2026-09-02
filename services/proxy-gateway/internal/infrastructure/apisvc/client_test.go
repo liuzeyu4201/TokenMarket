@@ -63,6 +63,49 @@ func TestListAndLookupAndObserve(t *testing.T) {
 	}
 }
 
+func TestFetchRouteSnapshotFailClosedAndHydrates(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/v1/projects/proj-1/route-snapshot", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Internal-Token") != "tok" {
+			w.WriteHeader(401)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code": "0",
+			"data": map[string]any{
+				"project_id":     "proj-1",
+				"mode":           "shared",
+				"preview_opt_in": true,
+				"buyer_owner_id": "buyer-1",
+				"connections": []map[string]string{{
+					"connection_id": "c1", "provider": "openai", "protocol": "openai",
+					"supply_mode": "shared", "base_url": "https://api.openai.com",
+					"credential": "sk-live", "seller_owner_id": "seller-9",
+					"health": "healthy", "lifecycle": "listed",
+				}},
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	c := apisvc.New(srv.URL, "tok")
+	snap, ok := c.FetchRouteSnapshot("proj-1")
+	if !ok || snap.Mode != "shared" || !snap.PreviewOptIn || len(snap.Connections) != 1 {
+		t.Fatalf("%+v %v", snap, ok)
+	}
+	if snap.Connections[0].Credential != "sk-live" {
+		t.Fatal("internal snapshot must include dataplane credential")
+	}
+	missing, ok := c.FetchRouteSnapshot("nope")
+	if ok || missing.ProjectID != "" {
+		t.Fatal("missing project must fail closed")
+	}
+	disabled := apisvc.New("", "")
+	if _, ok := disabled.FetchRouteSnapshot("proj-1"); ok {
+		t.Fatal("disabled client must fail closed")
+	}
+}
+
 func TestLookupFailClosed(t *testing.T) {
 	c := apisvc.New("", "")
 	if _, ok := c.Lookup("x"); ok {

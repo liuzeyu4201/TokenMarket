@@ -287,6 +287,56 @@ func (f FanoutSink) Observe(ctx context.Context, obs usageobs.Observation) error
 	return nil
 }
 
+// RouteSnapshot is the internal Project/Binding view for native routing.
+type RouteSnapshot struct {
+	ProjectID    string      `json:"project_id"`
+	Mode         string      `json:"mode"`
+	PreviewOptIn bool        `json:"preview_opt_in"`
+	BuyerOwnerID string      `json:"buyer_owner_id"`
+	Connections  []RouteConn `json:"connections"`
+}
+
+type RouteConn struct {
+	ConnectionID  string `json:"connection_id"`
+	Provider      string `json:"provider"`
+	Protocol      string `json:"protocol"`
+	SupplyMode    string `json:"supply_mode"`
+	BaseURL       string `json:"base_url"`
+	Credential    string `json:"credential"`
+	SellerOwnerID string `json:"seller_owner_id"`
+	Health        string `json:"health"`
+	Lifecycle     string `json:"lifecycle"`
+}
+
+func (c *Client) FetchRouteSnapshot(projectID string) (RouteSnapshot, bool) {
+	if !c.enabled() || projectID == "" {
+		return RouteSnapshot{}, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	path := "/internal/v1/projects/" + url.PathEscape(projectID) + "/route-snapshot"
+	resp, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return RouteSnapshot{}, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return RouteSnapshot{}, false
+	}
+	var env envelope
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&env) != nil {
+		return RouteSnapshot{}, false
+	}
+	var snap RouteSnapshot
+	if json.Unmarshal(env.Data, &snap) != nil {
+		return RouteSnapshot{}, false
+	}
+	if snap.ProjectID == "" || snap.Mode == "" {
+		return RouteSnapshot{}, false
+	}
+	return snap, true
+}
+
 func atoiNonNeg(s string) int {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil || n < 0 {

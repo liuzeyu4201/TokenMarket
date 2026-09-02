@@ -186,6 +186,65 @@ func TestNativeIgnoresSpoofedProjectModeAndPreviewHeaders(t *testing.T) {
 	}
 }
 
+func TestNativeHydratesSnapshotFromSoRWhenCacheMisses(t *testing.T) {
+	var got string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = string(b)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"id":"from-sor"}`))
+	}))
+	t.Cleanup(up.Close)
+	cache := passthrough.NewMemoryStore()
+	store := &passthrough.FetchingStore{
+		Cache: cache,
+		Fetch: func(projectID string) (passthrough.ProjectSnapshot, bool) {
+			if projectID != "proj-api" {
+				return passthrough.ProjectSnapshot{}, false
+			}
+			return passthrough.ProjectSnapshot{
+				ProjectID:    "proj-api",
+				Mode:         "shared",
+				BuyerOwnerID: "buyer-1",
+				Candidates: []qualify.Candidate{{
+					ConnectionID: "c-api", SellerOwnerID: "seller-9", Provider: "openai", Protocol: "openai",
+					SupplyMode: "shared", Lifecycle: "listed", Health: "healthy",
+					DeclaredCapacity: 8, AdmitsNew: true, PriceValid: true,
+				}},
+				Signals: map[string]score.Signals{"c-api": {
+					ConnectionID: "c-api", Health: "healthy", Remaining: 8, Declared: 8,
+					CapacityPresent: true, PricePresent: true, SellerBPS: 10000, LatencyPresent: true,
+				}},
+				Upstreams: map[string]passthrough.Upstream{"c-api": {BaseURL: up.URL, Credential: "sk-api"}},
+			}, true
+		},
+	}
+	k := &passthrough.Kernel{Catalog: nativeCatalog(), Selector: passthrough.RoutingSelector{}}
+	srv, err := httpserver.NewServer(httpserver.Config{
+		Service: testService, Version: testVersion,
+		Passthrough: &httpserver.PassthroughDeps{
+			Kernel: k, Auth: nativeAuth("proj-api", "shared", false), Snapshots: store,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"model":"gpt-test"}`
+	req := httptest.NewRequest(http.MethodPost, "/openai/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+nativeSecret)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("hydrated status %d %s", rec.Code, rec.Body.String())
+	}
+	if got != body {
+		t.Fatalf("forwarded %s", got)
+	}
+	if rec.Body.String() != `{"id":"from-sor"}` {
+		t.Fatalf("resp %s", rec.Body.String())
+	}
+}
+
 func TestNativeUnknownPathKeepsScaffoldNotFound(t *testing.T) {
 	srv, _ := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/definitely-missing", nil)

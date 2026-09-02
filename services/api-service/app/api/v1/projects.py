@@ -27,6 +27,7 @@ class CreateBody(BaseModel):
     mode: str
     enabled_protocols: list[str] = Field(min_length=1)
     idempotency_key: str | None = Field(default=None, min_length=1)
+    preview_opt_in: bool = False
 
 
 def _rid(request: Request) -> str:
@@ -67,6 +68,7 @@ def _payload(rec: ProjectRecord) -> dict[str, Any]:
         "created_at": _iso(rec.created_at),
         "updated_at": _iso(rec.updated_at),
         "archived_at": _iso(rec.archived_at),
+        "preview_opt_in": bool(rec.preview_opt_in),
     }
 
 
@@ -104,6 +106,7 @@ async def create_project(body: CreateBody, request: Request) -> JSONResponse:
             workspace=actor.workspace,
             request_id=rid,
             idempotency_key=body.idempotency_key,
+            preview_opt_in=body.preview_opt_in,
         )
     except ProjectError as exc:
         return _fail(exc, rid)
@@ -175,21 +178,37 @@ async def patch_project(project_id: uuid.UUID, request: Request) -> JSONResponse
             status_code=400,
             content=error_envelope(MODE_IMMUTABLE, MSG[MODE_IMMUTABLE], request_id=rid),
         )
-    extra = set(raw) - {"display_name"}
-    if extra or "display_name" not in raw:
+    extra = set(raw) - {"display_name", "preview_opt_in"}
+    if extra or ("display_name" not in raw and "preview_opt_in" not in raw):
         return JSONResponse(
             status_code=400,
             content=error_envelope(VALIDATION, MSG[VALIDATION], request_id=rid),
         )
     try:
-        rec = _svc(request).rename(
-            project_id=project_id,
-            owner_id=actor.user_id,
-            display_name=str(raw["display_name"]),
-            role=actor.role,
-            workspace=actor.workspace,
-            request_id=rid,
-        )
+        rec = None
+        if "display_name" in raw:
+            rec = _svc(request).rename(
+                project_id=project_id,
+                owner_id=actor.user_id,
+                display_name=str(raw["display_name"]),
+                role=actor.role,
+                workspace=actor.workspace,
+                request_id=rid,
+            )
+        if "preview_opt_in" in raw:
+            rec = _svc(request).set_preview_opt_in(
+                project_id=project_id,
+                owner_id=actor.user_id,
+                preview_opt_in=bool(raw["preview_opt_in"]),
+                role=actor.role,
+                workspace=actor.workspace,
+                request_id=rid,
+            )
+        if rec is None:
+            return JSONResponse(
+                status_code=400,
+                content=error_envelope(VALIDATION, MSG[VALIDATION], request_id=rid),
+            )
     except ProjectError as exc:
         return _fail(exc, rid)
     return JSONResponse(

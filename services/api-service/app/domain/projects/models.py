@@ -7,14 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import (
-    Boolean,
-    DateTime,
-    ForeignKey,
-    PrimaryKeyConstraint,
-    String,
-    text,
-)
+from sqlalchemy import Boolean, DateTime, ForeignKey, PrimaryKeyConstraint, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +46,7 @@ class ProjectRecord:
     updated_at: datetime
     archived_at: datetime | None = None
     deleted_at: datetime | None = None
+    preview_opt_in: bool = False
     protocols: list[ProtocolState] = field(default_factory=list)
 
     def enabled_protocol_names(self) -> list[str]:
@@ -83,6 +77,9 @@ class ProjectRow(Base):
     )
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    preview_opt_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
 

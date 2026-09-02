@@ -38,6 +38,7 @@ def _to_record(row: ProjectRow, protocols: list[ProjectProtocolRow]) -> ProjectR
         updated_at=row.updated_at,
         archived_at=row.archived_at,
         deleted_at=row.deleted_at,
+        preview_opt_in=bool(getattr(row, "preview_opt_in", False)),
         protocols=[
             ProtocolState(
                 protocol=p.protocol,
@@ -86,6 +87,7 @@ class SQLProjectStore:
                 updated_at=rec.updated_at,
                 archived_at=rec.archived_at,
                 deleted_at=rec.deleted_at,
+                preview_opt_in=bool(rec.preview_opt_in),
             )
         )
         try:
@@ -135,6 +137,7 @@ class SQLProjectStore:
         row.updated_at = rec.updated_at
         row.archived_at = rec.archived_at
         row.deleted_at = rec.deleted_at
+        row.preview_opt_in = bool(rec.preview_opt_in)
         existing = {p.protocol: p for p in self._protocols(rec.project_id)}
         for proto in rec.protocols:
             cur = existing.get(proto.protocol)

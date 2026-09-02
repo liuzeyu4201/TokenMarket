@@ -104,6 +104,32 @@ func psqlt(t *testing.T, id, sql string) string {
 	return strings.TrimSpace(dockerExecEnv(t, id, []string{pgPassEnv}, "psql", "-h", "127.0.0.1", "-U", "tm", "-d", "tm", "-tAc", sql))
 }
 
+func execSQLErr(id, sql string) (string, error) {
+	argv := []string{"exec", "-e", pgPassEnv, id, "psql", "-h", "127.0.0.1", "-U", "tm", "-d", "tm", "-v", "ON_ERROR_STOP=1", "-c", sql}
+	out, err := exec.Command("docker", argv...).CombinedOutput()
+	if err != nil {
+		return string(out), err
+	}
+	return string(out), nil
+}
+
 func uniqueName(prefix string) string {
 	return fmt.Sprintf("tm-%s-%d", prefix, time.Now().UnixNano())
+}
+
+func dockerRunPublish(t *testing.T, containerPort string, args ...string) (id, addr string) {
+	t.Helper()
+	id = dockerRun(t, append([]string{"-p", "127.0.0.1::" + containerPort}, args...)...)
+	out, err := exec.Command("docker", "port", id, containerPort).CombinedOutput()
+	if err != nil {
+		t.Fatalf("docker port: %s", bytes.TrimSpace(out))
+	}
+	line := strings.TrimSpace(string(out))
+	// 127.0.0.1:xxxxx
+	parts := strings.Split(line, "\n")
+	addr = strings.TrimSpace(parts[0])
+	if addr == "" {
+		t.Fatalf("empty published addr from %q", line)
+	}
+	return id, addr
 }

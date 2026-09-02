@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/keypool"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/passthrough"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/proxyauth"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/observability"
 )
@@ -64,6 +66,33 @@ func TestParseProxyAuthRequiresTmk(t *testing.T) {
 	h := proxyauth.HashSecret(pepper, sec)
 	if got[h].BuyerID != "buyer-1" {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestParseProxyAuthCarriesProjectMode(t *testing.T) {
+	pepper := []byte("p")
+	sec := "tmk-0123456789abcdef0123456789abcdef"
+	got := parseProxyAuthEnv(pepper, sec+"|buyer-1|proj-9|dedicated|1")
+	h := proxyauth.HashSecret(pepper, sec)
+	rec := got[h]
+	if rec.ProjectID != "proj-9" || rec.ProjectMode != "dedicated" || !rec.PreviewOptIn {
+		t.Fatalf("%+v", rec)
+	}
+}
+
+func TestLoadNativeSnapshotsSharedAndDedicated(t *testing.T) {
+	store := passthrough.NewMemoryStore()
+	loadNativeSnapshots(store, strings.Join([]string{
+		"p-shared|shared|0|c1|openai|http://127.0.0.1:9|sk-a|seller-z",
+		"p-ded|dedicated|0|pin|openai|http://127.0.0.1:8|sk-d|",
+	}, ","))
+	shared, ok := store.Lookup("p-shared")
+	if !ok || shared.Mode != "shared" || len(shared.Candidates) != 1 {
+		t.Fatalf("%+v %v", shared, ok)
+	}
+	ded, ok := store.Lookup("p-ded")
+	if !ok || ded.Mode != "dedicated" || ded.Dedicated.ConnectionID != "pin" {
+		t.Fatalf("%+v %v", ded, ok)
 	}
 }
 

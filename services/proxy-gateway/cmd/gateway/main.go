@@ -17,7 +17,9 @@ import (
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/passthrough"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/providervalid"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/proxyauth"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/qualify"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/runtimesnap"
+	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/score"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/domain/usageobs"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/httpserver"
 	"github.com/tokenmarket/tokenmarket/services/proxy-gateway/internal/infrastructure/apisvc"
@@ -139,9 +141,17 @@ func main() {
 		}
 	}
 
+	snapStore := passthrough.NewMemoryStore()
+	loadNativeSnapshots(snapStore, os.Getenv("PROXY_NATIVE_SNAPSHOTS"))
 	nativeKernel := &passthrough.Kernel{
 		Catalog:  catalog,
-		Selector: passthrough.FailClosedSelector{},
+		Selector: passthrough.RoutingSelector{},
+	}
+	var nativeAuth proxyauth.Authenticator
+	if proxyDeps != nil {
+		nativeAuth = proxyDeps.Auth
+	} else {
+		nativeAuth = proxyauth.Authenticator{Pepper: pepper, Store: authStore, Limiter: authLimiter}
 	}
 	publicSrv, err := httpserver.NewServer(httpserver.Config{
 		Service:       "proxy-gateway",
@@ -150,8 +160,12 @@ func main() {
 		Validate:      validateDeps,
 		MountValidate: mountOnPublic,
 		Proxy:         proxyDeps,
-		Passthrough:   &httpserver.PassthroughDeps{Kernel: nativeKernel},
-		CatalogReady:  &catalogReady,
+		Passthrough: &httpserver.PassthroughDeps{
+			Kernel:    nativeKernel,
+			Auth:      nativeAuth,
+			Snapshots: snapStore,
+		},
+		CatalogReady: &catalogReady,
 	})
 	if err != nil {
 		logger.Error("failed to create public server", "error", err)
@@ -292,7 +306,7 @@ func envIntFrom(s string, def int) int {
 	return n
 }
 
-// PROXY_STATIC_PROXY_KEYS=tmk-secret|buyer-uuid[,...]
+// PROXY_STATIC_PROXY_KEYS=tmk-secret|buyer-uuid[|projectId|mode|preview][,...]
 func parseProxyAuthEnv(pepper []byte, raw string) map[string]proxyauth.Record {
 	out := map[string]proxyauth.Record{}
 	for _, part := range strings.Split(raw, ",") {
@@ -304,8 +318,8 @@ func parseProxyAuthEnv(pepper []byte, raw string) map[string]proxyauth.Record {
 		if !strings.Contains(part, "|") {
 			sep = ":"
 		}
-		kv := strings.SplitN(part, sep, 2)
-		if len(kv) != 2 {
+		kv := strings.Split(part, sep)
+		if len(kv) < 2 {
 			continue
 		}
 		sec, buyer := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
@@ -317,9 +331,92 @@ func parseProxyAuthEnv(pepper []byte, raw string) map[string]proxyauth.Record {
 		if len(kid) > 8 {
 			kid = kid[:8]
 		}
-		out[h] = proxyauth.Record{KeyID: kid, BuyerID: buyer, Platform: "volcano", Status: "active"}
+		rec := proxyauth.Record{KeyID: kid, BuyerID: buyer, Platform: "volcano", Status: "active"}
+		if len(kv) >= 3 {
+			rec.ProjectID = strings.TrimSpace(kv[2])
+		}
+		if len(kv) >= 4 {
+			rec.ProjectMode = strings.TrimSpace(kv[3])
+		}
+		if len(kv) >= 5 {
+			rec.PreviewOptIn = strings.TrimSpace(kv[4]) == "1"
+		}
+		out[h] = rec
 	}
 	return out
+}
+
+// PROXY_NATIVE_SNAPSHOTS=projectId|mode|preview|connId|protocol|baseURL|credential|sellerOwner[,...]
+func loadNativeSnapshots(store *passthrough.MemoryStore, raw string) {
+	if store == nil {
+		return
+	}
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		f := strings.Split(part, "|")
+		if len(f) < 7 {
+			continue
+		}
+		projectID := strings.TrimSpace(f[0])
+		mode := strings.TrimSpace(f[1])
+		preview := strings.TrimSpace(f[2]) == "1"
+		connID := strings.TrimSpace(f[3])
+		protocol := strings.TrimSpace(f[4])
+		baseURL := strings.TrimSpace(f[5])
+		cred := strings.TrimSpace(f[6])
+		seller := ""
+		if len(f) >= 8 {
+			seller = strings.TrimSpace(f[7])
+		}
+		snap, _ := store.Lookup(projectID)
+		snap.ProjectID = projectID
+		snap.Mode = mode
+		snap.PreviewOptIn = preview
+		up := passthrough.Upstream{BaseURL: baseURL, Credential: cred, ConnectionID: connID}
+		if snap.Upstreams == nil {
+			snap.Upstreams = map[string]passthrough.Upstream{}
+		}
+		snap.Upstreams[connID] = up
+		if mode == "dedicated" {
+			snap.Dedicated = passthrough.DedicatedSnapshot{
+				ConnectionID: connID,
+				Status:       "active",
+				Health:       "healthy",
+				Up:           up,
+			}
+		} else {
+			snap.Candidates = append(snap.Candidates, qualify.Candidate{
+				ConnectionID:     connID,
+				SellerOwnerID:    seller,
+				Provider:         protocol,
+				Protocol:         protocol,
+				SupplyMode:       "shared",
+				Lifecycle:        "listed",
+				Health:           "healthy",
+				DeclaredCapacity: 32,
+				AdmitsNew:        true,
+				PriceValid:       true,
+			})
+			if snap.Signals == nil {
+				snap.Signals = map[string]score.Signals{}
+			}
+			snap.Signals[connID] = score.Signals{
+				ConnectionID:    connID,
+				Health:          "healthy",
+				LatencyPresent:  true,
+				LatencyMS:       50,
+				CapacityPresent: true,
+				Remaining:       32,
+				Declared:        32,
+				PricePresent:    true,
+				SellerBPS:       10000,
+			}
+		}
+		store.Put(snap)
+	}
 }
 
 // PROXY_STATIC_SELLER_KEYS=id|sellerId|apiKey[|admin|health[|officialConcurrency]][,...]

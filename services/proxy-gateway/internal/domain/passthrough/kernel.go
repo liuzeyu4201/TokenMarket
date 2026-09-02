@@ -414,6 +414,11 @@ func statusFor(code string) int {
 	}
 }
 
+// WriteError is the platform JSON body used for native admit/auth failures.
+func WriteError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	writePlatform(w, r, status, code, message)
+}
+
 func writePlatform(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	rid := r.Header.Get("X-Request-ID")
 	if rid == "" {

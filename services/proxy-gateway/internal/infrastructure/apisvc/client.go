@@ -122,10 +122,13 @@ func (c *Client) List(ctx context.Context) ([]keypool.SellerKey, error) {
 }
 
 type authRec struct {
-	KeyID    string `json:"key_id"`
-	BuyerID  string `json:"buyer_id"`
-	Platform string `json:"platform"`
-	Status   string `json:"status"`
+	KeyID        string  `json:"key_id"`
+	BuyerID      string  `json:"buyer_id"`
+	Platform     string  `json:"platform"`
+	Status       string  `json:"status"`
+	ProjectID    *string `json:"project_id"`
+	ProjectMode  *string `json:"project_mode"`
+	PreviewOptIn bool    `json:"preview_opt_in"`
 }
 
 // Lookup 实现 proxyauth.Store。
@@ -164,7 +167,17 @@ func (c *Client) LookupResult(hashHex string) (proxyauth.Record, proxyauth.Looku
 	if rec.Status != "active" {
 		return proxyauth.Record{}, proxyauth.LookupMiss
 	}
-	return proxyauth.Record{KeyID: rec.KeyID, BuyerID: rec.BuyerID, Platform: rec.Platform, Status: rec.Status}, proxyauth.LookupHit
+	out := proxyauth.Record{
+		KeyID: rec.KeyID, BuyerID: rec.BuyerID, Platform: rec.Platform, Status: rec.Status,
+		PreviewOptIn: rec.PreviewOptIn,
+	}
+	if rec.ProjectID != nil {
+		out.ProjectID = *rec.ProjectID
+	}
+	if rec.ProjectMode != nil {
+		out.ProjectMode = *rec.ProjectMode
+	}
+	return out, proxyauth.LookupHit
 }
 
 type usageBody struct {

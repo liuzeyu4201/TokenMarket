@@ -1,7 +1,12 @@
 package capacity
 
 import (
+	"bytes"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -131,28 +136,64 @@ func TestFaultNoDoubleCharge(t *testing.T) {
 }
 
 func TestBackupRPORTO(t *testing.T) {
-	led := NewMemLedger()
-	_ = led.Reserve(nil, "r1", "p1", "k1", 1)
-	led.Settle("r1")
-	snap := led.Snapshot()
-	snap.TakenAt = time.Now().Add(-4 * time.Minute)
-	_ = led.Reserve(nil, "r2", "p2", "k2", 1)
-	led.Settle("r2")
-	start := time.Now()
-	got := RestoreLedger(snap)
-	rto := time.Since(start)
-	rpo := time.Since(snap.TakenAt)
+	dockerAvailable(t)
+	srcName := uniqueName("pg-src")
+	src := dockerRun(t,
+		"--name", srcName,
+		"--mount", "type=tmpfs,destination=/var/lib/postgresql/data",
+		"-e", "POSTGRES_PASSWORD=tm_local_test",
+		"-e", "POSTGRES_USER=tm",
+		"-e", "POSTGRES_DB=tm",
+		"postgres:15.18-bookworm",
+	)
+	postgresReady(t, src)
+	psql(t, src, `CREATE TABLE ledger_entries (
+			request_id TEXT PRIMARY KEY,
+			amount INT NOT NULL,
+			state TEXT NOT NULL
+		)`)
+	psql(t, src, `INSERT INTO ledger_entries(request_id, amount, state) VALUES ('r1', 1, 'settled')`)
+	dump := dockerExecEnv(t, src, []string{pgPassEnv}, "pg_dump", "-h", "127.0.0.1", "-U", "tm", "-d", "tm", "--table=ledger_entries")
+	backupAt := time.Now()
+	psql(t, src, `INSERT INTO ledger_entries(request_id, amount, state) VALUES ('r2', 1, 'settled')`)
+
+	dstName := uniqueName("pg-dst")
+	dst := dockerRun(t,
+		"--name", dstName,
+		"--mount", "type=tmpfs,destination=/var/lib/postgresql/data",
+		"-e", "POSTGRES_PASSWORD=tm_local_test",
+		"-e", "POSTGRES_USER=tm",
+		"-e", "POSTGRES_DB=tm",
+		"postgres:15.18-bookworm",
+	)
+	postgresReady(t, dst)
+	restoreStart := time.Now()
+	cmd := exec.Command("docker", "exec", "-e", pgPassEnv, "-i", dst, "psql", "-h", "127.0.0.1", "-U", "tm", "-d", "tm")
+	cmd.Stdin = strings.NewReader(dump)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("restore empty instance: %s", bytes.TrimSpace(out))
+	}
+	rto := time.Since(restoreStart)
+	rpo := time.Since(backupAt)
 	if rpo > RPOLimit {
 		t.Fatalf("rpo %s", rpo)
 	}
 	if rto > RTOLimit {
 		t.Fatalf("rto %s", rto)
 	}
-	if _, ok := got.settled["r1"]; !ok {
-		t.Fatal("missing restored r1")
+	hasR1 := psqlt(t, dst, `SELECT count(*) FROM ledger_entries WHERE request_id='r1'`)
+	hasR2 := psqlt(t, dst, `SELECT count(*) FROM ledger_entries WHERE request_id='r2'`)
+	if hasR1 != "1" {
+		t.Fatalf("restored empty instance missing r1: %q", hasR1)
 	}
-	if _, ok := got.settled["r2"]; ok {
-		t.Fatal("post-backup r2 must not be in restored empty instance")
+	if hasR2 != "0" {
+		t.Fatalf("post-backup r2 must not be in restored empty instance: %q", hasR2)
+	}
+	if dir := os.Getenv("TOKENMARKET_EVIDENCE_DIR"); dir != "" {
+		_ = os.MkdirAll(filepath.Join(dir, "recovery"), 0o755)
+		body := fmt.Sprintf(`{"rpo_ns":%d,"rto_ns":%d,"r1":%q,"r2":%q}`, rpo, rto, hasR1, hasR2)
+		_ = os.WriteFile(filepath.Join(dir, "recovery", "postgres-rpo.json"), []byte(body), 0o644)
 	}
 }
 

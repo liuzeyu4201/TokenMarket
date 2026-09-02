@@ -10,10 +10,13 @@ import (
 
 // Record 已签发代理 Key 元数据。
 type Record struct {
-	KeyID    string
-	BuyerID  string
-	Platform string
-	Status   string
+	KeyID        string
+	BuyerID      string
+	Platform     string
+	Status       string
+	ProjectID    string
+	ProjectMode  string
+	PreviewOptIn bool
 }
 
 // Store 查找哈希。

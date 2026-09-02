@@ -127,6 +127,8 @@ def test_issue_proxy_key_tmk_and_auth_hash() -> None:
         )
         assert look.status_code == 200
         assert look.json()["data"]["buyer_id"] == str(user)
+        assert "project_mode" in look.json()["data"]
+        assert look.json()["data"]["preview_opt_in"] is False
         replay = client.post(
             "/api/v1/proxy-keys",
             json={"platform": "volcano"},

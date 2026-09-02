@@ -11,11 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.domain.sellerkeys.crypto import CredentialEncryptor
-from app.domain.usage.service import (
-    UsageConflictError,
-    UsageRecord,
-    UsageRecorder,
-)
+from app.domain.usage.service import UsageConflictError, UsageRecord, UsageRecorder
 from app.schemas.envelope import error_envelope, success_envelope
 
 router = APIRouter(prefix="/internal/v1", tags=["internal"])
@@ -161,7 +157,18 @@ async def lookup_proxy_hash(
         "platform": rec.platform,
         "status": rec.status,
         "project_id": str(rec.project_id) if rec.project_id else None,
+        "project_mode": None,
+        "preview_opt_in": False,
     }
+    proj_svc = getattr(request.app.state, "project_service", None)
+    if rec.project_id is not None and proj_svc is not None:
+        store = getattr(proj_svc, "_store", None)
+        getter = getattr(store, "get", None)
+        if callable(getter):
+            proj = getter(rec.project_id)
+            if proj is not None:
+                data["project_mode"] = getattr(proj, "mode", None)
+                data["preview_opt_in"] = bool(getattr(proj, "preview_opt_in", False))
     return JSONResponse(
         status_code=200, content=success_envelope(data, request_id=_rid(request))
     )

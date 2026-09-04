@@ -19,7 +19,7 @@
 | HTTP / 事件契约 | [`shared/contracts/`](../shared/contracts/README.md) | [`api/`](api/README.md) | 契约英文标识；说明双语 |
 | 产品与调研 | [`产品调研/`](../产品调研/README.md)、[`项目开发/`](../项目开发/README.md) | [`product/`](product/README.md) | 原文中文；枢纽双语 |
 | 架构决策 | [`docs/decisions/`](decisions/README.md) | 本目录 | 索引双语；历史 ADR 保持原文 |
-| 功能规格 | [`specs/`](../specs/)、[`项目开发/V0.1/V0.1_0712/specs/`](../项目开发/V0.1/V0.1_0712/specs/README.md) | [`product/`](product/README.md) | 中文 |
+| 功能规格 | [`specs/`](../specs/)、[`项目开发/V0.2/V0.2_0831/`](../项目开发/V0.2/V0.2_0831/README.md) | [`product/`](product/README.md) | 中文 |
 | 运行手册 | [`ops/runbooks/`](../ops/runbooks/README.md) | — | 中文 |
 | 工程宪章 | [`.specify/memory/constitution.md`](../.specify/memory/constitution.md) | — | 英文（历史权威，不在此轮整篇翻译） |
 
@@ -33,7 +33,7 @@
 | 读 PRD / 路线图 / 调研 | [`product/README.md`](product/README.md) |
 | 查为什么这样设计 | [`decisions/README.md`](decisions/README.md) |
 | 排障、迁移、部署 | [`ops/runbooks/README.md`](../ops/runbooks/README.md) |
-| 实现某个 V0.1 功能 | [`specs/`](../specs/) 对应 `NNN-…` 目录 |
+| 实现某个功能 | [`specs/`](../specs/) 对应 `NNN-…` 目录（V0.2 见 `020`–`053`） |
 
 ## 语言
 
@@ -52,7 +52,7 @@
 ```text
 docs/
 ├── README.md / README.en.md     # 本枢纽
-├── architecture/                # 架构索引与 V0.1 现状图
+├── architecture/                # 架构索引与 V0.2 现状图
 ├── api/                         # 对外接口导航 → shared/contracts
 ├── product/                     # 产品 / 调研 / 规格导航
 └── decisions/                   # ADR（路径由测试固定）

@@ -1,14 +1,28 @@
 # API Service
 
-TokenMarket core API service scaffold (SF01) with SF02 PostgreSQL readiness and
-user registration (`POST /api/v1/auth/register`, SF03 / feature `003-user-registration-ui`).
+TokenMarket 领域 API：用户、会话、授权、Project、Binding、加密 Provider Connection、项目代理 Key。第一迁移所有者。
+
+Hub: [`docs/architecture/README.md`](../../docs/architecture/README.md).
 
 ## Ownership
 
 - Owner: TokenMarket Engineering
 - Type: Python FastAPI service
 - Migration owner: yes (order 1)
-- User domain owner: this service (`users`, `registration_idempotency_records`)
+- Owns: `users`, Projects, Bindings, Connection ciphertext, proxy keys, authorization audit
+
+Startup **never** auto-migrates. Apply with `make migrate`.
+
+## Surfaces (V0.2)
+
+- Auth: register, phone OTP, `__Host-` session, workspace switch
+- Authorization evaluate and self-trade exclusion
+- Projects (shared/dedicated; mode immutable; `preview_opt_in`)
+- Provider Bindings and encrypted Connections (no plaintext read-back on public paths)
+- Project-scoped proxy keys (`tmk-…`)
+- Internal: `/internal/v1/proxy-keys/by-hash`, `/internal/v1/projects/{id}/route-snapshot` (dataplane credentials only on the internal token path)
+
+Contracts under `shared/contracts/{user-registration,phone-auth-session,project,provider-binding,provider-connection,project-proxy-key,role-access-isolation}/v1/`.
 
 ## Commands
 
@@ -22,44 +36,7 @@ make build
 make migrate
 ```
 
-## Authorization (SF05)
+## Readiness (SF02)
 
-- Contract: `shared/contracts/role-access-isolation/v1/`
-- Routes: `POST /api/v1/authorization/evaluate`,
-  `POST /api/v1/authorization/route-candidates/exclude-self`,
-  optional fixtures under `/api/v1/authorization/fixtures/*`
-- Migration: `alembic/versions/0004_role_access_isolation.py` (tables
-  `resource_ownerships`, `authorization_security_events`,
-  `authorization_audit_outbox`). Startup never auto-migrates.
-- Identity from SF04 session cookie only; role/status re-read from `users` each
-  request. Deny paths persist audit before returning 403/404; audit failure → 503.
-- Fixtures: `AUTHORIZATION_FIXTURES_ENABLED=true` **and** `MODE`/`APP_ENV` in
-  `local|test` only; production must leave fixtures off.
-- Runbook / alerts: `ops/runbooks/authorization.md`, `ops/alerts/authorization.yml`.
-- Rollback: disable routes / roll back image; keep audit tables.
-
-## Registration (SF03)
-
-- Contract: `shared/contracts/user-registration/v1/`
-- Requires `DATABASE_URL` (migrated) and `REDIS_URL` for rate limiting (fail-closed if missing/down).
-- Optional `CORS_ALLOW_ORIGINS` (default Vite local origins).
-- Does **not** issue tokens (SF04).
-- Migration: `alembic/versions/0002_users_registration.py` — `upgrade` creates tables;
-  `downgrade` drops them. Apply with `make migrate` / Alembic; app startup never auto-migrates.
-- **Backup**: tables inherit the API Service PostgreSQL platform backup/restore
-  (see `ops/backup/README.md`). Soft-delete is not restore; idempotency rows are 24h auxiliary.
-- Alerts / runbook: `ops/alerts/registration.yml`, `ops/runbooks/registration.md`.
-
-## Local dependency readiness (SF02)
-
-- The service starts independently of `make dev`. It does **not** manage the
-  local PostgreSQL lifecycle; run `make dev` first when a database is required.
-- `/health/live` remains process-only and stays HTTP 200 while the process is up.
-- `/health/ready` performs one owned, non-retried async `SELECT 1` against
-  `DATABASE_URL` with a two-second bound. Failure returns the contracted HTTP
-  503 body naming only `postgres` and a stable safe code (no URLs, secrets, or
-  exception bodies).
-- When PostgreSQL returns, readiness recovers to the unchanged HTTP 200 shape
-  without restarting the process.
-- Metrics: probe total/failure counters and duration histogram use secret-free
-  bounded labels only.
+- `/health/live` is process-only.
+- `/health/ready` is one owned `SELECT 1` against `DATABASE_URL` (2s, no retry). Failures name only `postgres` — no URLs or secrets.

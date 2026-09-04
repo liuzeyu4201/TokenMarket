@@ -133,8 +133,16 @@ Pages:
 - Home: `http://127.0.0.1:5173/`
 - Register: `http://127.0.0.1:5173/register`
 - Login: `http://127.0.0.1:5173/login`
-- Dashboard (session required): `http://127.0.0.1:5173/dashboard`
+- Projects (session required): `http://127.0.0.1:5173/projects`
+- Connections / supply: `/connections` · `/supply`
+- Admin login: `http://127.0.0.1:5173/admin/login`
 - Grafana: `http://127.0.0.1:3000`
+
+Native data plane (proxy key, not the browser session):
+
+- `http://127.0.0.1:8080/openai/v1/chat/completions`
+- `http://127.0.0.1:8080/anthropic/v1/messages`
+- V0.1 Volcano compat: `POST http://127.0.0.1:8080/v1/proxy/volcano/chat/completions`
 
 `/health/live` means the process is up. Database-backed features also need readiness and a successful migrate.
 

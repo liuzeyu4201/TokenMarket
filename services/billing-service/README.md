@@ -1,12 +1,19 @@
 # Billing Service
 
-TokenMarket billing service scaffold (SF01) with SF02 PostgreSQL readiness.
+TokenMarket 测试额度账本与报价服务。第二迁移所有者。V0.2 **没有**充值、真实支付、Escrow、提现或法币锚定。
+
+Hub: [`docs/architecture/README.md`](../../docs/architecture/README.md).
 
 ## Ownership
 
 - Owner: TokenMarket Engineering
 - Type: Python FastAPI service
 - Migration owner: yes (order 2)
+- Owns: immutable ledger entries, quotes, recon tickets, unresolved cost cases
+
+Undetermined cost is recorded as `unresolved`, never as 0. Prefer explicit upstream spend, else usage × versioned rates.
+
+Contracts: `shared/contracts/ledger/v1/`, `shared/contracts/pricing/v1/`.
 
 ## Commands
 
@@ -20,16 +27,7 @@ make build
 make migrate
 ```
 
-## Local dependency readiness (SF02)
+## Readiness (SF02)
 
-- The service starts independently of `make dev`. It does **not** manage the
-  local PostgreSQL lifecycle; run `make dev` first when a database is required.
-- `/health/live` remains process-only and stays HTTP 200 while the process is up.
-- `/health/ready` performs one owned, non-retried async `SELECT 1` against
-  `DATABASE_URL` with a two-second bound. Failure returns the contracted HTTP
-  503 body naming only `postgres` and a stable safe code (no URLs, secrets, or
-  exception bodies).
-- When PostgreSQL returns, readiness recovers to the unchanged HTTP 200 shape
-  without restarting the process.
-- Metrics: probe total/failure counters and duration histogram use secret-free
-  bounded labels only.
+- `/health/live` is process-only.
+- `/health/ready` is one owned `SELECT 1` against `DATABASE_URL` (2s, no retry). Failures name only `postgres` — no URLs or secrets.

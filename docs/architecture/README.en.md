@@ -8,7 +8,7 @@ TokenMarket is a contract-first monorepo: the Go gateway owns proxied traffic, P
 
 | Document | Contents |
 |----------|----------|
-| [overview.en.md](overview.en.md) | **As-built** V0.1 data flow (matches the code; no undeployed local Kafka) |
+| [overview.en.md](overview.en.md) | **As-built** V0.2 data flow (matches the code; no undeployed local Kafka) |
 | [`项目开发/技术架构/`](../../项目开发/技术架构/README.md) | As-built briefing PDF (detailed) and ~2h PPT |
 | [`项目开发/1-项目架构与目录结构.md`](../../项目开发/1-项目架构与目录结构.md) | Target architecture, service duties, layout (includes later-version capabilities) |
 | [`项目开发/2-Go代理网关开发规范.md`](../../项目开发/2-Go代理网关开发规范.md) | Gateway implementation constraints |
@@ -23,10 +23,10 @@ On conflict: **constitution > accepted ADR > current `shared/contracts` > not-ye
 
 | Component | Notes |
 |-----------|-------|
-| [`services/proxy-gateway/README.md`](../../services/proxy-gateway/README.md) | Health, internal credential validation, public Chat Completions proxy |
-| [`services/api-service/README.md`](../../services/api-service/README.md) | Registration, session, authorization, seller/proxy keys |
-| [`services/billing-service/README.md`](../../services/billing-service/README.md) | Billing scaffold and PostgreSQL readiness |
-| [`services/admin-service/README.md`](../../services/admin-service/README.md) | Admin scaffold |
+| [`services/proxy-gateway/README.md`](../../services/proxy-gateway/README.md) | Native passthrough, catalog admit, routing, Volcano compat |
+| [`services/api-service/README.md`](../../services/api-service/README.md) | Registration, session, Project, Binding, Connection, proxy keys |
+| [`services/billing-service/README.md`](../../services/billing-service/README.md) | Test-quota ledger, quotes, recon |
+| [`services/admin-service/README.md`](../../services/admin-service/README.md) | Isolated admin session and ops surface |
 | [`frontend/README.md`](../../frontend/README.md) | Web frontend |
 | [`shared/README.md`](../../shared/README.md) | Contracts and validation tools |
 | [`infra/README.md`](../../infra/README.md) | Compose and Grafana assets |

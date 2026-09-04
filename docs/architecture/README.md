@@ -8,7 +8,7 @@ TokenMarket 是契约优先的 monorepo：Go 网关吃代理流量，Python 服�
 
 | 文档 | 内容 |
 |------|------|
-| [overview.md](overview.md) | V0.1 **现状**数据流（与代码一致，不含未落地的 Kafka 本地依赖） |
+| [overview.md](overview.md) | V0.2 **现状**数据流（与代码一致，不含未落地的 Kafka 本地依赖） |
 | [`项目开发/技术架构/`](../../项目开发/技术架构/README.md) | 现状宣讲 PDF（详细）与约 2 小时 PPT |
 | [`项目开发/1-项目架构与目录结构.md`](../../项目开发/1-项目架构与目录结构.md) | 目标架构、服务职责、目录约定（含后续版本能力） |
 | [`项目开发/2-Go代理网关开发规范.md`](../../项目开发/2-Go代理网关开发规范.md) | 网关实现约束 |
@@ -23,10 +23,10 @@ TokenMarket 是契约优先的 monorepo：Go 网关吃代理流量，Python 服�
 
 | 组件 | 说明 |
 |------|------|
-| [`services/proxy-gateway/README.md`](../../services/proxy-gateway/README.md) | 健康、内部凭证验证、公开 Chat Completions 代理 |
-| [`services/api-service/README.md`](../../services/api-service/README.md) | 注册、会话、授权、卖家/代理 Key |
-| [`services/billing-service/README.md`](../../services/billing-service/README.md) | 计费骨架与 PostgreSQL 就绪 |
-| [`services/admin-service/README.md`](../../services/admin-service/README.md) | 管理骨架 |
+| [`services/proxy-gateway/README.md`](../../services/proxy-gateway/README.md) | 原生透传、目录准入、选路、火山兼容入口 |
+| [`services/api-service/README.md`](../../services/api-service/README.md) | 注册、会话、Project、Binding、Connection、代理 Key |
+| [`services/billing-service/README.md`](../../services/billing-service/README.md) | 测试额度账本、报价、对账 |
+| [`services/admin-service/README.md`](../../services/admin-service/README.md) | 独立管理员会话与运维面 |
 | [`frontend/README.md`](../../frontend/README.md) | Web 前端 |
 | [`shared/README.md`](../../shared/README.md) | 契约与校验工具 |
 | [`infra/README.md`](../../infra/README.md) | Compose 与 Grafana 资产 |

@@ -142,8 +142,16 @@ curl -fsS http://127.0.0.1:8000/health/ready
 - 首页：`http://127.0.0.1:5173/`
 - 注册页：`http://127.0.0.1:5173/register`
 - 登录页：`http://127.0.0.1:5173/login`
-- 工作台（需会话）：`http://127.0.0.1:5173/dashboard`
+- Project（需会话）：`http://127.0.0.1:5173/projects`
+- 连接 / 供给：`/connections` · `/supply`
+- 管理员登录：`http://127.0.0.1:5173/admin/login`
 - Grafana：`http://127.0.0.1:3000`
+
+原生数据面（需代理 Key，不是浏览器会话）：
+
+- `http://127.0.0.1:8080/openai/v1/chat/completions`
+- `http://127.0.0.1:8080/anthropic/v1/messages`
+- V0.1 火山兼容：`POST http://127.0.0.1:8080/v1/proxy/volcano/chat/completions`
 
 `/health/live` 只表示进程存活；依赖数据库的功能还需要就绪检查和迁移成功。
 

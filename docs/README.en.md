@@ -19,7 +19,7 @@ Language rules: [Language](#language).
 | HTTP / event contracts | [`shared/contracts/`](../shared/contracts/README.md) | [`api/`](api/README.en.md) | English identifiers; bilingual guides |
 | Product and research | [`产品调研/`](../产品调研/README.md), [`项目开发/`](../项目开发/README.md) | [`product/`](product/README.en.md) | Sources Chinese; hub bilingual |
 | Architecture decisions | [`docs/decisions/`](decisions/README.en.md) | this tree | Index bilingual; historical ADRs keep original language |
-| Feature specs | [`specs/`](../specs/), [`项目开发/V0.1/V0.1_0712/specs/`](../项目开发/V0.1/V0.1_0712/specs/README.md) | [`product/`](product/README.en.md) | Chinese |
+| Feature specs | [`specs/`](../specs/), [`项目开发/V0.2/V0.2_0831/`](../项目开发/V0.2/V0.2_0831/README.md) | [`product/`](product/README.en.md) | Chinese |
 | Runbooks | [`ops/runbooks/`](../ops/runbooks/README.md) | — | Chinese |
 | Constitution | [`.specify/memory/constitution.md`](../.specify/memory/constitution.md) | — | English (historical authority; not bulk-translated here) |
 
@@ -33,7 +33,7 @@ Language rules: [Language](#language).
 | Read PRD / roadmap / research | [`product/README.en.md`](product/README.en.md) |
 | See why a design exists | [`decisions/README.en.md`](decisions/README.en.md) |
 | Recover, migrate, or deploy | [`ops/runbooks/README.md`](../ops/runbooks/README.md) |
-| Implement a V0.1 feature | the matching `NNN-…` directory under [`specs/`](../specs/) |
+| Implement a feature | the matching `NNN-…` directory under [`specs/`](../specs/) (V0.2: `020`–`053`) |
 
 ## Language
 
@@ -52,7 +52,7 @@ Do not relocate `产品调研/`, `项目开发/`, `specs/`, or `shared/contracts
 ```text
 docs/
 ├── README.md / README.en.md     # this hub
-├── architecture/                # architecture index and V0.1 current diagram
+├── architecture/                # architecture index and V0.2 current diagram
 ├── api/                         # public API navigation → shared/contracts
 ├── product/                     # product / research / spec navigation
 └── decisions/                   # ADRs (path fixed by tests)

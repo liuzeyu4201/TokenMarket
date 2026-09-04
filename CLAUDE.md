@@ -12,6 +12,13 @@ Go 入口，`services/{api,billing,admin}-service/` 为 FastAPI 服务，`fronte
 React 应用，`shared/` 为版本化契约，`infra/`/`ops/` 为部署、
 监控、迁移与运行手册。测试保留在各组件既定测试根目录内。
 
+## Agent skills
+
+项目技能以 `.agents/skills/` 为权威副本，并镜像到
+`.claude/skills/`、`.cursor/skills/`、`.codex/skills/`、
+`.grok/skills/`、`.kimi-code/skills/`。进行中的 merge/rebase 冲突用
+`resolving-merge-conflicts`；合并提交之后的静默丢失用 `merge-reconciler`。
+
 ## 构建、测试与开发命令
 
 根 Makefile 是实现脚手架阶段的必需工作流入口：

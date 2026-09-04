@@ -6,6 +6,13 @@
       "sourceType": "github",
       "skillPath": "skills/finishing-a-development-branch/SKILL.md",
       "computedHash": "aa2632ed96df59c36348bd8f8ec1ff0fb0c5cc68b60691834687bf4cedc6be3f"
+    },
+    "resolving-merge-conflicts": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/resolving-merge-conflicts/SKILL.md",
+      "computedHash": "382b1c57fcb13119366f2553a3e8d76461ae671af9877b04862a531490e35614",
+      "adaptedPath": ".agents/skills/resolving-merge-conflicts/SKILL.md"
     }
   }
 }

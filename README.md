@@ -1,16 +1,47 @@
-**中文** | [English](README.en.md)
+<p align="center">
+  <img src="./assets/cover.png" alt="TokenMarket" width="100%">
+</p>
 
-# TokenMarket
+<h1 align="center">TokenMarket</h1>
 
-> 让 AI Coding Plan 的闲置额度流动起来。
+<p align="center">
+  <strong>让 AI Coding Plan 的闲置额度流动起来。</strong>
+</p>
 
-TokenMarket 是 **AI Coding Plan 额度的实时撮合与代理平台**：卖家接入已有 Provider Connection，买家用平台签发的代理 Key 按量调用。数据面按 **OpenAI / Anthropic / Google Vertex 各自原生协议透传**，不做跨协议转换。
+<p align="center">
+  卖家接入已有 Provider Connection，买家用平台签发的代理 Key 按量调用。
+</p>
 
-本仓库是实现该产品的 **monorepo**。当前实现基线是 **V0.2 交易沙盒**：真实用户、完整平台流程、原生数据面与不可变测试额度账本。公开上线仍须独立渗透、付费厂商冒烟、真实短信与生产部署等外部证据（见 [`specs/053-release-gates`](specs/053-release-gates/)）。
+<p align="center">
+  <a href="https://github.com/liuzeyu4201/TokenMarket/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/liuzeyu4201/TokenMarket/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="./LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
+  <img alt="Data plane: native passthrough" src="https://img.shields.io/badge/data_plane-native_passthrough-lightgrey.svg">
+  <img alt="Status: sandbox" src="https://img.shields.io/badge/status-sandbox-orange.svg">
+</p>
+
+<p align="center">
+  <strong>中文</strong> | <a href="README.en.md">English</a>
+</p>
+
+TokenMarket 是 **AI Coding Plan 额度的实时撮合与代理平台**。卖家把已有的上游连接接入平台；买家不直接持有上游凭据，只用平台签发的代理 Key，按 OpenAI、Anthropic、Google Vertex 各自的原生协议调用。数据面走 `/openai/*`、`/anthropic/*`、`/vertex/*`，同协议透传，不做跨协议转换。
+
+本仓库是实现该产品的 **monorepo**。当前实现基线是 **V0.2 交易沙盒**：真实用户、完整平台流程、原生数据面与不可变测试额度账本。**无充值/支付/Escrow/提现**。公开上线仍须独立渗透、付费厂商冒烟、真实短信与生产部署等外部证据（见 [`specs/053-release-gates`](specs/053-release-gates/)）。
+
+目标很简单：闲置额度可以流动，买家按原生协议调用，账本可以对账。
+
+```mermaid
+flowchart LR
+  A[卖家接入 Provider Connection] --> B[平台撮合与选路]
+  B --> C[买家用代理 Key 调用]
+  C --> D[原生协议透传]
+  D --> E[OpenAI / Anthropic / Vertex]
+  D --> F[不可变测试额度账本]
+```
 
 ## 目录
 
-- [当前范围](#当前范围)
+- [为什么做](#为什么做)
+- [现在能做什么](#现在能做什么)
 - [架构](#架构)
 - [快速开始](#快速开始)
 - [仓库结构](#仓库结构)
@@ -19,23 +50,31 @@ TokenMarket 是 **AI Coding Plan 额度的实时撮合与代理平台**：卖家
 - [安全](#安全)
 - [许可](#许可)
 
-## 当前范围
+## 为什么做
+
+- Coding Plan 额度常被窗口和月底清零浪费，卖家需要一个合规的出口。
+- 买家要的是厂商原生数据面，而不是再包一层跨协议转换。
+- 上游凭据不能出现在买家、管理员、日志或遥测里。
+- 共享流量按健康、延迟、容量和价格选路；专享必须隔离，故障失败关闭。
+- 费用必须可复算：优先上游花费，否则用量 × 版本化费率；算不清就记 `unresolved`，永不记 0。
+
+## 现在能做什么
 
 **已具备（V0.2 as-built）**
 
-- 本地一键起停：中间件（PostgreSQL 15、Redis 7、Grafana OSS）+ 五个主机进程
-- 统一手机号 OTP、`__Host-` 会话 Cookie、买家/卖家工作区切换、自买自卖隔离
-- 买家 Project（共享 / 专享，创建后模式不可改）、Provider Binding、加密 Provider Connection
-- 原生数据面：`/openai/*`、`/anthropic/*`、`/vertex/*`（冻结日稳定端点；Preview/Beta 须 Project opt-in）
-- 共享池：硬资格过滤后再按健康、延迟、容量、价格评分；专享独占连接，故障失败关闭、不回退共享池
-- 测试额度账本：优先上游明确花费，否则用量×版本化费率；无法确定则 `unresolved`，永不记 0；无充值/支付/Escrow/提现
-- 独立管理员会话与运维后台；可观测性、SLO 告警、容量与恢复演练引擎
-- 测试/生产分层 Compose：`make deploy mode=test|prod`
+- **一键本地起停**：PostgreSQL 15、Redis 7、Grafana OSS，加上五个主机进程
+- **统一登录**：手机号 OTP、`__Host-` 会话 Cookie、买家/卖家工作区切换、自买自卖隔离
+- **买家 Project**：共享或专享，创建后模式不可改；Provider Binding、加密 Provider Connection
+- **原生数据面**：`/openai/*`、`/anthropic/*`、`/vertex/*`（冻结日稳定端点；Preview/Beta 须 Project opt-in）
+- **选路**：共享池先做硬资格过滤，再按健康、延迟、容量、价格评分；专享独占连接，故障失败关闭、不回退共享池
+- **测试额度账本**：优先上游明确花费，否则用量 × 版本化费率；无法确定则 `unresolved`
+- **运维面**：独立管理员会话与后台；可观测性、SLO 告警、容量与恢复演练
+- **分层部署**：`make deploy mode=test|prod`
 
 **V0.2 不做**
 
 - 充值、真实支付、Escrow、法币锚定、提现、额度转让
-- 跨协议转换；new-api 作为核心分配层
+- 跨协议转换；把 new-api 当作核心分配层
 - 账号 / 组织 / IAM / 支付 / 上游凭据管理等厂商控制面
 - Kafka 纳入本地 `make dev`；业务服务写入 `compose.local.yml`
 
@@ -83,7 +122,7 @@ TokenMarket 是 **AI Coding Plan 额度的实时撮合与代理平台**：卖家
 ```bash
 make toolchain-check
 make bootstrap
-cp .env.example .env.local   # 将三个 tm_local_ 占位符换成独立合成密码
+cp .env.example .env.local   # 将三个占位符换成独立合成密码
 make start
 make migrate
 ```
@@ -95,7 +134,15 @@ make start
 make stop
 ```
 
-第一次配密码、端口、恢复码见 [`QUICKSTART.md`](QUICKSTART.md)。验证：
+第一次配密码、端口、恢复码见 [`QUICKSTART.md`](QUICKSTART.md)。本地跑起来之后，典型路径是：
+
+1. 打开 http://127.0.0.1:5173 ，用手机号 OTP 注册或登录
+2. 买家创建 Project（共享或专享），签发代理 Key
+3. 卖家接入并验证 Provider Connection
+4. 用原生 SDK 调用 `/openai/*`、`/anthropic/*` 或 `/vertex/*`
+5. 在账本里看到测试额度；算不清的费用是 `unresolved`，不会被记成 0
+
+验证：
 
 ```bash
 curl -fsS http://127.0.0.1:8080/health/live
@@ -119,6 +166,7 @@ curl -fsS http://127.0.0.1:8000/health/ready
 
 ```text
 .
+├── assets                   # README 英雄图等展示资产
 ├── services/proxy-gateway   # Go 网关：原生透传、目录准入、选路
 ├── services/api-service     # 用户 / Project / Binding / Connection / Key，迁移顺序 1
 ├── services/billing-service # 测试额度账本与报价，迁移顺序 2

@@ -2,7 +2,7 @@
 
 TokenMarket React web app: unified buyer/seller workspace plus an isolated `/admin` shell.
 
-Hub: [`docs/architecture/README.md`](../../docs/architecture/README.md) · [English](../../docs/architecture/README.en.md).
+Hub: [`docs/architecture/README.md`](../docs/architecture/README.md) · [English](../docs/architecture/README.en.md).
 
 ## Ownership
 

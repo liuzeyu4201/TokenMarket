@@ -6,11 +6,13 @@ Desensitization findings are formatted as path:line:kind — never secret values
 
 from __future__ import annotations
 
+import re
+
 from workflow.security import (format_desense_findings,
                                load_gitleaks_allowlist_patterns,
                                scan_text_for_desensitization)
 
-from .helpers import find_repo_root, load_text
+from .helpers import find_repo_root, load_text, repo_path
 
 LANDING_FILES: tuple[tuple[str, ...], ...] = (
     ("README.md",),
@@ -105,3 +107,18 @@ def test_env_example_stays_unusable_placeholder() -> None:
     assert "replace-me" in text
     assert ".env.local" in text
     assert "sk-live-" not in text
+
+
+def test_frontend_hub_links_resolve_inside_the_repo() -> None:
+    text = load_text("frontend", "README.md")
+    assert "](../../docs/" not in text
+    assert "](../docs/architecture/README.md)" in text
+    assert "](../docs/architecture/README.en.md)" in text
+    root = find_repo_root().resolve()
+    src = repo_path("frontend", "README.md").parent
+    for href in re.findall(r"\]\(([^)]+)\)", text):
+        if href.startswith(("http://", "https://", "#", "mailto:")):
+            continue
+        resolved = (src / href).resolve()
+        assert root in resolved.parents or resolved == root, href
+        assert resolved.is_file(), href

@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	postgresTestImage = "postgres:15.18-bookworm"
+	redisTestImage    = "redis:7.2-alpine"
+)
+
 func dockerAvailable(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
@@ -20,9 +25,26 @@ func dockerAvailable(t *testing.T) {
 	}
 }
 
+// requireDockerImage skips when the image is absent. Tests never pull
+// floating tags (same contract as api-service/billing-service fixtures).
+func requireDockerImage(t *testing.T, image string) {
+	t.Helper()
+	dockerAvailable(t)
+	cmd := exec.Command("docker", "image", "inspect", "--format", "{{.ID}}", image)
+	out, err := cmd.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(out)) == "" {
+		t.Skipf("%s is not present and tests never pull", image)
+	}
+}
+
+func dockerRunCmd(extra []string) *exec.Cmd {
+	args := append([]string{"run", "-d", "--pull", "never"}, extra...)
+	return exec.Command("docker", args...)
+}
+
 func dockerRun(t *testing.T, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("docker", append([]string{"run", "-d", "--pull", "never"}, args...)...)
+	cmd := dockerRunCmd(args)
 	out, err := cmd.CombinedOutput()
 	id := strings.TrimSpace(string(out))
 	if err != nil {

@@ -83,7 +83,14 @@ def _smoke_run_flags(repo_root: Path, component_id: str) -> list[str]:
     if component_id == "proxy-gateway":
         flags.extend(["-e", f"PROXY_AUTH_PEPPER={_SMOKE_GATEWAY_PEPPER}"])
     if component_id in {"api-service", "billing-service", "admin-service"}:
-        catalog = repo_root / "shared" / "contracts" / "endpoint-catalog" / "v1" / "catalog.json"
+        catalog = (
+            repo_root
+            / "shared"
+            / "contracts"
+            / "endpoint-catalog"
+            / "v1"
+            / "catalog.json"
+        )
         if catalog.is_file():
             flags.extend(
                 [
@@ -140,6 +147,111 @@ def _trivy_finding_summary(payload: str) -> str:
     return " ".join(payload.split())[:240]
 
 
+def _trivy_combined_output(result: subprocess.CompletedProcess[str]) -> str:
+    return "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
+
+
+def _trivy_missing_db(result: subprocess.CompletedProcess[str]) -> bool:
+    blob = _trivy_combined_output(result).lower()
+    return (
+        "skip-db-update cannot be specified on the first run" in blob
+        or "the first run cannot skip downloading db" in blob
+    )
+
+
+def _trivy_has_findings(result: subprocess.CompletedProcess[str]) -> bool:
+    payload = (result.stdout or "").strip()
+    if not payload:
+        return False
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(data, dict):
+        return False
+    for item in data.get("Results") or []:
+        if item.get("Vulnerabilities"):
+            return True
+    return False
+
+
+def _trivy_image_args(trivy: str, image_tag: str) -> list[str]:
+    return [
+        trivy,
+        "image",
+        "--severity",
+        "HIGH,CRITICAL",
+        "--exit-code",
+        "1",
+        "--scanners",
+        "vuln",
+        "--ignore-unfixed",
+        "--skip-db-update",
+        "--timeout",
+        "5m",
+        "--format",
+        "json",
+        image_tag,
+    ]
+
+
+def _trivy_scan_image(
+    trivy: str,
+    image_tag: str,
+    *,
+    db_downloaded: bool,
+) -> tuple[subprocess.CompletedProcess[str], bool]:
+    """Scan one image. Download the Trivy DB once on a clean first run.
+
+    ``--skip-db-update`` avoids hanging on later images, but Trivy rejects it
+    when the DB has never been fetched. One bounded ``--download-db-only``
+    retry is allowed (ci-gates download retry).
+    """
+    scan = _run(_trivy_image_args(trivy, image_tag))
+    if scan.returncode == 0 or db_downloaded or not _trivy_missing_db(scan):
+        return scan, db_downloaded
+    download = _run(
+        [
+            trivy,
+            "image",
+            "--download-db-only",
+            "--timeout",
+            "5m",
+        ]
+    )
+    if download.returncode != 0:
+        return download, True
+    return _run(_trivy_image_args(trivy, image_tag)), True
+
+
+def _trivy_is_db_init_failure(result: subprocess.CompletedProcess[str]) -> bool:
+    if _trivy_missing_db(result):
+        return True
+    args = [str(part) for part in (result.args or [])]
+    if "--download-db-only" in args:
+        return True
+    blob = _trivy_combined_output(result).lower()
+    return "vulnerability db" in blob or "downloading db" in blob
+
+
+def _trivy_failure_message(
+    component_id: str, image_tag: str, scan: subprocess.CompletedProcess[str]
+) -> str:
+    detail = _trivy_combined_output(scan)
+    snippet = _trivy_finding_summary(scan.stdout or detail)
+    if _trivy_has_findings(scan):
+        return (
+            f"{component_id} image scan found HIGH/CRITICAL issues for "
+            f"{image_tag}: {snippet}"
+        )
+    if _trivy_is_db_init_failure(scan):
+        return (
+            f"{component_id} image scan could not initialize the vulnerability DB "
+            f"for {image_tag}: {snippet}"
+        )
+    return f"{component_id} image scan failed for {image_tag}: {snippet}"
+
+
 def new_smoke_run_token() -> str:
     """Return a short unique token for one runtime-smoke run."""
     return uuid.uuid4().hex[:12]
@@ -175,7 +287,9 @@ def smoke_container_name(run_token: str, component_id: str) -> str:
         )
     name = f"tm-smoke-{token}-{slug}"
     if not _SMOKE_CONTAINER_RE.fullmatch(name):
-        raise ImageWorkflowError("STEP_FAILED", f"invalid smoke container name: {name!r}")
+        raise ImageWorkflowError(
+            "STEP_FAILED", f"invalid smoke container name: {name!r}"
+        )
     return name
 
 
@@ -384,7 +498,9 @@ def runtime_smoke(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any
                 phase="aggregate",
                 status=final["status"],
                 code=DiagnosticCode(final["code"]),
-                duration_ms=sum(int(_event_fields(e).get("duration_ms") or 0) for e in log.events),
+                duration_ms=sum(
+                    int(_event_fields(e).get("duration_ms") or 0) for e in log.events
+                ),
                 message=f"runtime-smoke aggregate: {final}",
                 run_id=run_id,
             )
@@ -463,6 +579,7 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
         return events
 
     failed = False
+    db_downloaded = False
     for component in _image_components(repo_root):
         comp_id = component["id"]
         image_tag = _default_image_tag(comp_id)
@@ -482,24 +599,8 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
         # packages with no available fix remain visible via local trivy runs but
         # do not block the SF01/SF02 scaffold gate (fail-closed still applies to
         # fixable application and OS packages).
-        scan = _run(
-            [
-                trivy,
-                "image",
-                "--severity",
-                "HIGH,CRITICAL",
-                "--exit-code",
-                "1",
-                "--scanners",
-                "vuln",
-                "--ignore-unfixed",
-                "--skip-db-update",
-                "--timeout",
-                "5m",
-                "--format",
-                "json",
-                image_tag,
-            ]
+        scan, db_downloaded = _trivy_scan_image(
+            trivy, image_tag, db_downloaded=db_downloaded
         )
         if scan.returncode == 0:
             log.finish(
@@ -512,18 +613,13 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
             emit(log.events[-1])
         else:
             failed = True
-            detail = (scan.stdout or scan.stderr or "").strip()
-            snippet = _trivy_finding_summary(detail)
             log.finish(
                 "image-scan",
                 comp_id,
                 "execution",
                 status="FAILED",
                 code=DiagnosticCode.STEP_FAILED,
-                message=(
-                    f"{comp_id} image scan found HIGH/CRITICAL issues for "
-                    f"{image_tag}: {snippet}"
-                ),
+                message=_trivy_failure_message(comp_id, image_tag, scan),
             )
             emit(log.events[-1])
 
@@ -535,7 +631,9 @@ def image_scan(repo_root: Path, *, plain: bool = False) -> list[dict[str, Any]]:
             phase="aggregate",
             status=final["status"],
             code=DiagnosticCode(final["code"]),
-            duration_ms=sum(int(_event_fields(e).get("duration_ms") or 0) for e in log.events),
+            duration_ms=sum(
+                int(_event_fields(e).get("duration_ms") or 0) for e in log.events
+            ),
             message=f"image-scan aggregate: {final}",
             run_id=run_id,
         )

@@ -33,10 +33,10 @@ func TestNodeExitNoDoubleCharge(t *testing.T) {
 }
 
 func TestRedisRestartNoDoubleCharge(t *testing.T) {
-	dockerAvailable(t)
+	requireDockerImage(t, redisTestImage)
 	name := uniqueName("redis")
 	id, addr := dockerRunPublish(t, "6379", "--name", name, "--tmpfs", "/data",
-		"redis:7.2-alpine", "redis-server", "--save", "", "--appendonly", "no")
+		redisTestImage, "redis-server", "--save", "", "--appendonly", "no")
 	waitDocker(t, id, []string{"redis-cli", "PING"}, "PONG", 20*time.Second)
 	led := NewMemLedger()
 	cached := &RedisCachedLedger{Inner: led, Addr: addr}
@@ -63,7 +63,7 @@ func TestRedisRestartNoDoubleCharge(t *testing.T) {
 }
 
 func TestPostgresShortOutageNoDoubleCharge(t *testing.T) {
-	dockerAvailable(t)
+	requireDockerImage(t, postgresTestImage)
 	name := uniqueName("pg-outage")
 	id := dockerRun(t,
 		"--name", name,
@@ -71,7 +71,7 @@ func TestPostgresShortOutageNoDoubleCharge(t *testing.T) {
 		"-e", "POSTGRES_PASSWORD=tm_local_test",
 		"-e", "POSTGRES_USER=tm",
 		"-e", "POSTGRES_DB=tm",
-		"postgres:15.18-bookworm",
+		postgresTestImage,
 	)
 	postgresReady(t, id)
 	psql(t, id, `CREATE TABLE ledger_entries (

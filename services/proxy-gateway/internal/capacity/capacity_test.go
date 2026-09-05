@@ -136,7 +136,7 @@ func TestFaultNoDoubleCharge(t *testing.T) {
 }
 
 func TestBackupRPORTO(t *testing.T) {
-	dockerAvailable(t)
+	requireDockerImage(t, postgresTestImage)
 	srcName := uniqueName("pg-src")
 	src := dockerRun(t,
 		"--name", srcName,
@@ -144,7 +144,7 @@ func TestBackupRPORTO(t *testing.T) {
 		"-e", "POSTGRES_PASSWORD=tm_local_test",
 		"-e", "POSTGRES_USER=tm",
 		"-e", "POSTGRES_DB=tm",
-		"postgres:15.18-bookworm",
+		postgresTestImage,
 	)
 	postgresReady(t, src)
 	psql(t, src, `CREATE TABLE ledger_entries (
@@ -164,7 +164,7 @@ func TestBackupRPORTO(t *testing.T) {
 		"-e", "POSTGRES_PASSWORD=tm_local_test",
 		"-e", "POSTGRES_USER=tm",
 		"-e", "POSTGRES_DB=tm",
-		"postgres:15.18-bookworm",
+		postgresTestImage,
 	)
 	postgresReady(t, dst)
 	restoreStart := time.Now()

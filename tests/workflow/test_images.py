@@ -8,6 +8,7 @@ tags, and that a runtime smoke test confirms each image starts healthy.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import time
@@ -18,6 +19,22 @@ import pytest
 from .helpers import find_repo_root, load_json, repo_path, run
 
 IMAGE_DELIVERABLES = {"container-image", "static-site-image"}
+_DOCKER_FROM_RE = re.compile(
+    r"^\s*FROM\s+(?:--[^\s=]+=\S+\s+)*(\S+)(?:\s+AS\s+\S+)?\s*$",
+    re.IGNORECASE,
+)
+
+
+def dockerfile_from_images(text: str) -> list[str]:
+    """Return Dockerfile FROM image refs, ignoring Python `from` in heredocs."""
+    images: list[str] = []
+    for line in text.splitlines():
+        match = _DOCKER_FROM_RE.match(line)
+        if match:
+            images.append(match.group(1))
+    return images
+
+
 HEALTH_ENDPOINTS = {
     "proxy-gateway": "/health/live",
     "api-service": "/health/live",
@@ -73,69 +90,98 @@ def test_five_image_components_are_declared() -> None:
     assert ids == expected, f"expected image components {expected}, got {ids}"
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_dockerfile_exists(component: dict) -> None:
     """Each image component must have a Dockerfile."""
     assert dockerfile_path(component).is_file()
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_dockerignore_exists(component: dict) -> None:
     """Each image component must exclude unintended files from the build context."""
     assert dockerignore_path(component).is_file()
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_dockerfile_is_multi_stage(component: dict) -> None:
     """Each image must use a multi-stage build (at least two FROM lines)."""
     text = read_dockerfile(component)
-    from_lines = [
-        line for line in text.splitlines() if re.match(r"^\s*FROM\s+", line, re.IGNORECASE)
+    from_images = dockerfile_from_images(text)
+    assert len(from_images) >= 2, f"{component['id']}: expected multi-stage Dockerfile"
+
+
+def test_dockerfile_from_images_ignores_python_import_in_heredoc() -> None:
+    text = (
+        "FROM python:3.11.15-slim AS builder\n"
+        "RUN python3 <<'PY'\n"
+        "from pathlib import Path\n"
+        "PY\n"
+        "FROM python:3.11.15-slim\n"
+    )
+    assert dockerfile_from_images(text) == [
+        "python:3.11.15-slim",
+        "python:3.11.15-slim",
     ]
-    assert len(from_lines) >= 2, f"{component['id']}: expected multi-stage Dockerfile"
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_dockerfile_uses_pinned_base_image(component: dict) -> None:
     """Base images must be pinned by digest or explicit version, never mutable tags."""
     text = read_dockerfile(component)
-    from_lines = [
-        line for line in text.splitlines() if re.match(r"^\s*FROM\s+", line, re.IGNORECASE)
-    ]
-    assert from_lines, f"{component['id']}: Dockerfile has no FROM line"
-    for line in from_lines:
-        image = re.sub(r"^\s*FROM\s+", "", line, flags=re.IGNORECASE).split()[0]
+    from_images = dockerfile_from_images(text)
+    assert from_images, f"{component['id']}: Dockerfile has no FROM line"
+    for image in from_images:
         assert "@sha256:" in image or re.search(
             r":\d+(\.\d+)*(-[a-z0-9]+)?$", image
         ), f"{component['id']}: base image {image!r} is not pinned by digest or explicit version"
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_dockerfile_has_non_root_user(component: dict) -> None:
     """Runtime stage must switch to a non-root user."""
     text = read_dockerfile(component)
     user_lines = [
-        line for line in text.splitlines() if re.match(r"^\s*USER\s+", line, re.IGNORECASE)
+        line
+        for line in text.splitlines()
+        if re.match(r"^\s*USER\s+", line, re.IGNORECASE)
     ]
     assert user_lines, f"{component['id']}: Dockerfile missing USER directive"
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_dockerfile_has_health_check(component: dict) -> None:
     """Runtime stage must expose a Docker HEALTHCHECK."""
     text = read_dockerfile(component)
     health_lines = [
-        line for line in text.splitlines() if re.match(r"^\s*HEALTHCHECK\s+", line, re.IGNORECASE)
+        line
+        for line in text.splitlines()
+        if re.match(r"^\s*HEALTHCHECK\s+", line, re.IGNORECASE)
     ]
     assert health_lines, f"{component['id']}: Dockerfile missing HEALTHCHECK directive"
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_dockerfile_build_context_is_independent(component: dict) -> None:
     """Dockerfile must not copy files from outside its component directory."""
     text = read_dockerfile(component)
     copy_lines = [
-        line for line in text.splitlines() if re.match(r"^\s*COPY\s+", line, re.IGNORECASE)
+        line
+        for line in text.splitlines()
+        if re.match(r"^\s*COPY\s+", line, re.IGNORECASE)
     ]
     for line in copy_lines:
         # Reject any COPY source that walks up from the build context.
@@ -144,7 +190,9 @@ def test_dockerfile_build_context_is_independent(component: dict) -> None:
         ), f"{component['id']}: Dockerfile copies from outside build context: {line.strip()}"
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_image_tag_is_immutable(component: dict) -> None:
     """Image tag must include commit SHA or semantic version, never 'latest'."""
     text = read_dockerfile(component)
@@ -155,10 +203,14 @@ def test_image_tag_is_immutable(component: dict) -> None:
     make_path = component_path(component) / "Makefile"
     if make_path.is_file():
         make_text = make_path.read_text(encoding="utf-8")
-        assert ":latest" not in make_text, f"{component['id']}: Makefile tags image as latest"
+        assert (
+            ":latest" not in make_text
+        ), f"{component['id']}: Makefile tags image as latest"
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_make_build_produces_image(component: dict) -> None:
     """Component Makefile build target must produce a tagged local image."""
     comp_path = component_path(component)
@@ -175,7 +227,9 @@ def test_make_build_produces_image(component: dict) -> None:
     ), f"{component['id']}: make build failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
 
 
-@pytest.mark.parametrize("component", image_delivering_components(), ids=lambda c: c["id"])
+@pytest.mark.parametrize(
+    "component", image_delivering_components(), ids=lambda c: c["id"]
+)
 def test_runtime_health_smoke(component: dict) -> None:
     """Built image must start and respond to its health endpoint as a non-root user."""
     comp_path = component_path(component)
@@ -193,7 +247,8 @@ def test_runtime_health_smoke(component: dict) -> None:
     )
 
     container_name = f"tm-smoke-{component['id'].replace('-', '_')}"
-    from workflow.images import EXPOSED_PORTS, SMOKE_HOST_PORTS, _smoke_run_flags
+    from workflow.images import (EXPOSED_PORTS, SMOKE_HOST_PORTS,
+                                 _smoke_run_flags)
 
     container_port = EXPOSED_PORTS[component["id"]]
     host_port = SMOKE_HOST_PORTS[component["id"]]
@@ -231,7 +286,9 @@ def test_runtime_health_smoke(component: dict) -> None:
             last_error = probe.stderr
             time.sleep(0.5)
         else:
-            pytest.fail(f"{component['id']}: health endpoint did not respond: {last_error}")
+            pytest.fail(
+                f"{component['id']}: health endpoint did not respond: {last_error}"
+            )
 
         # Runtime user must be non-root.
         inspect = run(
@@ -261,15 +318,39 @@ def test_runtime_health_smoke(component: dict) -> None:
 
 
 def _ok(stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=stdout, stderr=stderr
+    )
 
 
-def _fail(stderr: str = "error") -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr=stderr)
+def _fail(stderr: str = "error", stdout: str = "") -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(
+        args=[], returncode=1, stdout=stdout, stderr=stderr
+    )
+
+
+_TRIVY_FIRST_RUN_DB_ERROR = (
+    "2026-08-31T14:22:10Z ERROR [vulndb] The first run cannot skip downloading DB\n"
+    "2026-08-31T14:22:10Z FATAL Fatal error run error: init error: DB error: "
+    "database error: --skip-db-update cannot be specified on the first run\n"
+)
+
+
+def _image_component(component_id: str) -> dict[str, str | list[str]]:
+    return {
+        "id": component_id,
+        "path": f"services/{component_id}",
+        "deliverables": ["container-image"],
+    }
+
+
+def _event_payloads(events: list[dict]) -> list[dict]:
+    return [e.get("payload") or e for e in events]
 
 
 def test_smoke_network_and_container_names_are_unique_and_safe() -> None:
-    from workflow.images import new_smoke_run_token, smoke_container_name, smoke_network_name
+    from workflow.images import (new_smoke_run_token, smoke_container_name,
+                                 smoke_network_name)
 
     a = new_smoke_run_token()
     b = new_smoke_run_token()
@@ -299,7 +380,11 @@ def test_runtime_smoke_uses_shared_network_and_defers_cleanup(
             "path": "services/proxy-gateway",
             "deliverables": ["container-image"],
         },
-        {"id": "api-service", "path": "services/api-service", "deliverables": ["container-image"]},
+        {
+            "id": "api-service",
+            "path": "services/api-service",
+            "deliverables": ["container-image"],
+        },
         {
             "id": "billing-service",
             "path": "services/billing-service",
@@ -316,7 +401,9 @@ def test_runtime_smoke_uses_shared_network_and_defers_cleanup(
     def fake_components(_root: Path) -> list[dict]:
         return components
 
-    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         calls.append(list(args))
         cmd = args
         if cmd[:3] == ["docker", "network", "create"]:
@@ -369,7 +456,9 @@ def test_runtime_smoke_uses_shared_network_and_defers_cleanup(
     # no stop/rm for api before the last docker run.
     api_name = "tm-smoke-aabbccddeeff-api_service"
     frontend_run_idx = next(
-        i for i, c in enumerate(calls) if c[:2] == ["docker", "run"] and "frontend" in " ".join(c)
+        i
+        for i, c in enumerate(calls)
+        if c[:2] == ["docker", "run"] and "frontend" in " ".join(c)
     )
     early = calls[:frontend_run_idx]
     assert not any(
@@ -430,12 +519,18 @@ def test_runtime_smoke_failure_still_cleans_network_and_containers(
             "path": "services/proxy-gateway",
             "deliverables": ["container-image"],
         },
-        {"id": "api-service", "path": "services/api-service", "deliverables": ["container-image"]},
+        {
+            "id": "api-service",
+            "path": "services/api-service",
+            "deliverables": ["container-image"],
+        },
         {"id": "frontend", "path": "frontend", "deliverables": ["static-site-image"]},
     ]
     run_count = {"n": 0}
 
-    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         calls.append(list(args))
         if args[:3] == ["docker", "network", "create"]:
             return _ok()
@@ -505,7 +600,9 @@ def test_runtime_smoke_plain_mode_reads_payload_without_keyerror(
         },
     ]
 
-    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         if args[:3] == ["docker", "network", "create"]:
             return _ok()
         if args[:2] == ["docker", "inspect"] and "{{.Id}}" in args:
@@ -550,21 +647,19 @@ def test_image_scan_skips_db_update_and_sets_timeout(
 
     calls: list[list[str]] = []
 
-    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         calls.append(list(args))
         return _ok(stdout="{}\n")
 
-    monkeypatch.setattr(images_mod.shutil, "which", lambda _n: "/opt/homebrew/bin/trivy")
+    monkeypatch.setattr(
+        images_mod.shutil, "which", lambda _n: "/opt/homebrew/bin/trivy"
+    )
     monkeypatch.setattr(
         images_mod,
         "_image_components",
-        lambda _r: [
-            {
-                "id": "proxy-gateway",
-                "path": "services/proxy-gateway",
-                "deliverables": ["container-image"],
-            }
-        ],
+        lambda _r: [_image_component("proxy-gateway")],
     )
     monkeypatch.setattr(images_mod, "_run", fake_run)
     images_mod.image_scan(find_repo_root(), plain=True)
@@ -572,11 +667,131 @@ def test_image_scan_skips_db_update_and_sets_timeout(
     assert trivy_cmds
     assert "--skip-db-update" in trivy_cmds[0]
     assert "--timeout" in trivy_cmds[0]
+    assert "--download-db-only" not in trivy_cmds[0]
+
+
+def test_image_scan_downloads_db_once_when_skip_fails_first_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from workflow import images as images_mod
+
+    calls: list[list[str]] = []
+    downloaded = {"ok": False}
+
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(list(args))
+        if "--download-db-only" in args:
+            downloaded["ok"] = True
+            return _ok()
+        if "--skip-db-update" in args and not downloaded["ok"]:
+            return _fail(stderr=_TRIVY_FIRST_RUN_DB_ERROR)
+        return _ok(stdout="{}\n")
+
+    monkeypatch.setattr(
+        images_mod.shutil, "which", lambda _n: "/opt/homebrew/bin/trivy"
+    )
+    monkeypatch.setattr(
+        images_mod,
+        "_image_components",
+        lambda _r: [_image_component("proxy-gateway"), _image_component("api-service")],
+    )
+    monkeypatch.setattr(images_mod, "_run", fake_run)
+    events = images_mod.image_scan(find_repo_root(), plain=True)
+    trivy_cmds = [c for c in calls if c and c[0].endswith("trivy")]
+    downloads = [c for c in trivy_cmds if "--download-db-only" in c]
+    scans = [c for c in trivy_cmds if "--download-db-only" not in c]
+    assert len(downloads) == 1
+    assert "--timeout" in downloads[0]
+    assert scans
+    assert all("--skip-db-update" in c for c in scans)
+    payloads = _event_payloads(events)
+    assert all(p.get("status") != "FAILED" for p in payloads)
+    assert any(
+        p.get("phase") == "aggregate" and p.get("status") == "PASSED" for p in payloads
+    )
+
+
+def test_image_scan_reports_db_init_failure_not_cve_findings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from workflow import images as images_mod
+
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if "--download-db-only" in args:
+            return _fail(stderr="timeout downloading vulnerability db")
+        return _fail(stderr=_TRIVY_FIRST_RUN_DB_ERROR)
+
+    monkeypatch.setattr(
+        images_mod.shutil, "which", lambda _n: "/opt/homebrew/bin/trivy"
+    )
+    monkeypatch.setattr(
+        images_mod,
+        "_image_components",
+        lambda _r: [_image_component("proxy-gateway")],
+    )
+    monkeypatch.setattr(images_mod, "_run", fake_run)
+    events = images_mod.image_scan(find_repo_root(), plain=True)
+    messages = " ".join(
+        str((e.get("payload") or e).get("message") or "") for e in events
+    )
+    assert "HIGH/CRITICAL" not in messages
+    assert "vulnerability DB" in messages or "initialize" in messages.lower()
+    payloads = _event_payloads(events)
+    assert any(
+        p.get("status") == "FAILED" and p.get("component") == "proxy-gateway"
+        for p in payloads
+    )
+
+
+def test_image_scan_still_reports_high_critical_findings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from workflow import images as images_mod
+
+    payload = json.dumps(
+        {
+            "Results": [
+                {
+                    "Vulnerabilities": [
+                        {
+                            "VulnerabilityID": "CVE-2026-1",
+                            "PkgName": "openssl",
+                            "InstalledVersion": "1.0",
+                            "FixedVersion": "1.1",
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        return _fail(stdout=payload)
+
+    monkeypatch.setattr(
+        images_mod.shutil, "which", lambda _n: "/opt/homebrew/bin/trivy"
+    )
+    monkeypatch.setattr(
+        images_mod,
+        "_image_components",
+        lambda _r: [_image_component("proxy-gateway")],
+    )
+    monkeypatch.setattr(images_mod, "_run", fake_run)
+    events = images_mod.image_scan(find_repo_root(), plain=True)
+    messages = " ".join(
+        str((e.get("payload") or e).get("message") or "") for e in events
+    )
+    assert "HIGH/CRITICAL" in messages
+    assert "CVE-2026-1" in messages
 
 
 def test_trivy_finding_summary_extracts_cve_and_fix_versions() -> None:
-    import json
-
     from workflow.images import _trivy_finding_summary
 
     payload = json.dumps(
@@ -612,7 +827,9 @@ def test_runtime_smoke_rejects_root_user(
         },
     ]
 
-    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         if args[:3] == ["docker", "network", "create"]:
             return _ok()
         if args[:2] == ["docker", "inspect"] and "{{.Id}}" in args:
